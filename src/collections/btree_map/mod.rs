@@ -1,4 +1,4 @@
-//! This crate implements a [`BTreeMap`] similar to [`std::collections::BTreeMap`].
+//! [`BTreeMap`] similar to [`std::collections::BTreeMap`].
 //!
 //! The standard BtreeMap can use up to twice as much memory as required, this BTreeMap
 //! only allocates what is needed ( or a little more to avoid allocating too often ), so
