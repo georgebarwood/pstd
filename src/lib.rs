@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 #![cfg_attr(test, feature(btree_cursors, assert_matches))]
 
-//! crate with preview of parts of std ( unstable features ).
+//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )
 
 /// Memory allocation.
 pub mod alloc {}
