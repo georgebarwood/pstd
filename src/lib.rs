@@ -4,10 +4,12 @@
 //! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )
 
 /// Memory allocation.
-pub mod alloc {}
+pub mod alloc;
 
 /// Containers.
 pub mod collections {
     /// BTreeMap.
     pub mod btree_map;
+
+    pub use btree_map::BTreeMap;
 }
