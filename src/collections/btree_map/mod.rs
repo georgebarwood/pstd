@@ -698,7 +698,7 @@ pub enum FullAction {
 }
 
 /// Trait for controlling storage allocation for [BTreeMap].
-pub trait AllocTuning: Clone + Default + Allocator + Sized {
+pub trait AllocTuning: Clone + Allocator {
     /// Determine what to do when the size of an underlying BTree vector needs to be increased.
     fn full_action(&self, i: usize, len: usize) -> FullAction;
     /// Returns the new allocation if the allocation should be reduced based on the current length and allocation.
@@ -714,7 +714,7 @@ pub type DefaultAllocTuning = CustomAllocTuning<Global>;
 #[derive(Clone)]
 pub struct CustomAllocTuning<AL>
 where
-    AL: Allocator + Clone + Default,
+    AL: Allocator + Clone,
 {
     branch: u16,
     alloc_unit: u8,
@@ -735,7 +735,7 @@ where
 
 unsafe impl<AL> Allocator for CustomAllocTuning<AL>
 where
-    AL: Allocator + Clone + Default,
+    AL: Allocator + Clone,
 {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         self.allocator.allocate(layout)
@@ -746,7 +746,7 @@ where
 }
 impl<AL> AllocTuning for CustomAllocTuning<AL>
 where
-    AL: Allocator + Clone + Default,
+    AL: Allocator + Clone,
 {
     fn full_action(&self, i: usize, len: usize) -> FullAction {
         let lim = (self.branch as usize) * 2 + 1;
@@ -776,10 +776,13 @@ where
 }
 impl<AL> CustomAllocTuning<AL>
 where
-    AL: Allocator + Clone + Default,
+    AL: Allocator + Clone,
 {
     /// Construct with specified branch and allocation unit.
-    pub fn new(branch: u16, alloc_unit: u8) -> Self {
+    pub fn new(branch: u16, alloc_unit: u8) -> Self
+    where
+        AL: Default,
+    {
         assert!(branch >= 6);
         assert!(branch <= 512);
         assert!(alloc_unit > 0);
