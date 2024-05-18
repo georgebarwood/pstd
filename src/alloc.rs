@@ -197,3 +197,22 @@ where
         unsafe { (**self).shrink(ptr, old_layout, new_layout) }
     }
 }
+
+/// Default implementation of Allocator.
+#[derive(Clone, Default)]
+pub struct Global {}
+unsafe impl Allocator for Global {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        match layout.size() {
+            0 => Ok(NonNull::slice_from_raw_parts(NonNull::dangling(), 0)),
+            size => unsafe {
+                let raw_ptr = std::alloc::alloc(layout);
+                let ptr = NonNull::new(raw_ptr).ok_or(AllocError)?;
+                Ok(NonNull::slice_from_raw_parts(ptr, size))
+            },
+        }
+    }
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        std::alloc::dealloc(ptr.as_ptr(), layout);
+    }
+}
