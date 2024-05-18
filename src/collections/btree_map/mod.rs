@@ -110,6 +110,16 @@ impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
         }
     }
 
+    /// ToDo
+    #[must_use]
+    pub fn new_in<AL>(a: AL) -> BTreeMap<K, V, CustomAllocTuning<AL>> 
+       where AL: Allocator + Clone
+    {
+       let ct = CustomAllocTuning::new_in(32, 8, a);
+       let map : BTreeMap<K, V, CustomAllocTuning<AL>> = BTreeMap::with_tuning(ct);
+       map
+    }
+
     /// Get a cloned copy of the tuning.
     pub fn get_tuning(&self) -> A {
         self.atune.clone()
@@ -3178,14 +3188,6 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
 }
 
 // Tests.
-
-#[test]
-fn test_custom_alloc() {
-    let da = Global {};
-    let ct = CustomAllocTuning::new_in(32, 8, da);
-    let mut map = BTreeMap::with_tuning(ct);
-    map.insert("hello", "there");
-}
 
 #[cfg(all(test, not(miri), feature = "cap"))]
 use {cap::Cap, std::alloc};

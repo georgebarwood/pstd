@@ -685,3 +685,75 @@ fn sizes() {
     println!("size of Tree={}", std::mem::size_of::<Tree<K, V>>());
     println!("size of BTreeMap={}", std::mem::size_of::<BTreeMap<K, V>>());
 }
+
+#[test]
+fn test_custom_alloc() {
+    let da = Global {};
+    let ct = CustomAllocTuning::new_in(32, 8, da);
+    let mut map = BTreeMap::with_tuning(ct);
+    map.insert("hello", "there");
+}
+
+#[test]
+fn test_custom_alloc2() {
+    let a = Global{};
+    let mut map = BTreeMap::<_, _, CustomAllocTuning<Global>>::new_in(a);
+    map.insert("hello", "there");
+}
+
+#[derive(Clone)]
+struct ExTuning( Global );
+
+unsafe impl Allocator for ExTuning
+{
+     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError>
+     {
+        self.0.allocate(layout)  
+     }
+     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout)
+     {
+        self.0.deallocate(ptr, layout);
+     }
+}
+
+impl ExTuning
+{
+    const BRANCH : usize = 32;
+    const AU : usize = 4;
+}
+
+impl AllocTuning for ExTuning
+{
+    fn full_action(&self, i: usize, len: usize) -> FullAction {
+        let lim = Self::BRANCH * 2 + 1;
+        if len >= lim {
+            let b = len / 2;
+            let r = usize::from(i > b);
+            let au = Self::AU as usize;
+            FullAction::Split(b, b + (1 - r) * au, (len - b - 1) + r * au)
+        } else {
+            let mut na = len + Self::AU;
+            if na > lim {
+                na = lim;
+            }
+            FullAction::Extend(na)
+        }
+    }
+    fn space_action(&self, (len, alloc): (usize, usize)) -> Option<usize> {
+        if alloc - len >= Self::AU as usize {
+            Some(len)
+        } else {
+            None
+        }
+    }
+    fn set_seq(&mut self) {
+    }
+}
+
+#[test]
+fn test_custom_alloc3() {
+    let t = ExTuning( Global{} );
+    let mut map = BTreeMap::with_tuning(t);
+    map.insert("hello", "there");
+}
+
