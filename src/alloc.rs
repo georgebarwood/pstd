@@ -21,6 +21,7 @@ impl fmt::Display for AllocError {
     }
 }
 
+/// Memory allocation.
 ///
 /// # Safety
 ///

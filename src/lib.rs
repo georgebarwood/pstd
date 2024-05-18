@@ -8,7 +8,6 @@ pub mod alloc;
 
 /// Containers.
 pub mod collections {
-    /// BTreeMap.
     pub mod btree_map;
 
     pub use btree_map::BTreeMap;
