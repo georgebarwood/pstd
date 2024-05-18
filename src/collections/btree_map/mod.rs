@@ -34,7 +34,7 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::alloc::{AllocError, Allocator};
+use crate::alloc::{AllocError, Allocator, Global};
 
 /// `BTreeMap` similar to [`std::collections::BTreeMap`].
 ///
@@ -82,7 +82,7 @@ impl<K, V> BTreeMap<K, V> {
     /// Returns a new, empty map.
     #[must_use]
     pub fn new() -> Self {
-        Self::with_tuning(DefaultAllocTuning::default())
+        Self::with_tuning(CustomAllocTuning::default())
     }
 }
 
@@ -569,7 +569,7 @@ where
         }
     }
 }
-impl<K, Q, V> std::ops::Index<&Q> for BTreeMap<K, V>
+impl<K, Q, V, A: AllocTuning> std::ops::Index<&Q> for BTreeMap<K, V, A>
 where
     K: Borrow<Q> + Ord,
     Q: Ord + ?Sized,
@@ -707,28 +707,35 @@ pub trait AllocTuning: Clone + Default + Allocator + Sized {
     fn set_seq(&mut self);
 }
 
-/// Default implementation of [AllocTuning]. Default branch is 64, default allocation unit is 8.
+/// Default allocation tuning.
+pub type DefaultAllocTuning = CustomAllocTuning<Global>;
+
+/// Implementation of [AllocTuning]. Default branch is 64, default allocation unit is 8.
 #[derive(Clone)]
-pub struct DefaultAllocTuning<A = DefaultAllocator>
+pub struct CustomAllocTuning<AL>
 where
-    A: Allocator + Clone,
+    AL: Allocator + Clone + Default,
 {
     branch: u16,
     alloc_unit: u8,
-    allocator: A,
+    allocator: AL,
 }
-impl Default for DefaultAllocTuning {
+impl<AL> Default for CustomAllocTuning<AL>
+where
+    AL: Allocator + Clone + Default,
+{
     fn default() -> Self {
         Self {
             branch: 64,
             alloc_unit: 8,
-            allocator: DefaultAllocator {},
+            allocator: AL::default(),
         }
     }
 }
-unsafe impl<A> Allocator for DefaultAllocTuning<A>
+
+unsafe impl<AL> Allocator for CustomAllocTuning<AL>
 where
-    A: Allocator + Clone,
+    AL: Allocator + Clone + Default,
 {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         self.allocator.allocate(layout)
@@ -737,7 +744,10 @@ where
         self.allocator.deallocate(ptr, layout);
     }
 }
-impl AllocTuning for DefaultAllocTuning {
+impl<AL> AllocTuning for CustomAllocTuning<AL>
+where
+    AL: Allocator + Clone + Default,
+{
     fn full_action(&self, i: usize, len: usize) -> FullAction {
         let lim = (self.branch as usize) * 2 + 1;
         if len >= lim {
@@ -764,7 +774,10 @@ impl AllocTuning for DefaultAllocTuning {
         self.alloc_unit = u8::MAX;
     }
 }
-impl DefaultAllocTuning {
+impl<AL> CustomAllocTuning<AL>
+where
+    AL: Allocator + Clone + Default,
+{
     /// Construct with specified branch and allocation unit.
     pub fn new(branch: u16, alloc_unit: u8) -> Self {
         assert!(branch >= 6);
@@ -773,41 +786,20 @@ impl DefaultAllocTuning {
         Self {
             branch,
             alloc_unit,
-            allocator: DefaultAllocator {},
+            allocator: AL::default(),
         }
     }
-}
 
-impl<A: Allocator + Clone> DefaultAllocTuning<A> {
     /// Construct with specified branch, allocation unit and allocator.
-    pub fn new_in(branch: u16, alloc_unit: u8, allocator: A) -> Self {
+    pub fn new_in(branch: u16, alloc_unit: u8, alloc: AL) -> Self {
         assert!(branch >= 6);
         assert!(branch <= 512);
         assert!(alloc_unit > 0);
         Self {
             branch,
             alloc_unit,
-            allocator,
+            allocator: alloc,
         }
-    }
-}
-
-/// Default implementation of Allocator.
-#[derive(Clone)]
-pub struct DefaultAllocator {}
-unsafe impl Allocator for DefaultAllocator {
-    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        match layout.size() {
-            0 => Ok(NonNull::slice_from_raw_parts(NonNull::dangling(), 0)),
-            size => unsafe {
-                let raw_ptr = std::alloc::alloc(layout);
-                let ptr = NonNull::new(raw_ptr).ok_or(AllocError)?;
-                Ok(NonNull::slice_from_raw_parts(ptr, size))
-            },
-        }
-    }
-    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        std::alloc::dealloc(ptr.as_ptr(), layout);
     }
 }
 
@@ -3183,6 +3175,14 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
 }
 
 // Tests.
+
+#[test]
+fn test_custom_alloc() {
+    let da = Global {};
+    let ct = CustomAllocTuning::new_in(32, 8, da);
+    let mut map = BTreeMap::with_tuning(ct);
+    map.insert("hello", "there");
+}
 
 #[cfg(all(test, not(miri), feature = "cap"))]
 use {cap::Cap, std::alloc};
