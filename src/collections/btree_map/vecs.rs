@@ -1,5 +1,4 @@
 use std::{
-    alloc,
     alloc::Layout,
     borrow::Borrow,
     cmp::Ordering,
@@ -11,6 +10,8 @@ use std::{
     ptr,
     ptr::NonNull,
 };
+
+use crate::collections::btree_map::AllocTuning;
 
 /// Basic vec, does not have own capacity or length, just a pointer to memory.
 /// Kind-of cribbed from <https://doc.rust-lang.org/nomicon/vec/vec-final.html>.
@@ -47,40 +48,42 @@ impl<T> BasicVec<T> {
     /// # Safety
     ///
     /// `oa` must be the previous alloc set (0 if no alloc has yet been set).
-    pub unsafe fn set_alloc(&mut self, oa: usize, na: usize) {
+    pub unsafe fn set_alloc<A: AllocTuning>(&mut self, oa: usize, na: usize, alloc: &A) {
         if mem::size_of::<T>() == 0 {
             return;
         }
         if na == 0 {
-            self.free(oa);
+            self.free(oa, alloc);
             return;
         }
         let new_layout = Layout::array::<T>(na).unwrap();
 
         let new_ptr = if oa == 0 {
-            alloc::alloc(new_layout)
+            alloc.allocate(new_layout)
         } else {
             let old_layout = Layout::array::<T>(oa).unwrap();
             let old_ptr = self.p.as_ptr().cast::<u8>();
-            alloc::realloc(old_ptr, old_layout, new_layout.size())
-        };
+            let old_ptr = NonNull::new(old_ptr).unwrap();
+            if new_layout.size() > old_layout.size() {
+                alloc.grow(old_ptr, old_layout, new_layout)
+            } else {
+                alloc.shrink(old_ptr, old_layout, new_layout)
+            }
+        }
+        .unwrap();
 
-        // If allocation fails, `new_ptr` will be null, in which case we abort.
-        self.p = match NonNull::new(new_ptr.cast::<T>()) {
-            Some(p) => p,
-            None => alloc::handle_alloc_error(new_layout),
-        };
+        self.p = NonNull::new(new_ptr.as_ptr().cast::<T>()).unwrap();
     }
 
     /// Free memory.
     /// # Safety
     ///
     /// oa must be the last allocation set.
-    pub unsafe fn free(&mut self, oa: usize) {
+    pub unsafe fn free<A: AllocTuning>(&mut self, oa: usize, alloc: &A) {
         let elem_size = mem::size_of::<T>();
         if oa != 0 && elem_size != 0 {
-            alloc::dealloc(
-                self.p.as_ptr().cast::<u8>(),
+            alloc.deallocate(
+                NonNull::new(self.p.as_ptr().cast::<u8>()).unwrap(),
                 Layout::array::<T>(oa).unwrap(),
             );
         }
@@ -172,20 +175,6 @@ impl<T> Default for ShortVec<T> {
     }
 }
 
-impl<T> Drop for ShortVec<T> {
-    fn drop(&mut self) {
-        let mut len = self.len as usize;
-        while len > 0 {
-            len -= 1;
-            unsafe {
-                self.v.get(len);
-            }
-        }
-        self.len = 0;
-        self.set_alloc(0);
-    }
-}
-
 impl<T> ShortVec<T> {
     pub fn new() -> Self {
         let v = BasicVec::new();
@@ -201,13 +190,13 @@ impl<T> ShortVec<T> {
         self.len as usize
     }
 
-    pub fn set_alloc(&mut self, na: usize) {
+    pub fn set_alloc<A: AllocTuning>(&mut self, na: usize, alloc: &A) {
         safe_assert!(na >= self.len());
         if na == self.alloc as usize {
             return;
         }
         unsafe {
-            self.v.set_alloc(self.alloc as usize, na);
+            self.v.set_alloc(self.alloc as usize, na, alloc);
         }
         self.alloc = na as u16;
     }
@@ -252,19 +241,19 @@ impl<T> ShortVec<T> {
         }
     }
 
-    pub fn split(&mut self, at: usize, a1: usize, a2: usize) -> Self {
+    pub fn split<A: AllocTuning>(&mut self, at: usize, a1: usize, a2: usize, alloc: &A) -> Self {
         safe_assert!(at < self.len());
         let len = self.len() - at;
         safe_assert!(a1 >= at);
         safe_assert!(a2 >= len);
         let mut result = Self::new();
-        result.set_alloc(a2);
+        result.set_alloc(a2, alloc);
         unsafe {
             result.v.move_from(at, &mut self.v, 0, len);
         }
         result.len = len as u16;
         self.len = at as u16;
-        self.set_alloc(a1);
+        self.set_alloc(a1, alloc);
         result
     }
 
@@ -281,33 +270,9 @@ impl<T> ShortVec<T> {
         safe_assert!(i < self.len());
         unsafe { &mut *self.v.ix(i) }
     }
-}
 
-impl<T> Clone for ShortVec<T>
-where
-    T: Clone,
-{
-    fn clone(&self) -> Self {
-        let mut c = Self::new();
-        c.set_alloc(self.alloc as usize);
-        let mut n = self.len;
-        if n > 0 {
-            unsafe {
-                let mut src = self.v.p.as_ptr();
-                let mut dest = c.v.p.as_ptr();
-                loop {
-                    dest.write((*src).clone());
-                    c.len += 1;
-                    n -= 1;
-                    if n == 0 {
-                        break;
-                    }
-                    src = src.add(1);
-                    dest = dest.add(1);
-                }
-            }
-        }
-        c
+    pub fn sv_into_iter(self) -> IntoIterShortVec<T> {
+        IntoIterShortVec { start: 0, v: self }
     }
 }
 
@@ -337,24 +302,18 @@ where
     }
 }
 
-impl<T> IntoIterator for ShortVec<T> {
-    type Item = T;
-    type IntoIter = IntoIterShortVec<T>;
-    fn into_iter(self) -> Self::IntoIter {
-        IntoIterShortVec { start: 0, v: self }
-    }
-}
-
 pub struct IntoIterShortVec<T> {
     start: usize,
     v: ShortVec<T>,
 }
 
-impl<T> Iterator for IntoIterShortVec<T> {
-    type Item = T;
+impl<T> IntoIterShortVec<T> {
     #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn next<A: AllocTuning>(&mut self, alloc: &A) -> Option<T> {
         if self.start == self.v.len() {
+            self.start = 0;
+            self.v.len = 0;
+            self.v.set_alloc(0, alloc);
             None
         } else {
             let ix = self.start;
@@ -362,28 +321,21 @@ impl<T> Iterator for IntoIterShortVec<T> {
             Some(unsafe { self.v.v.get(ix) })
         }
     }
-}
-impl<T> DoubleEndedIterator for IntoIterShortVec<T> {
+
     #[inline]
-    fn next_back(&mut self) -> Option<Self::Item> {
+    pub fn next_back<A: AllocTuning>(&mut self, alloc: &A) -> Option<T> {
         if self.start == self.v.len() {
+            self.start = 0;
+            self.v.len = 0;
+            self.v.set_alloc(0, alloc);
             None
         } else {
             self.v.len -= 1;
             Some(unsafe { self.v.v.get(self.v.len()) })
         }
     }
-}
-impl<T> Drop for IntoIterShortVec<T> {
-    fn drop(&mut self) {
-        while self.len() > 0 {
-            self.next();
-        }
-        self.v.len = 0;
-    }
-}
-impl<T> ExactSizeIterator for IntoIterShortVec<T> {
-    fn len(&self) -> usize {
+
+    pub fn len(&self) -> usize {
         self.v.len() - self.start
     }
 }
@@ -403,15 +355,6 @@ impl<K, V> Default for PairVec<K, V> {
     }
 }
 
-impl<K, V> Drop for PairVec<K, V> {
-    fn drop(&mut self) {
-        while self.len != 0 {
-            self.pop();
-        }
-        self.set_alloc(0);
-    }
-}
-
 unsafe impl<K: Send, V: Send> Send for PairVec<K, V> {}
 unsafe impl<K: Sync, V: Sync> Sync for PairVec<K, V> {}
 
@@ -423,6 +366,13 @@ impl<K, V> PairVec<K, V> {
             alloc: 0,
             _pd: PhantomData,
         }
+    }
+
+    pub fn dealloc<A: AllocTuning>(&mut self, alloc: &A) {
+        while self.len != 0 {
+            self.pop();
+        }
+        self.set_alloc(0, alloc);
     }
 
     pub fn len(&self) -> usize {
@@ -455,7 +405,7 @@ impl<K, V> PairVec<K, V> {
         Self::layout(amount).1
     }
 
-    pub fn set_alloc(&mut self, na: usize) {
+    pub fn set_alloc<A: AllocTuning>(&mut self, na: usize, alloc: &A) {
         safe_assert!(na >= self.len());
         if na == self.alloc as usize {
             return;
@@ -471,11 +421,8 @@ impl<K, V> PairVec<K, V> {
                 NonNull::dangling()
             } else {
                 let (layout, off) = Self::layout(na);
-                let np = alloc::alloc(layout);
-                let np = match NonNull::new(np.cast::<u8>()) {
-                    Some(np) => np,
-                    None => alloc::handle_alloc_error(layout),
-                };
+                let np = alloc.allocate(layout).unwrap();
+                let np = np.cast::<u8>();
 
                 // Copy keys and values from old allocation to new allocation.
                 if self.len > 0 {
@@ -492,21 +439,27 @@ impl<K, V> PairVec<K, V> {
 
             // Free the old allocation.
             if self.alloc > 0 {
-                alloc::dealloc(self.p.as_ptr(), old_layout);
+                alloc.deallocate(self.p, old_layout);
             }
             self.alloc = na as u16;
             self.p = np;
         }
     }
 
-    pub fn split(&mut self, at: usize, a1: usize, a2: usize) -> ((K, V), Self) {
+    pub fn split<A: AllocTuning>(
+        &mut self,
+        at: usize,
+        a1: usize,
+        a2: usize,
+        alloc: &A,
+    ) -> ((K, V), Self) {
         safe_assert!(at <= self.len());
         let x = at + 1;
         let len = self.len() - x;
         safe_assert!(a1 >= at);
         safe_assert!(a2 >= len);
         let mut result = Self::new();
-        result.set_alloc(a2);
+        result.set_alloc(a2, alloc);
         unsafe {
             let (kf, vf) = self.ixmp(x);
             let (kt, vt) = result.ixmp(0);
@@ -516,7 +469,7 @@ impl<K, V> PairVec<K, V> {
         result.len = len as u16;
         self.len -= len as u16;
         let med = self.pop().unwrap();
-        self.set_alloc(a1);
+        self.set_alloc(a1, alloc);
         (med, result)
     }
 
@@ -698,16 +651,14 @@ impl<K, V> PairVec<K, V> {
             ixb,
         }
     }
-}
 
-impl<K, V> Clone for PairVec<K, V>
-where
-    K: Clone,
-    V: Clone,
-{
-    fn clone(&self) -> Self {
+    pub fn clone<A: AllocTuning>(&self, alloc: &A) -> Self
+    where
+        K: Clone,
+        V: Clone,
+    {
         let mut c = Self::new();
-        c.set_alloc(self.alloc as usize);
+        c.set_alloc(self.alloc as usize, alloc);
         let mut n = self.len;
         if n > 0 {
             unsafe {
@@ -845,26 +796,24 @@ pub struct IntoIterPairVec<K, V> {
     ix: usize,
     ixb: usize,
 }
-impl<K, V> Default for IntoIterPairVec<K, V> {
-    fn default() -> Self {
+impl<K, V> IntoIterPairVec<K, V> {
+    pub fn len(&self) -> usize {
+        self.ixb - self.ix
+    }
+    pub fn empty() -> Self {
         Self {
             v: PairVec::default(),
             ix: 0,
             ixb: 0,
         }
     }
-}
-impl<K, V> IntoIterPairVec<K, V> {
-    pub fn len(&self) -> usize {
-        self.ixb - self.ix
-    }
-}
-impl<K, V> Iterator for IntoIterPairVec<K, V> {
-    type Item = (K, V);
+
     #[inline]
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn next<A: AllocTuning>(&mut self, alloc: &A) -> Option<(K, V)> {
         unsafe {
             if self.ix == self.ixb {
+                self.v.len = 0;
+                self.v.set_alloc(0, alloc);
                 return None;
             }
             let (kp, vp) = self.v.ixmp(self.ix);
@@ -872,25 +821,18 @@ impl<K, V> Iterator for IntoIterPairVec<K, V> {
             Some((kp.read(), vp.read()))
         }
     }
-}
-impl<K, V> DoubleEndedIterator for IntoIterPairVec<K, V> {
+
     #[inline]
-    fn next_back(&mut self) -> Option<Self::Item> {
+    pub fn next_back<A: AllocTuning>(&mut self, alloc: &A) -> Option<(K, V)> {
         unsafe {
             if self.ix == self.ixb {
+                self.v.len = 0;
+                self.v.set_alloc(0, alloc);
                 return None;
             }
             self.ixb -= 1;
             let (kp, vp) = self.v.ixmp(self.ixb);
             Some((kp.read(), vp.read()))
         }
-    }
-}
-impl<K, V> Drop for IntoIterPairVec<K, V> {
-    fn drop(&mut self) {
-        while self.ix != self.ixb {
-            self.next();
-        }
-        self.v.len = 0;
     }
 }

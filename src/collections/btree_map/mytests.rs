@@ -39,6 +39,7 @@ fn exp_mem_test() {
     for i in 0..n {
         map.insert(i as u32, 1u8);
     }
+    println!("Done insertions");
     print_memory();
     println!("Required memory: {} bytes", n * 5);
 }
