@@ -4,6 +4,18 @@ const REP: usize = if cfg!(miri) { 2 } else { 1000 };
 const N: usize = if cfg!(miri) { 100 } else { 10000 };
 
 #[test]
+fn exp_clear_test()
+{
+    let n = N;
+    let mut map = BTreeMap::new();
+    for i in 0..n {
+        map.insert(i as u32, 1u8);
+    }
+    map.clear();
+    assert!(map.len() == 0);
+}
+
+#[test]
 #[cfg(feature = "serde")]
 fn exp_serde_test() {
     let n = N;
@@ -696,34 +708,29 @@ fn test_custom_alloc() {
 
 #[test]
 fn test_custom_alloc2() {
-    let a = Global{};
+    let a = Global {};
     let mut map = BTreeMap::<_, _, CustomAllocTuning<Global>>::new_in(a);
     map.insert("hello", "there");
 }
 
 #[derive(Clone)]
-struct ExTuning( Global );
+struct ExTuning(Global);
 
-unsafe impl Allocator for ExTuning
-{
-     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError>
-     {
-        self.0.allocate(layout)  
-     }
-     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout)
-     {
+unsafe impl Allocator for ExTuning {
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        self.0.allocate(layout)
+    }
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         self.0.deallocate(ptr, layout);
-     }
+    }
 }
 
-impl ExTuning
-{
-    const BRANCH : usize = 32;
-    const AU : usize = 4;
+impl ExTuning {
+    const BRANCH: usize = 32;
+    const AU: usize = 4;
 }
 
-impl AllocTuning for ExTuning
-{
+impl AllocTuning for ExTuning {
     fn full_action(&self, i: usize, len: usize) -> FullAction {
         let lim = Self::BRANCH * 2 + 1;
         if len >= lim {
@@ -746,14 +753,12 @@ impl AllocTuning for ExTuning
             None
         }
     }
-    fn set_seq(&mut self) {
-    }
+    fn set_seq(&mut self) {}
 }
 
 #[test]
 fn test_custom_alloc3() {
-    let t = ExTuning( Global{} );
+    let t = ExTuning(Global {});
     let mut map = BTreeMap::with_tuning(t);
     map.insert("hello", "there");
 }
-

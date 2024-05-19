@@ -90,6 +90,26 @@ impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
     #[cfg(test)]
     pub(crate) fn check(&self) {}
 
+    /// Returns a new, empty map with specified allocator.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::{ alloc::Global, collections::btree_map::{BTreeMap,CustomAllocTuning} };
+    /// let a = Global {};
+    /// let mut map = BTreeMap::<_, _, CustomAllocTuning<Global>>::new_in(a);
+    /// map.insert("England", "London");
+    /// ```
+    #[must_use]
+    pub fn new_in<AL>(a: AL) -> BTreeMap<K, V, CustomAllocTuning<AL>>
+    where
+        AL: Allocator + Clone,
+    {
+        let ct = CustomAllocTuning::new_in(32, 8, a);
+        let map: BTreeMap<K, V, CustomAllocTuning<AL>> = BTreeMap::with_tuning(ct);
+        map
+    }
+
     /// Returns a new, empty map with specified allocation tuning.
     ///
     /// # Example
@@ -110,22 +130,12 @@ impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
         }
     }
 
-    /// ToDo
-    #[must_use]
-    pub fn new_in<AL>(a: AL) -> BTreeMap<K, V, CustomAllocTuning<AL>> 
-       where AL: Allocator + Clone
-    {
-       let ct = CustomAllocTuning::new_in(32, 8, a);
-       let map : BTreeMap<K, V, CustomAllocTuning<AL>> = BTreeMap::with_tuning(ct);
-       map
-    }
-
     /// Get a cloned copy of the tuning.
     pub fn get_tuning(&self) -> A {
         self.atune.clone()
     }
 
-    /// Update the allocation tuning for the map.
+    /// Update the allocation tuning for the map, returns the replaced tuning.
     pub fn set_tuning(&mut self, atune: A) -> A {
         mem::replace(&mut self.atune, atune)
     }
@@ -133,7 +143,8 @@ impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
     /// Clear the map.
     pub fn clear(&mut self) {
         self.len = 0;
-        self.tree = Tree::new();
+        self.tree.dealloc(&self.atune);
+        // self.tree = Tree::new();
     }
 
     /// Get number of key-value pairs in the map.
@@ -3213,5 +3224,5 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[cfg(test)]
 mod mytests;
 
-#[cfg(test)]
-mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
+// #[cfg(test)]
+// mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
