@@ -84,11 +84,6 @@ impl<K, V> BTreeMap<K, V> {
     pub fn new() -> Self {
         Self::with_tuning(CustomAllocTuning::default())
     }
-}
-
-impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
-    #[cfg(test)]
-    pub(crate) fn check(&self) {}
 
     /// Returns a new, empty map with specified allocator.
     ///
@@ -97,7 +92,7 @@ impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
     /// ```
     /// use pstd::{ alloc::Global, collections::btree_map::{BTreeMap,CustomAllocTuning} };
     /// let a = Global {};
-    /// let mut map = BTreeMap::<_, _, CustomAllocTuning<Global>>::new_in(a);
+    /// let mut map = BTreeMap::new_in(a);
     /// map.insert("England", "London");
     /// ```
     #[must_use]
@@ -105,10 +100,13 @@ impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
     where
         AL: Allocator + Clone,
     {
-        let ct = CustomAllocTuning::new_in(32, 8, a);
-        let map: BTreeMap<K, V, CustomAllocTuning<AL>> = BTreeMap::with_tuning(ct);
-        map
+        BTreeMap::with_tuning(CustomAllocTuning::new_in(32, 8, a))
     }
+}
+
+impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
+    #[cfg(test)]
+    pub(crate) fn check(&self) {}
 
     /// Returns a new, empty map with specified allocation tuning.
     ///
