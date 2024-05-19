@@ -4,8 +4,7 @@ const REP: usize = if cfg!(miri) { 2 } else { 1000 };
 const N: usize = if cfg!(miri) { 100 } else { 10000 };
 
 #[test]
-fn exp_clear_test()
-{
+fn exp_clear_test() {
     let n = N;
     let mut map = BTreeMap::new();
     for i in 0..n {
