@@ -1,8 +1,17 @@
 //! [`BTreeMap`] similar to [`std::collections::BTreeMap`].
 //!
-//! The standard BtreeMap can use up to twice as much memory as required, this BTreeMap
-//! only allocates what is needed ( or a little more to avoid allocating too often ), so
-//! memory use can be up to 50% less.
+//! # Differences compared to [`std::collections::BTreeMap`]
+//!
+//! This BTreeMap does not treat a map being out-of-order as being unsafe ( since this cannot be guarunteed for all key types in any case ).
+//! So [`CursorMut::with_mutable_key`], [`CursorMutKey::insert_before_unchecked`] 
+//! and [`CursorMutKey::insert_after_unchecked`] are not marked as unsafe and
+//! crates should not rely on a map being ordered for memory safety.
+//!
+//! This BTreeMap has the trait [`AllocTuning`] which gives control over the allocation
+//! of the map in addition to where it is allocated via the [`Allocator`] trait.
+//! This and other implementation differences mean that less memory is allocated.
+//!
+//! Performance is mostly similar, but clone and serde deserialisation are significantly faster. 
 //!
 //! # Example
 //!
@@ -412,7 +421,6 @@ impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
     }
 
     /// Get iterator for range of mutable references to key-value pairs.
-    /// A key can be mutated, provided it does not change the map order.
     pub fn range_mut<T, R>(&mut self, range: R) -> RangeMut<'_, K, V>
     where
         T: Ord + ?Sized,
@@ -2558,18 +2566,12 @@ impl<'a, K, V, A: AllocTuning> CursorMut<'a, K, V, A> {
     }
 
     /// Insert leaving cursor after newly inserted element.
-    /// # Safety
-    ///
-    /// Keys must be unique and in sorted order.
-    pub unsafe fn insert_before_unchecked(&mut self, key: K, value: V) {
+    pub fn insert_before_unchecked(&mut self, key: K, value: V) {
         self.0.insert_before_unchecked(key, value);
     }
 
     /// Insert leaving cursor before newly inserted element.
-    /// # Safety
-    ///
-    /// Keys must be unique and in sorted order.
-    pub unsafe fn insert_after_unchecked(&mut self, key: K, value: V) {
+    pub fn insert_after_unchecked(&mut self, key: K, value: V) {
         self.0.insert_after_unchecked(key, value);
     }
 
@@ -2611,11 +2613,8 @@ impl<'a, K, V, A: AllocTuning> CursorMut<'a, K, V, A> {
     }
 
     /// Converts the cursor into a `CursorMutKey`, which allows mutating the key of elements in the tree.
-    /// # Safety
-    ///
-    /// Keys must be unique and in sorted order.
     #[must_use]
-    pub unsafe fn with_mutable_key(self) -> CursorMutKey<'a, K, V, A> {
+    pub fn with_mutable_key(self) -> CursorMutKey<'a, K, V, A> {
         self.0
     }
 
