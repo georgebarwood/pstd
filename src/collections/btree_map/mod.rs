@@ -2,16 +2,16 @@
 //!
 //! # Differences compared to [`std::collections::BTreeMap`]
 //!
-//! This BTreeMap does not treat a map being out-of-order as being unsafe ( since this cannot be guarunteed for all key types in any case ).
-//! So [`CursorMut::with_mutable_key`], [`CursorMutKey::insert_before_unchecked`] 
+//! This BTreeMap does not treat a map being out-of-order as unsafe ( since this cannot be guarunteed for all key types in any case ).
+//! So [`CursorMut::with_mutable_key`], [`CursorMutKey::insert_before_unchecked`]
 //! and [`CursorMutKey::insert_after_unchecked`] are not marked as unsafe and
-//! crates should not rely on a map being ordered for memory safety.
+//! crates should not rely on arbitrary maps being ordered for safety.
 //!
 //! This BTreeMap has the trait [`AllocTuning`] which gives control over the allocation
 //! of the map in addition to where it is allocated via the [`Allocator`] trait.
 //! This and other implementation differences mean that less memory is allocated.
 //!
-//! Performance is mostly similar, but clone and serde deserialisation are significantly faster. 
+//! Performance is mostly similar, but clone and serde deserialisation are significantly faster.
 //!
 //! # Example
 //!
@@ -374,9 +374,7 @@ impl<K, V, A: AllocTuning> BTreeMap<K, V, A> {
         let mut from = self.lower_bound_mut(Bound::Included(key));
         let mut to = map.lower_bound_mut(Bound::Unbounded);
         while let Some((k, v)) = from.remove_next() {
-            unsafe {
-                to.insert_before_unchecked(k, v);
-            }
+            to.insert_before_unchecked(k, v);
         }
         map
     }
@@ -1579,7 +1577,7 @@ where
 
     /// Insert value into map returning reference to inserted value.
     pub fn insert(mut self, value: V) -> &'a mut V {
-        unsafe { self.cursor.insert_after_unchecked(self.key, value) };
+        self.cursor.insert_after_unchecked(self.key, value);
         self.cursor.into_mut()
     }
 }
@@ -2745,9 +2743,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                 return Err(UnorderedKeyError {});
             }
         }
-        unsafe {
-            self.insert_before_unchecked(key, value);
-        }
+        self.insert_before_unchecked(key, value);
         Ok(())
     }
 
@@ -2766,26 +2762,18 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                 return Err(UnorderedKeyError {});
             }
         }
-        unsafe {
-            self.insert_after_unchecked(key, value);
-        }
+        self.insert_after_unchecked(key, value);
         Ok(())
     }
 
     /// Insert leaving cursor after newly inserted element.
-    /// # Safety
-    ///
-    /// Keys must be unique and in sorted order.
-    pub unsafe fn insert_before_unchecked(&mut self, key: K, value: V) {
+    pub fn insert_before_unchecked(&mut self, key: K, value: V) {
         self.insert_after_unchecked(key, value);
         self.index += 1;
     }
 
     /// Insert leaving cursor before newly inserted element.
-    /// # Safety
-    ///
-    /// Keys must be unique and in sorted order.
-    pub unsafe fn insert_after_unchecked(&mut self, key: K, value: V) {
+    pub fn insert_after_unchecked(&mut self, key: K, value: V) {
         unsafe {
             (*self.map).len += 1;
             let mut leaf = self.leaf.unwrap_unchecked();

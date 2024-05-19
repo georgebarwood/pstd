@@ -708,7 +708,7 @@ fn test_custom_alloc() {
 #[test]
 fn test_custom_alloc2() {
     let a = Global {};
-    let mut map = BTreeMap::<_, _, CustomAllocTuning<Global>>::new_in(a);
+    let mut map = BTreeMap::new_in(a);
     map.insert("hello", "there");
 }
 
