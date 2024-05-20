@@ -2,7 +2,7 @@
 //!
 //! # Differences compared to [`std::collections::BTreeMap`]
 //!
-//! This BTreeMap does not treat a map being out-of-order as unsafe ( since this cannot be guarunteed for all key types in any case ).
+//! This BTreeMap does not treat a map being out-of-order as unsafe ( since this cannot be guaranteed for all key types in any case ).
 //! So [`CursorMut::with_mutable_key`], [`CursorMutKey::insert_before_unchecked`]
 //! and [`CursorMutKey::insert_after_unchecked`] are not marked as unsafe and
 //! crates should not rely on arbitrary maps being ordered for safety.
