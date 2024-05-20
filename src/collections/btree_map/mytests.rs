@@ -1,7 +1,7 @@
 use crate::collections::btree_map::*;
 
-const REP: usize = if cfg!(miri) { 2 } else { 1000 };
-const N: usize = if cfg!(miri) { 100 } else { 10000 };
+const REP: usize = if cfg!(miri) { 2 } else { 100 };
+const N: usize = if cfg!(miri) { 100 } else { 100000 };
 
 #[test]
 fn exp_clear_test() {
@@ -258,16 +258,20 @@ fn std_cursor_remove_fwd_test() {
 }
 
 #[test]
-fn exp_cursor_seq_insert_only_test() {
+fn exp_cursor_tuned_insert_only_test() {
     for _rep in 0..REP {
         let n = N;
 
-        let ct = DefaultAllocTuning::new(1024,1024);
+        let mut ct = DefaultAllocTuning::new(1023, 2047);
+        ct.set_seq();
         let mut m = BTreeMap::with_tuning(ct);
 
         let mut c = m.lower_bound_mut(Bound::Unbounded);
         for i in 0..n {
             c.insert_before_unchecked(i, i);
+        }
+        if _rep == 0 {
+            print_memory();
         }
     }
 }
@@ -295,6 +299,9 @@ fn exp_cursor_insert_only_test() {
         for i in 0..n {
             c.insert_before_unchecked(i, i);
         }
+        if _rep == 0 {
+            print_memory();
+        }
     }
 }
 
@@ -305,7 +312,9 @@ fn std_cursor_insert_only_test() {
         let mut m = std::collections::BTreeMap::<usize, usize>::new();
         let mut c = m.lower_bound_mut(Bound::Unbounded);
         for i in 0..n {
-            unsafe{ c.insert_before_unchecked(i, i); }
+            unsafe {
+                c.insert_before_unchecked(i, i);
+            }
         }
     }
 }

@@ -6,7 +6,7 @@ use std::{
     fmt::Debug,
     marker::PhantomData,
     mem,
-    ops::{Deref, DerefMut},
+    ops::{Bound, Deref, DerefMut, RangeBounds},
     ptr,
     ptr::NonNull,
 };
@@ -407,9 +407,10 @@ impl<K, V> PairVec<K, V> {
 
     pub fn set_alloc<A: AllocTuning>(&mut self, na: usize, alloc: &A) {
         safe_assert!(na >= self.len());
-        if na == self.alloc as usize {
+        if na != 0 && na == self.alloc as usize {
             return;
         }
+
         if mem::size_of::<K>() == 0 && mem::size_of::<V>() == 0 {
             self.alloc = na as u16;
             return;
@@ -682,6 +683,76 @@ impl<K, V> PairVec<K, V> {
             }
         }
         c
+    }
+
+    pub fn get_xy<T, R>(&self, range: &R) -> (usize, usize)
+    where
+        T: Ord + ?Sized,
+        K: Borrow<T> + Ord,
+        R: RangeBounds<T>,
+    {
+        let y = match range.end_bound() {
+            Bound::Unbounded => self.len(),
+            Bound::Included(k) => self.skip_over(k),
+            Bound::Excluded(k) => self.skip(k),
+        };
+        let x = match range.start_bound() {
+            Bound::Unbounded => 0,
+            Bound::Included(k) => match self.search_to(y, k) {
+                Ok(i) => i,
+                Err(i) => i,
+            },
+            Bound::Excluded(k) => match self.search_to(y, k) {
+                Ok(i) => i + 1,
+                Err(i) => i,
+            },
+        };
+        (x, y)
+    }
+
+    fn skip<Q>(&self, key: &Q) -> usize
+    where
+        K: Borrow<Q> + Ord,
+        Q: Ord + ?Sized,
+    {
+        match self.search(key) {
+            Ok(i) | Err(i) => i,
+        }
+    }
+
+    fn skip_over<Q>(&self, key: &Q) -> usize
+    where
+        K: Borrow<Q> + Ord,
+        Q: Ord + ?Sized,
+    {
+        match self.search(key) {
+            Ok(i) => i + 1,
+            Err(i) => i,
+        }
+    }
+
+    pub fn get_lower<Q>(&self, bound: Bound<&Q>) -> usize
+    where
+        K: Borrow<Q> + Ord,
+        Q: Ord + ?Sized,
+    {
+        match bound {
+            Bound::Unbounded => 0,
+            Bound::Included(k) => self.skip(k),
+            Bound::Excluded(k) => self.skip_over(k),
+        }
+    }
+
+    pub fn get_upper<Q>(&self, bound: Bound<&Q>) -> usize
+    where
+        K: Borrow<Q> + Ord,
+        Q: Ord + ?Sized,
+    {
+        match bound {
+            Bound::Unbounded => self.len(),
+            Bound::Included(k) => self.skip_over(k),
+            Bound::Excluded(k) => self.skip(k),
+        }
     }
 }
 

@@ -797,9 +797,9 @@ where
         if len >= lim {
             if self.seq && i == len {
                 let b = len - 1;
-                FullAction::Split(b, b, lim)
+                FullAction::Split(b, b + 1, lim)
             } else if self.seq && i == 0 {
-                FullAction::Split(0, lim, len - 1)
+                FullAction::Split(0, lim, len)
             } else {
                 let b = len / 2;
                 let r = usize::from(i > b);
@@ -923,8 +923,8 @@ impl<K, V> Tree<K, V> {
 
     fn new_root<A: AllocTuning>(&mut self, (med, right): Split<K, V>, alloc: &A) {
         let mut nl = NonLeafInner::new();
-        nl.v.0.set_alloc(1, alloc);
-        nl.v.0.push(med);
+        nl.v.set_alloc(1, alloc);
+        nl.v.push(med);
         nl.c.set_alloc(2, alloc);
         nl.c.push(mem::take(self));
         nl.c.push(right);
@@ -965,8 +965,8 @@ impl<K, V> Tree<K, V> {
         loop {
             match s {
                 Tree::L(leaf) => return leaf.get_key_value(key),
-                Tree::NL(nl) => match nl.v.look(key) {
-                    Ok(i) => return Some(nl.v.0.ix(i)),
+                Tree::NL(nl) => match nl.v.search(key) {
+                    Ok(i) => return Some(nl.v.ix(i)),
                     Err(i) => s = nl.c.ix(i),
                 },
             }
@@ -982,8 +982,8 @@ impl<K, V> Tree<K, V> {
         loop {
             match s {
                 Tree::L(leaf) => return leaf.get(key),
-                Tree::NL(nl) => match nl.v.look(key) {
-                    Ok(i) => return Some(nl.v.0.ixv(i)),
+                Tree::NL(nl) => match nl.v.search(key) {
+                    Ok(i) => return Some(nl.v.ixv(i)),
                     Err(i) => s = nl.c.ix(i),
                 },
             }
@@ -999,8 +999,8 @@ impl<K, V> Tree<K, V> {
         loop {
             match s {
                 Tree::L(leaf) => return leaf.get_mut(key),
-                Tree::NL(nl) => match nl.v.look(key) {
-                    Ok(i) => return Some(nl.v.0.ixmv(i)),
+                Tree::NL(nl) => match nl.v.search(key) {
+                    Ok(i) => return Some(nl.v.ixmv(i)),
                     Err(i) => s = nl.c.ixm(i),
                 },
             }
@@ -1078,14 +1078,6 @@ impl<K, V> Leaf<K, V> {
         self.0.full()
     }
 
-    fn look_to<Q>(&self, n: usize, key: &Q) -> Result<usize, usize>
-    where
-        K: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        self.0.search_to(n, key)
-    }
-
     #[inline]
     fn look<Q>(&self, key: &Q) -> Result<usize, usize>
     where
@@ -1093,51 +1085,6 @@ impl<K, V> Leaf<K, V> {
         Q: Ord + ?Sized,
     {
         self.0.search(key)
-    }
-
-    fn skip<Q>(&self, key: &Q) -> usize
-    where
-        K: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        match self.0.search(key) {
-            Ok(i) | Err(i) => i,
-        }
-    }
-
-    fn skip_over<Q>(&self, key: &Q) -> usize
-    where
-        K: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        match self.0.search(key) {
-            Ok(i) => i + 1,
-            Err(i) => i,
-        }
-    }
-
-    fn get_lower<Q>(&self, bound: Bound<&Q>) -> usize
-    where
-        K: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        match bound {
-            Bound::Unbounded => 0,
-            Bound::Included(k) => self.skip(k),
-            Bound::Excluded(k) => self.skip_over(k),
-        }
-    }
-
-    fn get_upper<Q>(&self, bound: Bound<&Q>) -> usize
-    where
-        K: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        match bound {
-            Bound::Unbounded => self.0.len(),
-            Bound::Included(k) => self.skip_over(k),
-            Bound::Excluded(k) => self.skip(k),
-        }
     }
 
     fn insert<A: AllocTuning>(&mut self, key: K, x: &mut InsertCtx<K, V, A>)
@@ -1239,31 +1186,6 @@ impl<K, V> Leaf<K, V> {
         result
     }
 
-    fn get_xy<T, R>(&self, range: &R) -> (usize, usize)
-    where
-        T: Ord + ?Sized,
-        K: Borrow<T> + Ord,
-        R: RangeBounds<T>,
-    {
-        let y = match range.end_bound() {
-            Bound::Unbounded => self.0.len(),
-            Bound::Included(k) => self.skip_over(k),
-            Bound::Excluded(k) => self.skip(k),
-        };
-        let x = match range.start_bound() {
-            Bound::Unbounded => 0,
-            Bound::Included(k) => match self.look_to(y, k) {
-                Ok(i) => i,
-                Err(i) => i,
-            },
-            Bound::Excluded(k) => match self.look_to(y, k) {
-                Ok(i) => i + 1,
-                Err(i) => i,
-            },
-        };
-        (x, y)
-    }
-
     fn iter_mut(&mut self) -> IterMutPairVec<'_, K, V> {
         self.0.iter_mut()
     }
@@ -1278,13 +1200,13 @@ type NonLeaf<K, V> = Box<NonLeafInner<K, V>>;
 
 #[derive(Debug)]
 struct NonLeafInner<K, V> {
-    v: Leaf<K, V>,
+    v: PairVec<K, V>,
     c: TreeVec<K, V>,
 }
 impl<K, V> NonLeafInner<K, V> {
     fn new() -> Box<Self> {
         Box::new(Self {
-            v: Leaf::new(),
+            v: PairVec::new(),
             c: TreeVec::new(),
         })
     }
@@ -1303,12 +1225,12 @@ impl<K, V> NonLeafInner<K, V> {
         V: Clone,
     {
         let mut c = ShortVec::new();
-        c.set_alloc(self.v.0.alloc as usize + 1, alloc);
+        c.set_alloc(self.v.alloc as usize + 1, alloc);
         for t in self.c.iter() {
             c.push(t.clone(alloc));
         }
         Box::new(Self {
-            v: Leaf(self.v.0.clone(alloc)),
+            v: self.v.clone(alloc),
             c,
         })
     }
@@ -1317,20 +1239,20 @@ impl<K, V> NonLeafInner<K, V> {
     fn into_iter(mut self) -> (IntoIterPairVec<K, V>, IntoIterShortVec<Tree<K, V>>) {
         let v = mem::take(&mut self.v);
         let c = mem::take(&mut self.c);
-        (v.0.into_iter(), c.sv_into_iter())
+        (v.into_iter(), c.sv_into_iter())
     }
 
     fn remove_at<A: AllocTuning>(&mut self, i: usize, atune: &A) -> ((K, V), usize) {
         if let Some(kv) = self.c.ixm(i).pop_last(atune) {
-            let (kp, vp) = self.v.0.ixbm(i);
+            let (kp, vp) = self.v.ixbm(i);
             let k = mem::replace(kp, kv.0);
             let v = mem::replace(vp, kv.1);
             ((k, v), i + 1)
         } else {
             self.c.remove(i);
-            let kv = self.v.0.remove(i);
-            if let Some(na) = atune.space_action(self.v.0.state()) {
-                self.v.0.set_alloc(na, atune);
+            let kv = self.v.remove(i);
+            if let Some(na) = atune.space_action(self.v.state()) {
+                self.v.set_alloc(na, atune);
                 self.c.set_alloc(na + 1, atune);
             }
             (kv, i)
@@ -1344,13 +1266,13 @@ impl<K, V> NonLeafInner<K, V> {
         a2: usize,
         alloc: &A,
     ) -> ((K, V), Box<Self>) {
-        let (med, right) = self.v.0.split(b, a1, a2, alloc);
+        let (med, right) = self.v.split(b, a1, a2, alloc);
         let right = Box::new(Self {
-            v: Leaf(right),
+            v: right,
             c: self.c.split(b + 1, a1 + 1, a2 + 1, alloc),
         });
-        debug_assert!(right.v.0.alloc + 1 == right.c.alloc);
-        debug_assert!(self.v.0.alloc + 1 == self.c.alloc);
+        debug_assert!(right.v.alloc + 1 == right.c.alloc);
+        debug_assert!(self.v.alloc + 1 == self.c.alloc);
         (med, right)
     }
 
@@ -1358,10 +1280,10 @@ impl<K, V> NonLeafInner<K, V> {
     where
         K: Ord,
     {
-        match self.v.look(&key) {
+        match self.v.search(&key) {
             Ok(i) => {
                 let value = x.value.take().unwrap();
-                let (kp, vp) = self.v.0.ixbm(i);
+                let (kp, vp) = self.v.ixbm(i);
                 *kp = key;
                 x.value = Some(mem::replace(vp, value));
             }
@@ -1369,29 +1291,29 @@ impl<K, V> NonLeafInner<K, V> {
                 self.c.ixm(i).insert(key, x);
                 if let Some((med, right)) = x.split.take() {
                     if self.v.full() {
-                        match x.atune.full_action(i, self.v.0.len()) {
+                        match x.atune.full_action(i, self.v.len()) {
                             FullAction::Split(b, a1, a2) => {
                                 let (pmed, mut pright) = self.split(b, a1, a2, x.atune);
                                 if i > b {
                                     i -= b + 1;
                                     assert!(i < a2);
-                                    pright.v.0.insert(i, med);
+                                    pright.v.insert(i, med);
                                     pright.c.insert(i + 1, right);
                                 } else {
                                     assert!(i < a1);
-                                    self.v.0.insert(i, med);
+                                    self.v.insert(i, med);
                                     self.c.insert(i + 1, right);
                                 }
                                 x.split = Some((pmed, Tree::NL(pright)));
                                 return;
                             }
                             FullAction::Extend(to) => {
-                                self.v.0.set_alloc(to, x.atune);
+                                self.v.set_alloc(to, x.atune);
                                 self.c.set_alloc(to + 1, x.atune);
                             }
                         }
                     }
-                    self.v.0.insert(i, med);
+                    self.v.insert(i, med);
                     self.c.insert(i + 1, right);
                 }
             }
@@ -1403,7 +1325,7 @@ impl<K, V> NonLeafInner<K, V> {
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        match self.v.look(key) {
+        match self.v.search(key) {
             Ok(i) => Some(self.remove_at(i, atune).0),
             Err(i) => self.c.ixm(i).remove(key, atune),
         }
@@ -1412,13 +1334,13 @@ impl<K, V> NonLeafInner<K, V> {
     fn pop_first<A: AllocTuning>(&mut self, atune: &A) -> Option<(K, V)> {
         if let Some(x) = self.c.ixm(0).pop_first(atune) {
             Some(x)
-        } else if self.v.0.is_empty() {
+        } else if self.v.is_empty() {
             None
         } else {
             self.c.remove(0);
-            let result = Some(self.v.0.remove(0));
-            if let Some(na) = atune.space_action(self.v.0.state()) {
-                self.v.0.set_alloc(na, atune);
+            let result = Some(self.v.remove(0));
+            if let Some(na) = atune.space_action(self.v.state()) {
+                self.v.set_alloc(na, atune);
                 self.c.set_alloc(na + 1, atune);
             }
             result
@@ -1429,13 +1351,13 @@ impl<K, V> NonLeafInner<K, V> {
         let i = self.c.len();
         if let Some(x) = self.c.ixm(i - 1).pop_last(atune) {
             Some(x)
-        } else if self.v.0.is_empty() {
+        } else if self.v.is_empty() {
             None
         } else {
             self.c.pop();
-            let result = self.v.0.pop();
-            if let Some(na) = atune.space_action(self.v.0.state()) {
-                self.v.0.set_alloc(na, atune);
+            let result = self.v.pop();
+            if let Some(na) = atune.space_action(self.v.state()) {
+                self.v.set_alloc(na, atune);
                 self.c.set_alloc(na + 1, atune);
             }
             result
@@ -1723,7 +1645,7 @@ impl<'a, K, V> RangeMut<'a, K, V> {
         match tree {
             Tree::L(leaf) => self.fwd_leaf = leaf.iter_mut(),
             Tree::NL(nl) => {
-                let (v, mut c) = (nl.v.0.iter_mut(), nl.c.iter_mut());
+                let (v, mut c) = (nl.v.iter_mut(), nl.c.iter_mut());
                 let ct = c.next();
                 let ct_back = if both { c.next_back() } else { None };
                 let both = both && ct_back.is_none();
@@ -1745,12 +1667,12 @@ impl<'a, K, V> RangeMut<'a, K, V> {
     {
         match tree {
             Tree::L(leaf) => {
-                let (x, y) = leaf.get_xy(range);
+                let (x, y) = leaf.0.get_xy(range);
                 self.fwd_leaf = leaf.0.range_mut(x, y);
             }
             Tree::NL(nl) => {
                 let (x, y) = nl.v.get_xy(range);
-                let (v, mut c) = (nl.v.0.range_mut(x, y), nl.c[x..=y].iter_mut());
+                let (v, mut c) = (nl.v.range_mut(x, y), nl.c[x..=y].iter_mut());
 
                 let ct = c.next();
                 let ct_back = if both { c.next_back() } else { None };
@@ -1774,12 +1696,12 @@ impl<'a, K, V> RangeMut<'a, K, V> {
     {
         match tree {
             Tree::L(leaf) => {
-                let (x, y) = leaf.get_xy(range);
+                let (x, y) = leaf.0.get_xy(range);
                 self.bck_leaf = leaf.0.range_mut(x, y);
             }
             Tree::NL(nl) => {
                 let (x, y) = nl.v.get_xy(range);
-                let (v, mut c) = (nl.v.0.range_mut(x, y), nl.c[x..=y].iter_mut());
+                let (v, mut c) = (nl.v.range_mut(x, y), nl.c[x..=y].iter_mut());
                 let ct_back = c.next_back();
                 self.bck_stk.push(StkMut { v, c });
                 if let Some(ct_back) = ct_back {
@@ -1792,7 +1714,7 @@ impl<'a, K, V> RangeMut<'a, K, V> {
         match tree {
             Tree::L(leaf) => self.bck_leaf = leaf.iter_mut(),
             Tree::NL(nl) => {
-                let (v, mut c) = (nl.v.0.iter_mut(), nl.c.iter_mut());
+                let (v, mut c) = (nl.v.iter_mut(), nl.c.iter_mut());
                 let ct_back = c.next_back();
                 self.bck_stk.push(StkMut { v, c });
                 if let Some(ct_back) = ct_back {
@@ -2178,7 +2100,7 @@ impl<'a, K, V> Range<'a, K, V> {
         match tree {
             Tree::L(leaf) => self.fwd_leaf = leaf.0.iter(),
             Tree::NL(nl) => {
-                let (v, mut c) = (nl.v.0.iter(), nl.c.iter());
+                let (v, mut c) = (nl.v.iter(), nl.c.iter());
                 let ct = c.next();
                 let ct_back = if both { c.next_back() } else { None };
                 let both = both && ct_back.is_none();
@@ -2200,12 +2122,12 @@ impl<'a, K, V> Range<'a, K, V> {
     {
         match tree {
             Tree::L(leaf) => {
-                let (x, y) = leaf.get_xy(range);
+                let (x, y) = leaf.0.get_xy(range);
                 self.fwd_leaf = leaf.0.range(x, y);
             }
             Tree::NL(nl) => {
                 let (x, y) = nl.v.get_xy(range);
-                let (v, mut c) = (nl.v.0.range(x, y), nl.c[x..=y].iter());
+                let (v, mut c) = (nl.v.range(x, y), nl.c[x..=y].iter());
 
                 let ct = c.next();
                 let ct_back = if both { c.next_back() } else { None };
@@ -2229,12 +2151,12 @@ impl<'a, K, V> Range<'a, K, V> {
     {
         match tree {
             Tree::L(leaf) => {
-                let (x, y) = leaf.get_xy(range);
+                let (x, y) = leaf.0.get_xy(range);
                 self.bck_leaf = leaf.0.range(x, y);
             }
             Tree::NL(nl) => {
                 let (x, y) = nl.v.get_xy(range);
-                let (v, mut c) = (nl.v.0.range(x, y), nl.c[x..=y].iter());
+                let (v, mut c) = (nl.v.range(x, y), nl.c[x..=y].iter());
                 let ct_back = c.next_back();
                 self.bck_stk.push(Stk { v, c });
                 if let Some(ct_back) = ct_back {
@@ -2249,7 +2171,7 @@ impl<'a, K, V> Range<'a, K, V> {
                 self.bck_leaf = leaf.iter();
             }
             Tree::NL(nl) => {
-                let (v, mut c) = (nl.v.0.iter(), nl.c.iter());
+                let (v, mut c) = (nl.v.iter(), nl.c.iter());
                 let ct_back = c.next_back();
                 self.bck_stk.push(Stk { v, c });
                 if let Some(ct_back) = ct_back {
@@ -2665,7 +2587,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
         loop {
             match tree {
                 Tree::L(leaf) => {
-                    self.index = leaf.get_lower(bound);
+                    self.index = leaf.0.get_lower(bound);
                     self.leaf = Some(leaf);
                     break;
                 }
@@ -2686,7 +2608,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
         loop {
             match tree {
                 Tree::L(leaf) => {
-                    self.index = leaf.get_upper(bound);
+                    self.index = leaf.0.get_upper(bound);
                     self.leaf = Some(leaf);
                     break;
                 }
@@ -2725,7 +2647,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                     break;
                 }
                 Tree::NL(nl) => {
-                    let ix = nl.v.0.len();
+                    let ix = nl.v.len();
                     self.stack[tsp] = (nl, ix);
                     tree = nl.c.ixm(ix);
                     tsp += 1;
@@ -2808,7 +2730,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
             if let Some((mut nl, mut ix)) = self.stack.pop() {
                 if (*nl).v.full() {
                     let a = &(*self.map).atune;
-                    match a.full_action(ix, (*nl).v.0.len()) {
+                    match a.full_action(ix, (*nl).v.len()) {
                         FullAction::Split(b, a1, a2) => {
                             let (med, right) = (*nl).split(b, a1, a2, a);
                             let r = usize::from(ix > b);
@@ -2818,12 +2740,12 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                             nl = (*t).nonleaf();
                         }
                         FullAction::Extend(to) => {
-                            (*nl).v.0.set_alloc(to, a);
+                            (*nl).v.set_alloc(to, a);
                             (*nl).c.set_alloc(to + 1, a);
                         }
                     }
                 }
-                (*nl).v.0.insert(ix, med);
+                (*nl).v.insert(ix, med);
                 (*nl).c.insert(ix + 1, tree);
                 ix += r;
                 self.stack.push((nl, ix));
@@ -2853,7 +2775,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                 while tsp > 0 {
                     tsp -= 1;
                     let (nl, ix) = self.stack[tsp];
-                    if ix < (*nl).v.0.len() {
+                    if ix < (*nl).v.len() {
                         let a = &(*self.map).atune;
                         let (kv, ix) = (*nl).remove_at(ix, a);
                         self.stack[tsp] = (nl, ix);
@@ -2880,8 +2802,8 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                 while tsp > 0 {
                     tsp -= 1;
                     let (nl, mut ix) = self.stack[tsp];
-                    if ix < (*nl).v.0.len() {
-                        let kv = (*nl).v.0.ixbm(ix);
+                    if ix < (*nl).v.len() {
+                        let kv = (*nl).v.ixbm(ix);
                         ix += 1;
                         self.stack[tsp] = (nl, ix);
                         self.push(tsp + 1, (*nl).c.ixm(ix));
@@ -2907,7 +2829,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                     let (nl, mut ix) = self.stack[tsp];
                     if ix > 0 {
                         ix -= 1;
-                        let kv = (*nl).v.0.ixbm(ix);
+                        let kv = (*nl).v.ixbm(ix);
                         self.stack[tsp] = (nl, ix);
                         self.push_back(tsp + 1, (*nl).c.ixm(ix));
                         return Some(kv);
@@ -2929,8 +2851,8 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
             let leaf = self.leaf.unwrap_unchecked();
             if self.index == (*leaf).0.len() {
                 for (nl, ix) in self.stack.iter().rev() {
-                    if *ix < (**nl).v.0.len() {
-                        return Some((**nl).v.0.ixbm(*ix));
+                    if *ix < (**nl).v.len() {
+                        return Some((**nl).v.ixbm(*ix));
                     }
                 }
                 None
@@ -2946,7 +2868,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
             if self.index == 0 {
                 for (nl, ix) in self.stack.iter().rev() {
                     if *ix > 0 {
-                        return Some((**nl).v.0.ixbm(*ix - 1));
+                        return Some((**nl).v.ixbm(*ix - 1));
                     }
                 }
                 None
@@ -3031,7 +2953,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
             match tree {
                 Tree::L(leaf) => {
                     self.leaf = Some(leaf);
-                    self.index = leaf.get_lower(bound);
+                    self.index = leaf.0.get_lower(bound);
                     break;
                 }
                 Tree::NL(nl) => {
@@ -3052,7 +2974,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
             match tree {
                 Tree::L(leaf) => {
                     self.leaf = Some(leaf);
-                    self.index = leaf.get_upper(bound);
+                    self.index = leaf.0.get_upper(bound);
                     break;
                 }
                 Tree::NL(nl) => {
@@ -3090,7 +3012,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
                     break;
                 }
                 Tree::NL(nl) => {
-                    let ix = nl.v.0.len();
+                    let ix = nl.v.len();
                     self.stack[tsp] = (nl, ix);
                     tree = nl.c.ix(ix);
                     tsp += 1;
@@ -3109,8 +3031,8 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
                 while tsp > 0 {
                     tsp -= 1;
                     let (nl, mut ix) = self.stack[tsp];
-                    if ix < (*nl).v.0.len() {
-                        let kv = (*nl).v.0.ix(ix);
+                    if ix < (*nl).v.len() {
+                        let kv = (*nl).v.ix(ix);
                         ix += 1;
                         self.stack[tsp] = (nl, ix);
                         let ct = (*nl).c.ix(ix);
@@ -3138,7 +3060,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
                     let (nl, mut ix) = self.stack[tsp];
                     if ix > 0 {
                         ix -= 1;
-                        let kv = (*nl).v.0.ix(ix);
+                        let kv = (*nl).v.ix(ix);
                         self.stack[tsp] = (nl, ix);
                         let ct = (*nl).c.ix(ix);
                         self.push_back(tsp + 1, ct);
@@ -3160,8 +3082,8 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
             let leaf = self.leaf.unwrap_unchecked();
             if self.index == (*leaf).0.len() {
                 for (nl, ix) in self.stack.iter().rev() {
-                    if *ix < (**nl).v.0.len() {
-                        return Some((**nl).v.0.ix(*ix));
+                    if *ix < (**nl).v.len() {
+                        return Some((**nl).v.ix(*ix));
                     }
                 }
                 None
@@ -3178,7 +3100,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
             if self.index == 0 {
                 for (nl, ix) in self.stack.iter().rev() {
                     if *ix > 0 {
-                        return Some((**nl).v.0.ix(*ix - 1));
+                        return Some((**nl).v.ix(*ix - 1));
                     }
                 }
                 None
