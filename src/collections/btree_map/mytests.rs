@@ -258,11 +258,11 @@ fn std_cursor_remove_fwd_test() {
 }
 
 #[test]
-fn exp_cursor_seq_insert_test() {
+fn exp_cursor_seq_insert_only_test() {
     for _rep in 0..REP {
         let n = N;
 
-        let ct = DefaultAllocTuning::new(1024, 1024);
+        let ct = DefaultAllocTuning::new(1024,1024);
         let mut m = BTreeMap::with_tuning(ct);
 
         let mut c = m.lower_bound_mut(Bound::Unbounded);
@@ -273,7 +273,7 @@ fn exp_cursor_seq_insert_test() {
 }
 
 #[test]
-fn std_vec_seq_insert_test() {
+fn std_vec_seq_insert_only_test() {
     for _rep in 0..REP {
         let mut vec = Vec::<(usize, usize)>::default();
         let n = N;
@@ -282,6 +282,30 @@ fn std_vec_seq_insert_test() {
         }
         if _rep == 0 {
             print_memory();
+        }
+    }
+}
+
+#[test]
+fn exp_cursor_insert_only_test() {
+    for _rep in 0..REP {
+        let n = N;
+        let mut m = /*std::collections::*/ BTreeMap::<usize, usize>::new();
+        let mut c = m.lower_bound_mut(Bound::Unbounded);
+        for i in 0..n {
+            c.insert_before_unchecked(i, i);
+        }
+    }
+}
+
+#[test]
+fn std_cursor_insert_only_test() {
+    for _rep in 0..REP {
+        let n = N;
+        let mut m = std::collections::BTreeMap::<usize, usize>::new();
+        let mut c = m.lower_bound_mut(Bound::Unbounded);
+        for i in 0..n {
+            unsafe{ c.insert_before_unchecked(i, i); }
         }
     }
 }
