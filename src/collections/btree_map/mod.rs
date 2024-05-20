@@ -735,7 +735,7 @@ pub type DefaultAllocTuning = CustomAllocTuning<Global>;
 
 /// Implementation of [AllocTuning]. Default branch is 64, default allocation unit is 8.
 #[derive(Clone)]
-pub struct CustomAllocTuning<AL>
+pub struct CustomAllocTuning<AL = Global>
 where
     AL: Allocator + Clone,
 {
@@ -743,6 +743,37 @@ where
     alloc_unit: u16,
     seq: bool,
     allocator: AL,
+}
+impl<AL> CustomAllocTuning<AL>
+where
+    AL: Allocator + Clone,
+{
+    /// Construct with specified branch and allocation unit.
+    pub fn new(branch: u16, alloc_unit: u16) -> Self
+    where
+        AL: Default,
+    {
+        assert!(branch >= 6);
+        assert!(alloc_unit > 0);
+        Self {
+            branch,
+            alloc_unit,
+            seq: false,
+            allocator: AL::default(),
+        }
+    }
+
+    /// Construct with specified branch, allocation unit and allocator.
+    pub fn new_in(branch: u16, alloc_unit: u16, alloc: AL) -> Self {
+        assert!(branch >= 6);
+        assert!(alloc_unit > 0);
+        Self {
+            branch,
+            alloc_unit,
+            seq: false,
+            allocator: alloc,
+        }
+    }
 }
 impl<AL> Default for CustomAllocTuning<AL>
 where
@@ -757,7 +788,6 @@ where
         }
     }
 }
-
 impl<AL> AllocTuning for CustomAllocTuning<AL>
 where
     AL: Allocator + Clone,
@@ -793,39 +823,6 @@ where
     }
     fn set_seq(&mut self) {
         self.seq = true;
-    }
-}
-impl<AL> CustomAllocTuning<AL>
-where
-    AL: Allocator + Clone,
-{
-    /// Construct with specified branch and allocation unit.
-    pub fn new(branch: u16, alloc_unit: u16) -> Self
-    where
-        AL: Default,
-    {
-        assert!(branch >= 6);
-        assert!(branch <= 512);
-        assert!(alloc_unit > 0);
-        Self {
-            branch,
-            alloc_unit,
-            seq: false,
-            allocator: AL::default(),
-        }
-    }
-
-    /// Construct with specified branch, allocation unit and allocator.
-    pub fn new_in(branch: u16, alloc_unit: u16, alloc: AL) -> Self {
-        assert!(branch >= 6);
-        assert!(branch <= 512);
-        assert!(alloc_unit > 0);
-        Self {
-            branch,
-            alloc_unit,
-            seq: false,
-            allocator: alloc,
-        }
     }
 }
 unsafe impl<AL> Allocator for CustomAllocTuning<AL>

@@ -258,6 +258,35 @@ fn std_cursor_remove_fwd_test() {
 }
 
 #[test]
+fn exp_cursor_seq_insert_test() {
+    for _rep in 0..REP {
+        let n = N;
+
+        let ct = DefaultAllocTuning::new(1024, 1024);
+        let mut m = BTreeMap::with_tuning(ct);
+
+        let mut c = m.lower_bound_mut(Bound::Unbounded);
+        for i in 0..n {
+            c.insert_before_unchecked(i, i);
+        }
+    }
+}
+
+#[test]
+fn std_vec_seq_insert_test() {
+    for _rep in 0..REP {
+        let mut vec = Vec::<(usize, usize)>::default();
+        let n = N;
+        for i in 0..n {
+            vec.push((i, i));
+        }
+        if _rep == 0 {
+            print_memory();
+        }
+    }
+}
+
+#[test]
 fn exp_cursor_insert_test() {
     for _rep in 0..REP {
         let n = N;
@@ -404,20 +433,6 @@ fn exp_insert_seq_fwd() {
         let n = N;
         for i in 0..n {
             map.insert(i, i);
-        }
-        if _rep == 0 {
-            print_memory();
-        }
-    }
-}
-
-#[test]
-fn vec_insert_fwd() {
-    for _rep in 0..REP {
-        let mut vec = Vec::<(usize, usize)>::default();
-        let n = N;
-        for i in 0..n {
-            vec.push((i, i));
         }
         if _rep == 0 {
             print_memory();
