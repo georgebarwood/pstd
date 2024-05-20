@@ -684,9 +684,7 @@ where
                             break;
                         }
                     }
-                    unsafe {
-                        c.insert_before_unchecked(k, v);
-                    }
+                    c.insert_before_unchecked(k, v);
                 } else {
                     return Ok(map);
                 }
@@ -742,7 +740,8 @@ where
     AL: Allocator + Clone,
 {
     branch: u16,
-    alloc_unit: u8,
+    alloc_unit: u16,
+    seq: bool,
     allocator: AL,
 }
 impl<AL> Default for CustomAllocTuning<AL>
@@ -753,22 +752,12 @@ where
         Self {
             branch: 64,
             alloc_unit: 8,
+            seq: false,
             allocator: AL::default(),
         }
     }
 }
 
-unsafe impl<AL> Allocator for CustomAllocTuning<AL>
-where
-    AL: Allocator + Clone,
-{
-    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        self.allocator.allocate(layout)
-    }
-    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        self.allocator.deallocate(ptr, layout);
-    }
-}
 impl<AL> AllocTuning for CustomAllocTuning<AL>
 where
     AL: Allocator + Clone,
@@ -776,10 +765,17 @@ where
     fn full_action(&self, i: usize, len: usize) -> FullAction {
         let lim = (self.branch as usize) * 2 + 1;
         if len >= lim {
-            let b = len / 2;
-            let r = usize::from(i > b);
-            let au = self.alloc_unit as usize;
-            FullAction::Split(b, b + (1 - r) * au, (len - b - 1) + r * au)
+            if self.seq && i == len {
+                let b = len - 1;
+                FullAction::Split(b, b, lim)
+            } else if self.seq && i == 0 {
+                FullAction::Split(0, lim, len - 1)
+            } else {
+                let b = len / 2;
+                let r = usize::from(i > b);
+                let au = self.alloc_unit as usize;
+                FullAction::Split(b, b + (1 - r) * au, (len - b - 1) + r * au)
+            }
         } else {
             let mut na = len + self.alloc_unit as usize;
             if na > lim {
@@ -796,7 +792,7 @@ where
         }
     }
     fn set_seq(&mut self) {
-        self.alloc_unit = u8::MAX;
+        self.seq = true;
     }
 }
 impl<AL> CustomAllocTuning<AL>
@@ -804,7 +800,7 @@ where
     AL: Allocator + Clone,
 {
     /// Construct with specified branch and allocation unit.
-    pub fn new(branch: u16, alloc_unit: u8) -> Self
+    pub fn new(branch: u16, alloc_unit: u16) -> Self
     where
         AL: Default,
     {
@@ -814,20 +810,33 @@ where
         Self {
             branch,
             alloc_unit,
+            seq: false,
             allocator: AL::default(),
         }
     }
 
     /// Construct with specified branch, allocation unit and allocator.
-    pub fn new_in(branch: u16, alloc_unit: u8, alloc: AL) -> Self {
+    pub fn new_in(branch: u16, alloc_unit: u16, alloc: AL) -> Self {
         assert!(branch >= 6);
         assert!(branch <= 512);
         assert!(alloc_unit > 0);
         Self {
             branch,
             alloc_unit,
+            seq: false,
             allocator: alloc,
         }
+    }
+}
+unsafe impl<AL> Allocator for CustomAllocTuning<AL>
+where
+    AL: Allocator + Clone,
+{
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        self.allocator.allocate(layout)
+    }
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+        self.allocator.deallocate(ptr, layout);
     }
 }
 
@@ -3209,5 +3218,5 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[cfg(test)]
 mod mytests;
 
-// #[cfg(test)]
-// mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
+#[cfg(test)]
+mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!

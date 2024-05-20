@@ -1336,7 +1336,7 @@ fn test_cursor_mut() {
 #[test]
 fn test_cursor_mut_key() {
     let mut map = BTreeMap::from([(1, 'a'), (3, 'c'), (5, 'e')]);
-    let mut cur = unsafe { map.lower_bound_mut(Bound::Excluded(&3)).with_mutable_key() };
+    let mut cur = map.lower_bound_mut(Bound::Excluded(&3)).with_mutable_key();
     assert_eq!(cur.peek_next(), Some((&mut 5, &mut 'e')));
     assert_eq!(cur.peek_prev(), Some((&mut 3, &mut 'c')));
 
@@ -1355,7 +1355,7 @@ fn test_cursor_mut_key() {
     assert_eq!(cur.remove_next(), None);
     assert_eq!(map, BTreeMap::from([(1, 'a'), (3, 'c'), (4, 'd')]));
 
-    let mut cur = unsafe { map.upper_bound_mut(Bound::Included(&5)).with_mutable_key() };
+    let mut cur = map.upper_bound_mut(Bound::Included(&5)).with_mutable_key();
     assert_eq!(cur.peek_next(), None);
     assert_eq!(cur.prev(), Some((&mut 4, &mut 'd')));
     assert_eq!(cur.peek_next(), Some((&mut 4, &mut 'd')));

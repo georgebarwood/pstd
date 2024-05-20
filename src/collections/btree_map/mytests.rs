@@ -22,7 +22,7 @@ fn exp_serde_test() {
     for i in 0..n {
         map.insert(i as u32, 1u8);
     }
-    for _i in 0..REP * 10 {
+    for _i in 0..REP {
         let ser = bincode::serialize(&map).unwrap();
         let _: BTreeMap<i32, u8> = bincode::deserialize(&ser).unwrap();
     }
@@ -37,7 +37,7 @@ fn std_serde_test() {
     for i in 0..n {
         map.insert(i as u32, 1u8);
     }
-    for _i in 0..REP * 10 {
+    for _i in 0..REP {
         let ser = bincode::serialize(&map).unwrap();
         let _: BTreeMap<i32, u8> = bincode::deserialize(&ser).unwrap();
     }
@@ -77,7 +77,7 @@ fn exp_get_test() {
     }
     assert!(m.len() == n);
     print_memory();
-    for _rep in 0..REP * 10 {
+    for _rep in 0..REP {
         for i in 0..n {
             let v = i;
             assert!(m[&i] == v);
@@ -96,7 +96,7 @@ fn std_get_test() {
     }
     assert!(m.len() == n);
     print_memory();
-    for _rep in 0..REP * 10 {
+    for _rep in 0..REP {
         for i in 0..n {
             let v = i;
             assert!(m[&i] == v);
@@ -373,10 +373,10 @@ fn mut_cursor_test() {
 fn is_this_ub() {
     BTreeMap::new().entry(0).or_insert('a');
 
-    let mut m = BTreeMap::new();
-    m.insert(0, 'a');
-    *m.entry(0).or_insert('a') = 'b';
-    match m.entry(0) {
+    let mut map = BTreeMap::new();
+    map.insert(0, 'a');
+    *map.entry(0).or_insert('a') = 'b';
+    match map.entry(0) {
         Entry::Occupied(e) => e.remove(),
         _ => panic!(),
     };
@@ -395,15 +395,43 @@ fn basic_range_test() {
 }
 
 #[test]
-fn exp_insert_fwd() {
+fn exp_insert_seq_fwd() {
     for _rep in 0..REP {
-        let mut t = /*std::collections::*/ BTreeMap::<usize, usize>::default();
-        let mut tuning = t.get_tuning();
+        let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
+        let mut tuning = map.get_tuning();
         tuning.set_seq();
-        t.set_tuning(tuning);
+        map.set_tuning(tuning);
         let n = N;
         for i in 0..n {
-            t.insert(i, i);
+            map.insert(i, i);
+        }
+        if _rep == 0 {
+            print_memory();
+        }
+    }
+}
+
+#[test]
+fn vec_insert_fwd() {
+    for _rep in 0..REP {
+        let mut vec = Vec::<(usize, usize)>::default();
+        let n = N;
+        for i in 0..n {
+            vec.push((i, i));
+        }
+        if _rep == 0 {
+            print_memory();
+        }
+    }
+}
+
+#[test]
+fn exp_insert_fwd() {
+    for _rep in 0..REP {
+        let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
+        let n = N;
+        for i in 0..n {
+            map.insert(i, i);
         }
         if _rep == 0 {
             print_memory();
@@ -414,10 +442,10 @@ fn exp_insert_fwd() {
 #[test]
 fn std_insert_fwd() {
     for _rep in 0..REP {
-        let mut t = std::collections::BTreeMap::<usize, usize>::default();
+        let mut map = std::collections::BTreeMap::<usize, usize>::default();
         let n = N;
         for i in 0..n {
-            t.insert(i, i);
+            map.insert(i, i);
         }
         if _rep == 0 {
             print_memory();
@@ -428,13 +456,27 @@ fn std_insert_fwd() {
 #[test]
 fn exp_insert_rev() {
     for _rep in 0..REP {
-        let mut t = /*std::collections::*/ BTreeMap::<usize, usize>::default();
-        let mut tuning = t.get_tuning();
-        tuning.set_seq();
-        t.set_tuning(tuning);
+        let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
         let n = N;
         for i in (0..n).rev() {
-            t.insert(i, i);
+            map.insert(i, i);
+        }
+        if _rep == 0 {
+            print_memory();
+        }
+    }
+}
+
+#[test]
+fn exp_insert_seq_rev() {
+    for _rep in 0..REP {
+        let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
+        let mut tuning = map.get_tuning();
+        tuning.set_seq();
+        map.set_tuning(tuning);
+        let n = N;
+        for i in (0..n).rev() {
+            map.insert(i, i);
         }
         if _rep == 0 {
             print_memory();
@@ -445,10 +487,10 @@ fn exp_insert_rev() {
 #[test]
 fn std_insert_rev() {
     for _rep in 0..REP {
-        let mut t = std::collections::BTreeMap::<usize, usize>::default();
+        let mut map = std::collections::BTreeMap::<usize, usize>::default();
         let n = N;
         for i in (0..n).rev() {
-            t.insert(i, i);
+            map.insert(i, i);
         }
         if _rep == 0 {
             print_memory();
@@ -459,10 +501,10 @@ fn std_insert_rev() {
 #[test]
 fn exp_entry() {
     for _rep in 0..REP {
-        let mut t = /*std::collections::*/ BTreeMap::<usize, usize>::default();
+        let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
         let n = N;
         for i in 0..n {
-            t.entry(i).or_insert(i);
+            map.entry(i).or_insert(i);
         }
     }
 }
@@ -470,23 +512,23 @@ fn exp_entry() {
 #[test]
 fn std_entry() {
     for _rep in 0..REP {
-        let mut t = std::collections::BTreeMap::<usize, usize>::default();
+        let mut map = std::collections::BTreeMap::<usize, usize>::default();
         let n = N;
         for i in 0..n {
-            t.entry(i).or_insert(i);
+            map.entry(i).or_insert(i);
         }
     }
 }
 
 #[test]
 fn exp_iter_nm() {
-    let mut m = /*std::collections::*/ BTreeMap::<usize, usize>::default();
+    let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
     let n = N * 10;
     for i in 0..n {
-        m.entry(i).or_insert(i);
+        map.entry(i).or_insert(i);
     }
     for _rep in 0..REP {
-        for (k, v) in &m {
+        for (k, v) in &map {
             assert!(k == v);
         }
     }
@@ -494,13 +536,13 @@ fn exp_iter_nm() {
 
 #[test]
 fn std_iter_nm() {
-    let mut m = std::collections::BTreeMap::<usize, usize>::default();
+    let mut map = std::collections::BTreeMap::<usize, usize>::default();
     let n = N * 10;
     for i in 0..n {
-        m.entry(i).or_insert(i);
+        map.entry(i).or_insert(i);
     }
     for _rep in 0..REP {
-        for (k, v) in &m {
+        for (k, v) in &map {
             assert!(k == v);
         }
     }
@@ -508,13 +550,13 @@ fn std_iter_nm() {
 
 #[test]
 fn exp_iter_mut() {
-    let mut m = /*std::collections::*/ BTreeMap::<usize, usize>::default();
+    let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
     let n = N * 10;
     for i in 0..n {
-        m.entry(i).or_insert(i);
+        map.entry(i).or_insert(i);
     }
     for _rep in 0..REP {
-        for (k, v) in &mut m {
+        for (k, v) in &mut map {
             assert!(k == v);
         }
     }
@@ -522,13 +564,13 @@ fn exp_iter_mut() {
 
 #[test]
 fn std_iter_mut() {
-    let mut m = std::collections::BTreeMap::<usize, usize>::default();
+    let mut map = std::collections::BTreeMap::<usize, usize>::default();
     let n = N * 10;
     for i in 0..n {
-        m.entry(i).or_insert(i);
+        map.entry(i).or_insert(i);
     }
     for _rep in 0..REP {
-        for (k, v) in &mut m {
+        for (k, v) in &mut map {
             assert!(k == v);
         }
     }
@@ -537,12 +579,12 @@ fn std_iter_mut() {
 #[test]
 fn exp_into_iter() {
     for _rep in 0..REP / 10 {
-        let mut m = /*std::collections::*/ BTreeMap::<usize, usize>::default();
+        let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
         let n = N * 10;
         for i in 0..n {
-            m.insert(i, i);
+            map.insert(i, i);
         }
-        for (k, v) in m {
+        for (k, v) in map {
             assert!(k == v);
         }
     }
@@ -551,12 +593,12 @@ fn exp_into_iter() {
 #[test]
 fn std_into_iter() {
     for _rep in 0..REP / 10 {
-        let mut m = std::collections::BTreeMap::<usize, usize>::default();
+        let mut map = std::collections::BTreeMap::<usize, usize>::default();
         let n = N * 10;
         for i in 0..n {
-            m.insert(i, i);
+            map.insert(i, i);
         }
-        for (k, v) in m {
+        for (k, v) in map {
             assert!(k == v);
         }
     }
