@@ -5,6 +5,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 criterion_group!(
     benches,
     bench_get,
+    bench_rget,
     bench_clone,
     bench_ref_iter,
     bench_into_iter,
@@ -27,6 +28,40 @@ fn bench_clone(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::new("Exp", n), |b| b.iter(|| exp_map.clone()));
         group.bench_function(BenchmarkId::new("Std", n), |b| b.iter(|| std_map.clone()));
+    }
+    group.finish();
+}
+
+fn bench_rget(c: &mut Criterion) {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    let mut group = c.benchmark_group("Rget");
+    for n in [10, 20, 50, 100, 200, 500, 1000].iter() {
+        let n = *n;
+        group.bench_function(BenchmarkId::new("Exp", n), |b| {
+            let mut map = pstd::collections::BTreeMap::new();
+            for i in 0..n {
+                map.insert(i.to_string(), i.to_string());
+            }
+            b.iter(|| {
+                for _i in 0..n {
+                    let ri = ( rng.gen::<usize>() % n ).to_string();
+                    assert!(map.get(&ri).unwrap() == &ri);
+                }
+            })
+        });
+        group.bench_function(BenchmarkId::new("Std", n), |b| {
+            let mut map = std::collections::BTreeMap::new();
+            for i in 0..n {
+                map.insert(i.to_string(), i.to_string());
+            }
+            b.iter(|| {
+                for _i in 0..n {
+                    let ri = ( rng.gen::<usize>() % n ).to_string();
+                    assert!(map.get(&ri).unwrap() == &ri);
+                }
+            })
+        });
     }
     group.finish();
 }
