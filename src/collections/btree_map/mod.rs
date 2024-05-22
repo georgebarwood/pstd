@@ -2451,14 +2451,7 @@ impl<'a, K, V, A: AllocTuning> CursorMut<'a, K, V, A> {
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        unsafe {
-            // Converting map to raw pointer here is necessary to keep Miri happy
-            // although not when using MIRIFLAGS=-Zmiri-tree-borrows.
-            let map: *mut BTreeMap<K, V, A> = map;
-            let mut s = CursorMutKey::make(map);
-            s.push_lower(&mut (*map).tree, bound);
-            Self(s)
-        }
+        Self(CursorMutKey::from_lower(map, bound))
     }
 
     fn upper_bound<Q>(map: &'a mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
@@ -2466,12 +2459,7 @@ impl<'a, K, V, A: AllocTuning> CursorMut<'a, K, V, A> {
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        unsafe {
-            let map: *mut BTreeMap<K, V, A> = map;
-            let mut s = CursorMutKey::make(map);
-            s.push_upper(&mut (*map).tree, bound);
-            Self(s)
-        }
+        Self(CursorMutKey::from_upper(map, bound))
     }
 
     /// Insert leaving cursor after newly inserted element.
@@ -2555,12 +2543,14 @@ impl<'a, K, V, A: AllocTuning> CursorMut<'a, K, V, A> {
     }
 }
 
+type CMS<K, V> = StkVec<(*mut NonLeaf<K, V>, usize)>;
+
 /// Cursor that allows mutation of map keys, returned by [`CursorMut::with_mutable_key`].
 pub struct CursorMutKey<'a, K, V, A: AllocTuning> {
     map: *mut BTreeMap<K, V, A>,
-    leaf: Option<*mut Leaf<K, V>>,
+    leaf: *mut Leaf<K, V>,
     index: usize,
-    stack: StkVec<(*mut NonLeaf<K, V>, usize)>,
+    stack: CMS<K, V>,
     _pd: PhantomData<&'a mut BTreeMap<K, V, A>>,
 }
 
@@ -2568,52 +2558,56 @@ unsafe impl<'a, K, V, A: AllocTuning> Send for CursorMutKey<'a, K, V, A> {}
 unsafe impl<'a, K, V, A: AllocTuning> Sync for CursorMutKey<'a, K, V, A> {}
 
 impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
-    fn make(map: *mut BTreeMap<K, V, A>) -> Self {
-        Self {
-            map,
-            leaf: None,
-            index: 0,
-            stack: StkVec::new(),
-            _pd: PhantomData,
-        }
-    }
-
-    fn push_lower<Q>(&mut self, mut tree: &mut Tree<K, V>, bound: Bound<&Q>)
+    fn from_lower<Q>(map: &mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
+        let mut stack = CMS::<K, V>::new();
+        let mut tree = &mut map.tree;
         loop {
             match tree {
                 Tree::L(leaf) => {
-                    self.index = leaf.0.get_lower(bound);
-                    self.leaf = Some(leaf);
-                    break;
+                    let index = leaf.0.get_lower(bound);
+                    return Self {
+                        index,
+                        leaf,
+                        stack,
+                        map,
+                        _pd: PhantomData,
+                    };
                 }
                 Tree::NL(nl) => {
                     let ix = nl.v.get_lower(bound);
-                    self.stack.push((nl, ix));
+                    stack.push((nl, ix));
                     tree = nl.c.ixm(ix);
                 }
             }
         }
     }
 
-    fn push_upper<Q>(&mut self, mut tree: &mut Tree<K, V>, bound: Bound<&Q>)
+    fn from_upper<Q>(map: &mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
+        let mut stack = CMS::<K, V>::new();
+        let mut tree = &mut map.tree;
         loop {
             match tree {
                 Tree::L(leaf) => {
-                    self.index = leaf.0.get_upper(bound);
-                    self.leaf = Some(leaf);
-                    break;
+                    let index = leaf.0.get_upper(bound);
+                    return Self {
+                        index,
+                        leaf,
+                        stack,
+                        map,
+                        _pd: PhantomData,
+                    };
                 }
                 Tree::NL(nl) => {
                     let ix = nl.v.get_upper(bound);
-                    self.stack.push((nl, ix));
+                    stack.push((nl, ix));
                     tree = nl.c.ixm(ix);
                 }
             }
@@ -2625,7 +2619,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
             match tree {
                 Tree::L(leaf) => {
                     self.index = 0;
-                    self.leaf = Some(leaf);
+                    self.leaf = leaf;
                     break;
                 }
                 Tree::NL(nl) => {
@@ -2642,7 +2636,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
             match tree {
                 Tree::L(leaf) => {
                     self.index = leaf.0.len();
-                    self.leaf = Some(leaf);
+                    self.leaf = leaf;
                     break;
                 }
                 Tree::NL(nl) => {
@@ -2703,7 +2697,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
     pub fn insert_after_unchecked(&mut self, key: K, value: V) {
         unsafe {
             (*self.map).len += 1;
-            let mut leaf = self.leaf.unwrap_unchecked();
+            let mut leaf = self.leaf;
             if (*leaf).full() {
                 let a = &(*self.map).atune;
                 match a.full_action(self.index, (*leaf).0.len()) {
@@ -2715,7 +2709,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                         assert!(self.index < if r == 1 { a2 } else { a1 });
                         let t = self.save_split(med, right, r);
                         leaf = (*t).leaf();
-                        self.leaf = Some(leaf);
+                        self.leaf = leaf;
                     }
                     FullAction::Extend(to) => (*leaf).0.set_alloc(to, a),
                 }
@@ -2768,7 +2762,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
     /// Remove next element.
     pub fn remove_next(&mut self) -> Option<(K, V)> {
         unsafe {
-            let leaf = self.leaf.unwrap_unchecked();
+            let leaf = self.leaf;
             if self.index == (*leaf).0.len() {
                 let mut tsp = self.stack.len();
                 while tsp > 0 {
@@ -2795,7 +2789,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<(&mut K, &mut V)> {
         unsafe {
-            let leaf = self.leaf.unwrap_unchecked();
+            let leaf = self.leaf;
             if self.index == (*leaf).0.len() {
                 let mut tsp = self.stack.len();
                 while tsp > 0 {
@@ -2836,7 +2830,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                 }
                 None
             } else {
-                let leaf = self.leaf.unwrap_unchecked();
+                let leaf = self.leaf;
                 self.index -= 1;
                 Some((*leaf).0.ixbm(self.index))
             }
@@ -2847,7 +2841,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
     #[must_use]
     pub fn peek_next(&self) -> Option<(&mut K, &mut V)> {
         unsafe {
-            let leaf = self.leaf.unwrap_unchecked();
+            let leaf = self.leaf;
             if self.index == (*leaf).0.len() {
                 for (nl, ix) in self.stack.iter().rev() {
                     if *ix < (**nl).v.len() {
@@ -2872,7 +2866,7 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
                 }
                 None
             } else {
-                let leaf = self.leaf.unwrap_unchecked();
+                let leaf = self.leaf;
                 Some((*leaf).0.ixbm(self.index - 1))
             }
         }
@@ -2882,31 +2876,36 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
     #[must_use]
     pub fn as_cursor(&self) -> Cursor<'_, K, V, A> {
         unsafe {
-            let mut c = Cursor::make();
-            c.index = self.index;
-            c.leaf = Some(&*self.leaf.unwrap());
+            let mut stack = CNMS::<K, V>::new();
             for (nl, ix) in &self.stack {
-                c.stack.push((&(**nl), *ix));
+                stack.push((&(**nl), *ix));
             }
-            c
+            Cursor {
+                index: self.index,
+                leaf: &*self.leaf,
+                stack,
+                _pd: PhantomData,
+            }
         }
     }
 
     /// This is needed for the implementation of the [Entry] API.
     fn into_mut(self) -> &'a mut V {
         unsafe {
-            let leaf = self.leaf.unwrap_unchecked();
+            let leaf = self.leaf;
             (*leaf).0.ixmv(self.index)
         }
     }
 }
 
+type CNMS<K, V> = StkVec<(*const NonLeaf<K, V>, usize)>;
+
 /// Cursor returned by [`BTreeMap::lower_bound`], [`BTreeMap::upper_bound`].
 #[derive(Debug, Clone)]
 pub struct Cursor<'a, K, V, A: AllocTuning> {
-    leaf: Option<*const Leaf<K, V>>,
+    leaf: *const Leaf<K, V>,
     index: usize,
-    stack: StkVec<(*const NonLeaf<K, V>, usize)>,
+    stack: CNMS<K, V>,
     _pd: PhantomData<&'a BTreeMap<K, V, A>>,
 }
 
@@ -2914,23 +2913,19 @@ unsafe impl<'a, K, V, A: AllocTuning> Send for Cursor<'a, K, V, A> {}
 unsafe impl<'a, K, V, A: AllocTuning> Sync for Cursor<'a, K, V, A> {}
 
 impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
-    fn make() -> Self {
-        Self {
-            leaf: None,
-            index: 0,
-            stack: StkVec::new(),
-            _pd: PhantomData,
-        }
-    }
-
     fn lower_bound<Q>(bt: &'a BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        let mut s = Self::make();
-        s.push_lower(&bt.tree, bound);
-        s
+        let mut stack = StkVec::new();
+        let (index, leaf) = Self::push_lower(&mut stack, &bt.tree, bound);
+        Self {
+            stack,
+            index,
+            leaf,
+            _pd: PhantomData,
+        }
     }
 
     fn upper_bound<Q>(bt: &'a BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
@@ -2938,12 +2933,21 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        let mut s = Self::make();
-        s.push_upper(&bt.tree, bound);
-        s
+        let mut stack = StkVec::new();
+        let (index, leaf) = Self::push_upper(&mut stack, &bt.tree, bound);
+        Self {
+            stack,
+            index,
+            leaf,
+            _pd: PhantomData,
+        }
     }
 
-    fn push_lower<Q>(&mut self, mut tree: &'a Tree<K, V>, bound: Bound<&Q>)
+    fn push_lower<Q>(
+        stack: &mut StkVec<(*const NonLeaf<K, V>, usize)>,
+        mut tree: &'a Tree<K, V>,
+        bound: Bound<&Q>,
+    ) -> (usize, *const Leaf<K, V>)
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
@@ -2951,20 +2955,23 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
         loop {
             match tree {
                 Tree::L(leaf) => {
-                    self.leaf = Some(leaf);
-                    self.index = leaf.0.get_lower(bound);
-                    break;
+                    let index = leaf.0.get_lower(bound);
+                    return (index, leaf);
                 }
                 Tree::NL(nl) => {
                     let ix = nl.v.get_lower(bound);
-                    self.stack.push((nl, ix));
+                    stack.push((nl, ix));
                     tree = nl.c.ix(ix);
                 }
             }
         }
     }
 
-    fn push_upper<Q>(&mut self, mut tree: &'a Tree<K, V>, bound: Bound<&Q>)
+    fn push_upper<Q>(
+        stack: &mut StkVec<(*const NonLeaf<K, V>, usize)>,
+        mut tree: &'a Tree<K, V>,
+        bound: Bound<&Q>,
+    ) -> (usize, *const Leaf<K, V>)
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
@@ -2972,13 +2979,12 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
         loop {
             match tree {
                 Tree::L(leaf) => {
-                    self.leaf = Some(leaf);
-                    self.index = leaf.0.get_upper(bound);
-                    break;
+                    let index = leaf.0.get_upper(bound);
+                    return (index, leaf);
                 }
                 Tree::NL(nl) => {
                     let ix = nl.v.get_upper(bound);
-                    self.stack.push((nl, ix));
+                    stack.push((nl, ix));
                     tree = nl.c.ix(ix);
                 }
             }
@@ -2989,7 +2995,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
         loop {
             match tree {
                 Tree::L(leaf) => {
-                    self.leaf = Some(leaf);
+                    self.leaf = leaf;
                     self.index = 0;
                     break;
                 }
@@ -3006,7 +3012,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
         loop {
             match tree {
                 Tree::L(leaf) => {
-                    self.leaf = Some(leaf);
+                    self.leaf = leaf;
                     self.index = leaf.0.len();
                     break;
                 }
@@ -3024,7 +3030,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<(&K, &V)> {
         unsafe {
-            let leaf = self.leaf.unwrap_unchecked();
+            let leaf = self.leaf;
             if self.index == (*leaf).0.len() {
                 let mut tsp = self.stack.len();
                 while tsp > 0 {
@@ -3051,7 +3057,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
     /// Move the cursor back, returns references to the key and value of the element that it moved over.
     pub fn prev(&mut self) -> Option<(&K, &V)> {
         unsafe {
-            let leaf = self.leaf.unwrap_unchecked();
+            let leaf = self.leaf;
             if self.index == 0 {
                 let mut tsp = self.stack.len();
                 while tsp > 0 {
@@ -3078,7 +3084,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
     #[must_use]
     pub fn peek_next(&self) -> Option<(&K, &V)> {
         unsafe {
-            let leaf = self.leaf.unwrap_unchecked();
+            let leaf = self.leaf;
             if self.index == (*leaf).0.len() {
                 for (nl, ix) in self.stack.iter().rev() {
                     if *ix < (**nl).v.len() {
@@ -3095,7 +3101,7 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
     #[must_use]
     pub fn peek_prev(&self) -> Option<(&K, &V)> {
         unsafe {
-            let leaf = self.leaf.unwrap_unchecked();
+            let leaf = self.leaf;
             if self.index == 0 {
                 for (nl, ix) in self.stack.iter().rev() {
                     if *ix > 0 {
@@ -3136,5 +3142,5 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[cfg(test)]
 mod mytests;
 
-//#[cfg(test)]
-//mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
+#[cfg(test)]
+mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
