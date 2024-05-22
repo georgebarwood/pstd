@@ -2920,7 +2920,12 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
             match tree {
                 Tree::L(leaf) => {
                     let index = leaf.0.get_lower(bound);
-                    return Self { stack, index, leaf, _pd: PhantomData };
+                    return Self {
+                        stack,
+                        index,
+                        leaf,
+                        _pd: PhantomData,
+                    };
                 }
                 Tree::NL(nl) => {
                     let ix = nl.v.get_lower(bound);
@@ -2942,7 +2947,12 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
             match tree {
                 Tree::L(leaf) => {
                     let index = leaf.0.get_upper(bound);
-                    return Self { stack, index, leaf, _pd: PhantomData };
+                    return Self {
+                        stack,
+                        index,
+                        leaf,
+                        _pd: PhantomData,
+                    };
                 }
                 Tree::NL(nl) => {
                     let ix = nl.v.get_upper(bound);
