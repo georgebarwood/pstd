@@ -3136,5 +3136,5 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[cfg(test)]
 mod mytests;
 
-#[cfg(test)]
-mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
+//#[cfg(test)]
+//mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
