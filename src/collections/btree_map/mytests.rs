@@ -262,7 +262,7 @@ fn exp_cursor_tuned_insert_only_test() {
     for _rep in 0..REP {
         let n = N;
 
-        let mut ct = DefaultAllocTuning::new(1023, 2047);
+        let mut ct = DefaultTuning::new(1023, 2047);
         ct.set_seq();
         let mut m = BTreeMap::with_tuning(ct);
 
@@ -790,7 +790,7 @@ fn sizes() {
 #[test]
 fn test_custom_alloc() {
     let da = Global {};
-    let ct = CustomAllocTuning::new_in(32, 8, da);
+    let ct = CustomTuning::new_in(32, 8, da);
     let mut map = BTreeMap::with_tuning(ct);
     map.insert("hello", "there");
 }
@@ -819,7 +819,7 @@ impl ExTuning {
     const AU: usize = 4;
 }
 
-impl AllocTuning for ExTuning {
+impl Tuning for ExTuning {
     fn full_action(&self, i: usize, len: usize) -> FullAction {
         let lim = Self::BRANCH * 2 + 1;
         if len >= lim {

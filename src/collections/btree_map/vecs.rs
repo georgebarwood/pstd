@@ -11,7 +11,7 @@ use std::{
     ptr::NonNull,
 };
 
-use crate::collections::btree_map::AllocTuning;
+use crate::collections::btree_map::Tuning;
 
 /// Basic vec, does not have own capacity or length, just a pointer to memory.
 /// Kind-of cribbed from <https://doc.rust-lang.org/nomicon/vec/vec-final.html>.
@@ -48,7 +48,7 @@ impl<T> BasicVec<T> {
     /// # Safety
     ///
     /// `oa` must be the previous alloc set (0 if no alloc has yet been set).
-    pub unsafe fn set_alloc<A: AllocTuning>(&mut self, oa: usize, na: usize, alloc: &A) {
+    pub unsafe fn set_alloc<A: Tuning>(&mut self, oa: usize, na: usize, alloc: &A) {
         if mem::size_of::<T>() == 0 {
             return;
         }
@@ -79,7 +79,7 @@ impl<T> BasicVec<T> {
     /// # Safety
     ///
     /// oa must be the last allocation set.
-    pub unsafe fn free<A: AllocTuning>(&mut self, oa: usize, alloc: &A) {
+    pub unsafe fn free<A: Tuning>(&mut self, oa: usize, alloc: &A) {
         let elem_size = mem::size_of::<T>();
         if oa != 0 && elem_size != 0 {
             alloc.deallocate(
@@ -190,7 +190,7 @@ impl<T> ShortVec<T> {
         self.len as usize
     }
 
-    pub fn set_alloc<A: AllocTuning>(&mut self, na: usize, alloc: &A) {
+    pub fn set_alloc<A: Tuning>(&mut self, na: usize, alloc: &A) {
         safe_assert!(na >= self.len());
         if na == self.alloc as usize {
             return;
@@ -241,7 +241,7 @@ impl<T> ShortVec<T> {
         }
     }
 
-    pub fn split<A: AllocTuning>(&mut self, at: usize, a1: usize, a2: usize, alloc: &A) -> Self {
+    pub fn split<A: Tuning>(&mut self, at: usize, a1: usize, a2: usize, alloc: &A) -> Self {
         safe_assert!(at < self.len());
         let len = self.len() - at;
         safe_assert!(a1 >= at);
@@ -309,7 +309,7 @@ pub struct IntoIterShortVec<T> {
 
 impl<T> IntoIterShortVec<T> {
     #[inline]
-    pub fn next<A: AllocTuning>(&mut self, alloc: &A) -> Option<T> {
+    pub fn next<A: Tuning>(&mut self, alloc: &A) -> Option<T> {
         if self.start == self.v.len() {
             self.start = 0;
             self.v.len = 0;
@@ -323,7 +323,7 @@ impl<T> IntoIterShortVec<T> {
     }
 
     #[inline]
-    pub fn next_back<A: AllocTuning>(&mut self, alloc: &A) -> Option<T> {
+    pub fn next_back<A: Tuning>(&mut self, alloc: &A) -> Option<T> {
         if self.start == self.v.len() {
             self.start = 0;
             self.v.len = 0;
@@ -368,7 +368,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
-    pub fn dealloc<A: AllocTuning>(&mut self, alloc: &A) {
+    pub fn dealloc<A: Tuning>(&mut self, alloc: &A) {
         while self.len != 0 {
             self.pop();
         }
@@ -405,7 +405,7 @@ impl<K, V> PairVec<K, V> {
         Self::layout(amount).1
     }
 
-    pub fn set_alloc<A: AllocTuning>(&mut self, na: usize, alloc: &A) {
+    pub fn set_alloc<A: Tuning>(&mut self, na: usize, alloc: &A) {
         safe_assert!(na >= self.len());
         if na != 0 && na == self.alloc as usize {
             return;
@@ -447,7 +447,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
-    pub fn split<A: AllocTuning>(
+    pub fn split<A: Tuning>(
         &mut self,
         at: usize,
         a1: usize,
@@ -653,7 +653,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
-    pub fn clone<A: AllocTuning>(&self, alloc: &A) -> Self
+    pub fn clone<A: Tuning>(&self, alloc: &A) -> Self
     where
         K: Clone,
         V: Clone,
@@ -880,7 +880,7 @@ impl<K, V> IntoIterPairVec<K, V> {
     }
 
     #[inline]
-    pub fn next<A: AllocTuning>(&mut self, alloc: &A) -> Option<(K, V)> {
+    pub fn next<A: Tuning>(&mut self, alloc: &A) -> Option<(K, V)> {
         unsafe {
             if self.ix == self.ixb {
                 self.v.len = 0;
@@ -894,7 +894,7 @@ impl<K, V> IntoIterPairVec<K, V> {
     }
 
     #[inline]
-    pub fn next_back<A: AllocTuning>(&mut self, alloc: &A) -> Option<(K, V)> {
+    pub fn next_back<A: Tuning>(&mut self, alloc: &A) -> Option<(K, V)> {
         unsafe {
             if self.ix == self.ixb {
                 self.v.len = 0;
