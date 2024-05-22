@@ -2451,7 +2451,7 @@ impl<'a, K, V, A: AllocTuning> CursorMut<'a, K, V, A> {
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        Self(CursorMutKey::from_lower(map, bound))
+        Self(CursorMutKey::lower(map, bound))
     }
 
     fn upper_bound<Q>(map: &'a mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
@@ -2459,7 +2459,7 @@ impl<'a, K, V, A: AllocTuning> CursorMut<'a, K, V, A> {
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        Self(CursorMutKey::from_upper(map, bound))
+        Self(CursorMutKey::upper(map, bound))
     }
 
     /// Insert leaving cursor after newly inserted element.
@@ -2543,14 +2543,12 @@ impl<'a, K, V, A: AllocTuning> CursorMut<'a, K, V, A> {
     }
 }
 
-type CMS<K, V> = StkVec<(*mut NonLeaf<K, V>, usize)>;
-
 /// Cursor that allows mutation of map keys, returned by [`CursorMut::with_mutable_key`].
 pub struct CursorMutKey<'a, K, V, A: AllocTuning> {
     map: *mut BTreeMap<K, V, A>,
     leaf: *mut Leaf<K, V>,
     index: usize,
-    stack: CMS<K, V>,
+    stack: StkVec<(*mut NonLeaf<K, V>, usize)>,
     _pd: PhantomData<&'a mut BTreeMap<K, V, A>>,
 }
 
@@ -2558,12 +2556,12 @@ unsafe impl<'a, K, V, A: AllocTuning> Send for CursorMutKey<'a, K, V, A> {}
 unsafe impl<'a, K, V, A: AllocTuning> Sync for CursorMutKey<'a, K, V, A> {}
 
 impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
-    fn from_lower<Q>(map: &mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
+    fn lower<Q>(map: &mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        let mut stack = CMS::<K, V>::new();
+        let mut stack = StkVec::new();
         let mut tree = &mut map.tree;
         loop {
             match tree {
@@ -2586,12 +2584,12 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
         }
     }
 
-    fn from_upper<Q>(map: &mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
+    fn upper<Q>(map: &mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
-        let mut stack = CMS::<K, V>::new();
+        let mut stack = StkVec::new();
         let mut tree = &mut map.tree;
         loop {
             match tree {
@@ -2874,9 +2872,9 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
 
     /// Returns a read-only cursor pointing to the same location as the `CursorMutKey`.
     #[must_use]
-    pub fn as_cursor(&self) -> Cursor<'_, K, V, A> {
+    pub fn as_cursor(&self) -> Cursor<'a, K, V, A> {
         unsafe {
-            let mut stack = CNMS::<K, V>::new();
+            let mut stack = StkVec::<(*const NonLeaf<K, V>, usize)>::new();
             for (nl, ix) in &self.stack {
                 stack.push((&(**nl), *ix));
             }
@@ -2898,14 +2896,12 @@ impl<'a, K, V, A: AllocTuning> CursorMutKey<'a, K, V, A> {
     }
 }
 
-type CNMS<K, V> = StkVec<(*const NonLeaf<K, V>, usize)>;
-
 /// Cursor returned by [`BTreeMap::lower_bound`], [`BTreeMap::upper_bound`].
 #[derive(Debug, Clone)]
 pub struct Cursor<'a, K, V, A: AllocTuning> {
     leaf: *const Leaf<K, V>,
     index: usize,
-    stack: CNMS<K, V>,
+    stack: StkVec<(*const NonLeaf<K, V>, usize)>,
     _pd: PhantomData<&'a BTreeMap<K, V, A>>,
 }
 
@@ -2919,44 +2915,12 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
         Q: Ord + ?Sized,
     {
         let mut stack = StkVec::new();
-        let (index, leaf) = Self::push_lower(&mut stack, &bt.tree, bound);
-        Self {
-            stack,
-            index,
-            leaf,
-            _pd: PhantomData,
-        }
-    }
-
-    fn upper_bound<Q>(bt: &'a BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
-    where
-        K: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        let mut stack = StkVec::new();
-        let (index, leaf) = Self::push_upper(&mut stack, &bt.tree, bound);
-        Self {
-            stack,
-            index,
-            leaf,
-            _pd: PhantomData,
-        }
-    }
-
-    fn push_lower<Q>(
-        stack: &mut StkVec<(*const NonLeaf<K, V>, usize)>,
-        mut tree: &'a Tree<K, V>,
-        bound: Bound<&Q>,
-    ) -> (usize, *const Leaf<K, V>)
-    where
-        K: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
+        let mut tree = &bt.tree;
         loop {
             match tree {
                 Tree::L(leaf) => {
                     let index = leaf.0.get_lower(bound);
-                    return (index, leaf);
+                    return Self { stack, index, leaf, _pd: PhantomData };
                 }
                 Tree::NL(nl) => {
                     let ix = nl.v.get_lower(bound);
@@ -2967,20 +2931,18 @@ impl<'a, K, V, A: AllocTuning> Cursor<'a, K, V, A> {
         }
     }
 
-    fn push_upper<Q>(
-        stack: &mut StkVec<(*const NonLeaf<K, V>, usize)>,
-        mut tree: &'a Tree<K, V>,
-        bound: Bound<&Q>,
-    ) -> (usize, *const Leaf<K, V>)
+    fn upper_bound<Q>(bt: &'a BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
     {
+        let mut stack = StkVec::new();
+        let mut tree = &bt.tree;
         loop {
             match tree {
                 Tree::L(leaf) => {
                     let index = leaf.0.get_upper(bound);
-                    return (index, leaf);
+                    return Self { stack, index, leaf, _pd: PhantomData };
                 }
                 Tree::NL(nl) => {
                     let ix = nl.v.get_upper(bound);
