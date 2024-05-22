@@ -2760,8 +2760,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     /// Remove next element.
     pub fn remove_next(&mut self) -> Option<(K, V)> {
         unsafe {
-            let leaf = self.leaf;
-            if self.index == (*leaf).0.len() {
+            if self.index == (*self.leaf).0.len() {
                 let mut tsp = self.stack.len();
                 while tsp > 0 {
                     tsp -= 1;
@@ -2778,7 +2777,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
                 None
             } else {
                 (*self.map).len -= 1;
-                Some((*leaf).0.remove(self.index))
+                Some((*self.leaf).0.remove(self.index))
             }
         }
     }
@@ -2787,8 +2786,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<(&mut K, &mut V)> {
         unsafe {
-            let leaf = self.leaf;
-            if self.index == (*leaf).0.len() {
+            if self.index == (*self.leaf).0.len() {
                 let mut tsp = self.stack.len();
                 while tsp > 0 {
                     tsp -= 1;
@@ -2803,7 +2801,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
                 }
                 None
             } else {
-                let kv = (*leaf).0.ixbm(self.index);
+                let kv = (*self.leaf).0.ixbm(self.index);
                 self.index += 1;
                 Some(kv)
             }
@@ -2828,9 +2826,8 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
                 }
                 None
             } else {
-                let leaf = self.leaf;
                 self.index -= 1;
-                Some((*leaf).0.ixbm(self.index))
+                Some((*self.leaf).0.ixbm(self.index))
             }
         }
     }
@@ -2839,8 +2836,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     #[must_use]
     pub fn peek_next(&self) -> Option<(&mut K, &mut V)> {
         unsafe {
-            let leaf = self.leaf;
-            if self.index == (*leaf).0.len() {
+            if self.index == (*self.leaf).0.len() {
                 for (nl, ix) in self.stack.iter().rev() {
                     if *ix < (**nl).v.len() {
                         return Some((**nl).v.ixbm(*ix));
@@ -2848,7 +2844,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
                 }
                 None
             } else {
-                Some((*leaf).0.ixbm(self.index))
+                Some((*self.leaf).0.ixbm(self.index))
             }
         }
     }
@@ -2864,8 +2860,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
                 }
                 None
             } else {
-                let leaf = self.leaf;
-                Some((*leaf).0.ixbm(self.index - 1))
+                Some((*self.leaf).0.ixbm(self.index - 1))
             }
         }
     }
@@ -2889,10 +2884,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
 
     /// This is needed for the implementation of the [Entry] API.
     fn into_mut(self) -> &'a mut V {
-        unsafe {
-            let leaf = self.leaf;
-            (*leaf).0.ixmv(self.index)
-        }
+        unsafe { (*self.leaf).0.ixmv(self.index) }
     }
 }
 
@@ -3002,8 +2994,7 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<(&K, &V)> {
         unsafe {
-            let leaf = self.leaf;
-            if self.index == (*leaf).0.len() {
+            if self.index == (*self.leaf).0.len() {
                 let mut tsp = self.stack.len();
                 while tsp > 0 {
                     tsp -= 1;
@@ -3019,7 +3010,7 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
                 }
                 None
             } else {
-                let kv = (*leaf).0.ix(self.index);
+                let kv = (*self.leaf).0.ix(self.index);
                 self.index += 1;
                 Some(kv)
             }
@@ -3029,7 +3020,6 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
     /// Move the cursor back, returns references to the key and value of the element that it moved over.
     pub fn prev(&mut self) -> Option<(&K, &V)> {
         unsafe {
-            let leaf = self.leaf;
             if self.index == 0 {
                 let mut tsp = self.stack.len();
                 while tsp > 0 {
@@ -3047,7 +3037,7 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
                 None
             } else {
                 self.index -= 1;
-                Some((*leaf).0.ix(self.index))
+                Some((*self.leaf).0.ix(self.index))
             }
         }
     }
@@ -3056,8 +3046,7 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
     #[must_use]
     pub fn peek_next(&self) -> Option<(&K, &V)> {
         unsafe {
-            let leaf = self.leaf;
-            if self.index == (*leaf).0.len() {
+            if self.index == (*self.leaf).0.len() {
                 for (nl, ix) in self.stack.iter().rev() {
                     if *ix < (**nl).v.len() {
                         return Some((**nl).v.ix(*ix));
@@ -3065,7 +3054,7 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
                 }
                 None
             } else {
-                Some((*leaf).0.ix(self.index))
+                Some((*self.leaf).0.ix(self.index))
             }
         }
     }
@@ -3073,7 +3062,6 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
     #[must_use]
     pub fn peek_prev(&self) -> Option<(&K, &V)> {
         unsafe {
-            let leaf = self.leaf;
             if self.index == 0 {
                 for (nl, ix) in self.stack.iter().rev() {
                     if *ix > 0 {
@@ -3082,7 +3070,7 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
                 }
                 None
             } else {
-                Some((*leaf).0.ix(self.index - 1))
+                Some((*self.leaf).0.ix(self.index - 1))
             }
         }
     }
