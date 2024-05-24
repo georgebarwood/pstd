@@ -13,9 +13,6 @@ use std::{
 
 use crate::collections::btree_map::Tuning;
 
-unsafe impl<T: Send> Send for ShortVec<T> {}
-unsafe impl<T: Sync> Sync for ShortVec<T> {}
-
 /// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise does nothing.
 #[cfg(any(debug_assertions, not(feature = "unsafe-optim")))]
 macro_rules! safe_assert {
@@ -218,6 +215,9 @@ impl<T> ShortVec<T> {
         ptr::read(self.ixp(i))
     }
 }
+
+unsafe impl<T: Send> Send for ShortVec<T> {}
+unsafe impl<T: Sync> Sync for ShortVec<T> {}
 
 impl<T> Deref for ShortVec<T> {
     type Target = [T];
