@@ -407,17 +407,15 @@ impl<K, V> PairVec<K, V> {
 
     pub fn set_alloc<A: Tuning>(&mut self, na: usize, alloc: &A) {
         safe_assert!(na >= self.len());
-        if na != 0 && na == self.alloc as usize {
-            return;
-        }
-
         if mem::size_of::<K>() == 0 && mem::size_of::<V>() == 0 {
             self.alloc = na as u16;
             return;
         }
+        if na == self.alloc as usize {
+            return;
+        }
         unsafe {
             let (old_layout, old_off) = Self::layout(self.alloc as usize);
-
             let np = if na == 0 {
                 NonNull::dangling()
             } else {
