@@ -5,7 +5,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 criterion_group!(
     benches,
     bench_get,
-    bench_rget,
+    bench_sget,
     bench_clone,
     bench_ref_iter,
     bench_into_iter,
@@ -32,21 +32,24 @@ fn bench_clone(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_rget(c: &mut Criterion) {
+fn bench_sget(c: &mut Criterion) {
     //use rand::Rng;
     //let mut rng = rand::thread_rng();
-    let mut group = c.benchmark_group("Rget");
+    let mut group = c.benchmark_group("Sget");
     for n in [10, 20, 50, 100, 200, 500, 1000].iter() {
         let n = *n;
-        let mut s = Vec::new(); for i in 0..n { s.push(i.to_string()); }
-        group.bench_function(BenchmarkId::new("Exp", n), |b| {                       
+        let mut s = Vec::new();
+        for i in 0..n {
+            s.push(i.to_string());
+        }
+        group.bench_function(BenchmarkId::new("Exp", n), |b| {
             let mut map = pstd::collections::BTreeMap::new();
             for i in 0..n {
                 map.insert(i.to_string(), i.to_string());
             }
             b.iter(|| {
-                for i in 0..n {   
-                    /* let ri = rng.gen::<usize>() % n; */                 
+                for i in 0..n {
+                    /* let ri = rng.gen::<usize>() % n; */
                     assert!(map.get(&s[i]).unwrap() == &s[i]);
                 }
             })
