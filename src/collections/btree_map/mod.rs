@@ -1568,12 +1568,6 @@ where
 
 // Mutable reference iteration.
 
-enum StealResultMut<'a, K, V> {
-    KV((&'a K, &'a mut V)), // Key-value pair.
-    CT(&'a mut Tree<K, V>), // Child Tree.
-    Nothing,
-}
-
 /// Iterator returned by [`BTreeMap::iter_mut`].
 #[derive(Debug, Default)]
 pub struct IterMut<'a, K, V> {
@@ -1721,26 +1715,7 @@ impl<'a, K, V> RangeMut<'a, K, V> {
             }
         }
     }
-    fn steal_bck(&mut self) -> StealResultMut<'a, K, V> {
-        for s in &mut self.bck_stk {
-            if s.v.len() > s.c.len() {
-                return StealResultMut::KV(s.v.next().unwrap());
-            } else if let Some(ct) = s.c.next() {
-                return StealResultMut::CT(ct);
-            }
-        }
-        StealResultMut::Nothing
-    }
-    fn steal_fwd(&mut self) -> StealResultMut<'a, K, V> {
-        for s in &mut self.fwd_stk {
-            if s.v.len() > s.c.len() {
-                return StealResultMut::KV(s.v.next_back().unwrap());
-            } else if let Some(ct) = s.c.next_back() {
-                return StealResultMut::CT(ct);
-            }
-        }
-        StealResultMut::Nothing
-    }
+
     #[cold]
     fn next_inner(&mut self) -> Option<(&'a K, &'a mut V)> {
         loop {
@@ -1753,21 +1728,21 @@ impl<'a, K, V> RangeMut<'a, K, V> {
                 }
                 self.fwd_stk.pop();
             } else {
-                match self.steal_bck() {
-                    StealResultMut::KV(kv) => return Some(kv),
-                    StealResultMut::CT(ct) => {
+                for s in &mut self.bck_stk {
+                    if s.v.len() > s.c.len() {
+                        return Some(s.v.next().unwrap());
+                    } else if let Some(ct) = s.c.next() {
                         self.push_tree(ct, false);
                         if let Some(x) = self.fwd_leaf.next() {
                             return Some(x);
                         }
-                    }
-                    StealResultMut::Nothing => {
-                        if let Some(x) = self.bck_leaf.next() {
-                            return Some(x);
-                        }
-                        return None;
+                        break;
                     }
                 }
+                if let Some(x) = self.bck_leaf.next() {
+                    return Some(x);
+                }
+                return None;
             }
         }
     }
@@ -1783,21 +1758,21 @@ impl<'a, K, V> RangeMut<'a, K, V> {
                 }
                 self.bck_stk.pop();
             } else {
-                match self.steal_fwd() {
-                    StealResultMut::KV(kv) => return Some(kv),
-                    StealResultMut::CT(ct) => {
+                for s in &mut self.fwd_stk {
+                    if s.v.len() > s.c.len() {
+                        return Some(s.v.next_back().unwrap());
+                    } else if let Some(ct) = s.c.next_back() {
                         self.push_tree_back(ct);
                         if let Some(x) = self.bck_leaf.next_back() {
                             return Some(x);
                         }
-                    }
-                    StealResultMut::Nothing => {
-                        if let Some(x) = self.fwd_leaf.next_back() {
-                            return Some(x);
-                        }
-                        return None;
+                        break;
                     }
                 }
+                if let Some(x) = self.fwd_leaf.next_back() {
+                    return Some(x);
+                }
+                return None;
             }
         }
     }
@@ -1822,12 +1797,6 @@ impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
 impl<'a, K, V> FusedIterator for RangeMut<'a, K, V> {}
 
 // Consuming iteration.
-
-enum StealResultCon<K, V> {
-    KV((K, V)),     // Key-value pair.
-    CT(Tree<K, V>), // Child Tree.
-    Nothing,
-}
 
 /// Consuming iterator for [`BTreeMap`].
 pub struct IntoIter<K, V, A: Tuning = DefaultTuning> {
@@ -1930,26 +1899,6 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
             }
         }
     }
-    fn steal_bck(&mut self) -> StealResultCon<K, V> {
-        for s in &mut self.bck_stk {
-            if s.v.len() > s.c.len() {
-                return StealResultCon::KV(s.v.next(&self.alloc).unwrap());
-            } else if let Some(ct) = s.c.next(&self.alloc) {
-                return StealResultCon::CT(ct);
-            }
-        }
-        StealResultCon::Nothing
-    }
-    fn steal_fwd(&mut self) -> StealResultCon<K, V> {
-        for s in &mut self.fwd_stk {
-            if s.v.len() > s.c.len() {
-                return StealResultCon::KV(s.v.next_back(&self.alloc).unwrap());
-            } else if let Some(ct) = s.c.next_back(&self.alloc) {
-                return StealResultCon::CT(ct);
-            }
-        }
-        StealResultCon::Nothing
-    }
     #[cold]
     fn next_inner(&mut self) -> Option<(K, V)> {
         loop {
@@ -1962,21 +1911,21 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
                 }
                 self.fwd_stk.pop();
             } else {
-                match self.steal_bck() {
-                    StealResultCon::KV(kv) => return Some(kv),
-                    StealResultCon::CT(ct) => {
+                for s in &mut self.bck_stk {
+                    if s.v.len() > s.c.len() {
+                        return Some(s.v.next(&self.alloc).unwrap());
+                    } else if let Some(ct) = s.c.next(&self.alloc) {
                         self.push_tree(ct, false);
                         if let Some(x) = self.fwd_leaf.next(&self.alloc) {
                             return Some(x);
                         }
-                    }
-                    StealResultCon::Nothing => {
-                        if let Some(x) = self.bck_leaf.next(&self.alloc) {
-                            return Some(x);
-                        }
-                        return None;
+                        break;
                     }
                 }
+                if let Some(x) = self.bck_leaf.next(&self.alloc) {
+                    return Some(x);
+                }
+                return None;
             }
         }
     }
@@ -1992,21 +1941,21 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
                 }
                 self.bck_stk.pop();
             } else {
-                match self.steal_fwd() {
-                    StealResultCon::KV(kv) => return Some(kv),
-                    StealResultCon::CT(ct) => {
+                for s in &mut self.fwd_stk {
+                    if s.v.len() > s.c.len() {
+                        return Some(s.v.next_back(&self.alloc).unwrap());
+                    } else if let Some(ct) = s.c.next_back(&self.alloc) {
                         self.push_tree_back(ct);
                         if let Some(x) = self.bck_leaf.next_back(&self.alloc) {
                             return Some(x);
                         }
-                    }
-                    StealResultCon::Nothing => {
-                        if let Some(x) = self.fwd_leaf.next_back(&self.alloc) {
-                            return Some(x);
-                        }
-                        return None;
+                        break;
                     }
                 }
+                if let Some(x) = self.fwd_leaf.next_back(&self.alloc) {
+                    return Some(x);
+                }
+                return None;
             }
         }
     }
@@ -2027,12 +1976,6 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
 }
 
 // Immutable reference iteration.
-
-enum StealResult<'a, K, V> {
-    KV((&'a K, &'a V)), // Key-value pair.
-    CT(&'a Tree<K, V>), // Child Tree.
-    Nothing,
-}
 
 /// Iterator returned by [`BTreeMap::iter`].
 #[derive(Clone, Debug, Default)]
@@ -2178,26 +2121,6 @@ impl<'a, K, V> Range<'a, K, V> {
             }
         }
     }
-    fn steal_bck(&mut self) -> StealResult<'a, K, V> {
-        for s in &mut self.bck_stk {
-            if s.v.len() > s.c.len() {
-                return StealResult::KV(s.v.next().unwrap());
-            } else if let Some(ct) = s.c.next() {
-                return StealResult::CT(ct);
-            }
-        }
-        StealResult::Nothing
-    }
-    fn steal_fwd(&mut self) -> StealResult<'a, K, V> {
-        for s in &mut self.fwd_stk {
-            if s.v.len() > s.c.len() {
-                return StealResult::KV(s.v.next_back().unwrap());
-            } else if let Some(ct) = s.c.next_back() {
-                return StealResult::CT(ct);
-            }
-        }
-        StealResult::Nothing
-    }
     #[cold]
     fn next_inner(&mut self) -> Option<(&'a K, &'a V)> {
         loop {
@@ -2210,21 +2133,21 @@ impl<'a, K, V> Range<'a, K, V> {
                 }
                 self.fwd_stk.pop();
             } else {
-                match self.steal_bck() {
-                    StealResult::KV(kv) => return Some(kv),
-                    StealResult::CT(ct) => {
+                for s in &mut self.bck_stk {
+                    if s.v.len() > s.c.len() {
+                        return Some(s.v.next().unwrap());
+                    } else if let Some(ct) = s.c.next() {
                         self.push_tree(ct, false);
                         if let Some(x) = self.fwd_leaf.next() {
                             return Some(x);
                         }
-                    }
-                    StealResult::Nothing => {
-                        if let Some(x) = self.bck_leaf.next() {
-                            return Some(x);
-                        }
-                        return None;
+                        break;
                     }
                 }
+                if let Some(x) = self.bck_leaf.next() {
+                    return Some(x);
+                }
+                return None;
             }
         }
     }
@@ -2240,21 +2163,21 @@ impl<'a, K, V> Range<'a, K, V> {
                 }
                 self.bck_stk.pop();
             } else {
-                match self.steal_fwd() {
-                    StealResult::KV(kv) => return Some(kv),
-                    StealResult::CT(ct) => {
+                for s in &mut self.fwd_stk {
+                    if s.v.len() > s.c.len() {
+                        return Some(s.v.next_back().unwrap());
+                    } else if let Some(ct) = s.c.next_back() {
                         self.push_tree_back(ct);
                         if let Some(x) = self.bck_leaf.next_back() {
                             return Some(x);
                         }
-                    }
-                    StealResult::Nothing => {
-                        if let Some(x) = self.fwd_leaf.next_back() {
-                            return Some(x);
-                        }
-                        return None;
+                        break;
                     }
                 }
+                if let Some(x) = self.fwd_leaf.next_back() {
+                    return Some(x);
+                }
+                return None;
             }
         }
     }
