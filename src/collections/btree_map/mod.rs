@@ -1718,63 +1718,58 @@ impl<'a, K, V> RangeMut<'a, K, V> {
 
     #[cold]
     fn next_inner(&mut self) -> Option<(&'a K, &'a mut V)> {
-        loop {
-            if let Some(s) = self.fwd_stk.last_mut() {
-                if let Some(kv) = s.v.next() {
-                    if let Some(ct) = s.c.next() {
-                        self.push_tree(ct, false);
-                    }
-                    return Some(kv);
+        while let Some(s) = self.fwd_stk.last_mut() {
+            if let Some(kv) = s.v.next() {
+                if let Some(ct) = s.c.next() {
+                    self.push_tree(ct, false);
                 }
-                self.fwd_stk.pop();
-            } else {
-                for s in &mut self.bck_stk {
-                    if s.v.len() > s.c.len() {
-                        return Some(s.v.next().unwrap());
-                    } else if let Some(ct) = s.c.next() {
-                        self.push_tree(ct, false);
-                        if let Some(x) = self.fwd_leaf.next() {
-                            return Some(x);
-                        }
-                        break;
-                    }
-                }
-                if let Some(x) = self.bck_leaf.next() {
+                return Some(kv);
+            }
+            self.fwd_stk.pop();
+        }
+        for s in &mut self.bck_stk {
+            if s.v.len() > s.c.len() {
+                return Some(s.v.next().unwrap());
+            } else if let Some(ct) = s.c.next() {
+                self.push_tree(ct, false);
+                if let Some(x) = self.fwd_leaf.next() {
                     return Some(x);
                 }
-                return None;
+                break;
             }
         }
+        if let Some(x) = self.bck_leaf.next() {
+            return Some(x);
+        }
+        return None;
     }
     #[cold]
     fn next_back_inner(&mut self) -> Option<(&'a K, &'a mut V)> {
-        loop {
-            if let Some(s) = self.bck_stk.last_mut() {
-                if let Some(kv) = s.v.next_back() {
-                    if let Some(ct) = s.c.next_back() {
-                        self.push_tree_back(ct);
-                    }
-                    return Some(kv);
+        while let Some(s) = self.bck_stk.last_mut() {
+            if let Some(kv) = s.v.next_back() {
+                if let Some(ct) = s.c.next_back() {
+                    self.push_tree_back(ct);
                 }
-                self.bck_stk.pop();
-            } else {
-                for s in &mut self.fwd_stk {
-                    if s.v.len() > s.c.len() {
-                        return Some(s.v.next_back().unwrap());
-                    } else if let Some(ct) = s.c.next_back() {
-                        self.push_tree_back(ct);
-                        if let Some(x) = self.bck_leaf.next_back() {
-                            return Some(x);
-                        }
-                        break;
-                    }
-                }
-                if let Some(x) = self.fwd_leaf.next_back() {
+                return Some(kv);
+            }
+            self.bck_stk.pop();
+        }
+
+        for s in &mut self.fwd_stk {
+            if s.v.len() > s.c.len() {
+                return Some(s.v.next_back().unwrap());
+            } else if let Some(ct) = s.c.next_back() {
+                self.push_tree_back(ct);
+                if let Some(x) = self.bck_leaf.next_back() {
                     return Some(x);
                 }
-                return None;
+                break;
             }
         }
+        if let Some(x) = self.fwd_leaf.next_back() {
+            return Some(x);
+        }
+        return None;
     }
 }
 impl<'a, K, V> Iterator for RangeMut<'a, K, V> {
@@ -1901,63 +1896,57 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
     }
     #[cold]
     fn next_inner(&mut self) -> Option<(K, V)> {
-        loop {
-            if let Some(s) = self.fwd_stk.last_mut() {
-                if let Some(kv) = s.v.next(&self.alloc) {
-                    if let Some(ct) = s.c.next(&self.alloc) {
-                        self.push_tree(ct, false);
-                    }
-                    return Some(kv);
+        while let Some(s) = self.fwd_stk.last_mut() {
+            if let Some(kv) = s.v.next(&self.alloc) {
+                if let Some(ct) = s.c.next(&self.alloc) {
+                    self.push_tree(ct, false);
                 }
-                self.fwd_stk.pop();
-            } else {
-                for s in &mut self.bck_stk {
-                    if s.v.len() > s.c.len() {
-                        return Some(s.v.next(&self.alloc).unwrap());
-                    } else if let Some(ct) = s.c.next(&self.alloc) {
-                        self.push_tree(ct, false);
-                        if let Some(x) = self.fwd_leaf.next(&self.alloc) {
-                            return Some(x);
-                        }
-                        break;
-                    }
-                }
-                if let Some(x) = self.bck_leaf.next(&self.alloc) {
+                return Some(kv);
+            }
+            self.fwd_stk.pop();
+        }
+        for s in &mut self.bck_stk {
+            if s.v.len() > s.c.len() {
+                return Some(s.v.next(&self.alloc).unwrap());
+            } else if let Some(ct) = s.c.next(&self.alloc) {
+                self.push_tree(ct, false);
+                if let Some(x) = self.fwd_leaf.next(&self.alloc) {
                     return Some(x);
                 }
-                return None;
+                break;
             }
         }
+        if let Some(x) = self.bck_leaf.next(&self.alloc) {
+            return Some(x);
+        }
+        return None;
     }
     #[cold]
     fn next_back_inner(&mut self) -> Option<(K, V)> {
-        loop {
-            if let Some(s) = self.bck_stk.last_mut() {
-                if let Some(kv) = s.v.next_back(&self.alloc) {
-                    if let Some(ct) = s.c.next_back(&self.alloc) {
-                        self.push_tree_back(ct);
-                    }
-                    return Some(kv);
+        while let Some(s) = self.bck_stk.last_mut() {
+            if let Some(kv) = s.v.next_back(&self.alloc) {
+                if let Some(ct) = s.c.next_back(&self.alloc) {
+                    self.push_tree_back(ct);
                 }
-                self.bck_stk.pop();
-            } else {
-                for s in &mut self.fwd_stk {
-                    if s.v.len() > s.c.len() {
-                        return Some(s.v.next_back(&self.alloc).unwrap());
-                    } else if let Some(ct) = s.c.next_back(&self.alloc) {
-                        self.push_tree_back(ct);
-                        if let Some(x) = self.bck_leaf.next_back(&self.alloc) {
-                            return Some(x);
-                        }
-                        break;
-                    }
-                }
-                if let Some(x) = self.fwd_leaf.next_back(&self.alloc) {
+                return Some(kv);
+            }
+            self.bck_stk.pop();
+        }
+        for s in &mut self.fwd_stk {
+            if s.v.len() > s.c.len() {
+                return Some(s.v.next_back(&self.alloc).unwrap());
+            } else if let Some(ct) = s.c.next_back(&self.alloc) {
+                self.push_tree_back(ct);
+                if let Some(x) = self.bck_leaf.next_back(&self.alloc) {
                     return Some(x);
                 }
-                return None;
+                break;
             }
         }
+        if let Some(x) = self.fwd_leaf.next_back(&self.alloc) {
+            return Some(x);
+        }
+        return None;
     }
 
     fn next(&mut self) -> Option<(K, V)> {
@@ -2123,63 +2112,57 @@ impl<'a, K, V> Range<'a, K, V> {
     }
     #[cold]
     fn next_inner(&mut self) -> Option<(&'a K, &'a V)> {
-        loop {
-            if let Some(s) = self.fwd_stk.last_mut() {
-                if let Some(kv) = s.v.next() {
-                    if let Some(ct) = s.c.next() {
-                        self.push_tree(ct, false);
-                    }
-                    return Some(kv);
+        while let Some(s) = self.fwd_stk.last_mut() {
+            if let Some(kv) = s.v.next() {
+                if let Some(ct) = s.c.next() {
+                    self.push_tree(ct, false);
                 }
-                self.fwd_stk.pop();
-            } else {
-                for s in &mut self.bck_stk {
-                    if s.v.len() > s.c.len() {
-                        return Some(s.v.next().unwrap());
-                    } else if let Some(ct) = s.c.next() {
-                        self.push_tree(ct, false);
-                        if let Some(x) = self.fwd_leaf.next() {
-                            return Some(x);
-                        }
-                        break;
-                    }
-                }
-                if let Some(x) = self.bck_leaf.next() {
+                return Some(kv);
+            }
+            self.fwd_stk.pop();
+        }
+        for s in &mut self.bck_stk {
+            if s.v.len() > s.c.len() {
+                return Some(s.v.next().unwrap());
+            } else if let Some(ct) = s.c.next() {
+                self.push_tree(ct, false);
+                if let Some(x) = self.fwd_leaf.next() {
                     return Some(x);
                 }
-                return None;
+                break;
             }
         }
+        if let Some(x) = self.bck_leaf.next() {
+            return Some(x);
+        }
+        return None;
     }
     #[cold]
     fn next_back_inner(&mut self) -> Option<(&'a K, &'a V)> {
-        loop {
-            if let Some(s) = self.bck_stk.last_mut() {
-                if let Some(kv) = s.v.next_back() {
-                    if let Some(ct) = s.c.next_back() {
-                        self.push_tree_back(ct);
-                    }
-                    return Some(kv);
+        while let Some(s) = self.bck_stk.last_mut() {
+            if let Some(kv) = s.v.next_back() {
+                if let Some(ct) = s.c.next_back() {
+                    self.push_tree_back(ct);
                 }
-                self.bck_stk.pop();
-            } else {
-                for s in &mut self.fwd_stk {
-                    if s.v.len() > s.c.len() {
-                        return Some(s.v.next_back().unwrap());
-                    } else if let Some(ct) = s.c.next_back() {
-                        self.push_tree_back(ct);
-                        if let Some(x) = self.bck_leaf.next_back() {
-                            return Some(x);
-                        }
-                        break;
-                    }
-                }
-                if let Some(x) = self.fwd_leaf.next_back() {
+                return Some(kv);
+            }
+            self.bck_stk.pop();
+        }
+        for s in &mut self.fwd_stk {
+            if s.v.len() > s.c.len() {
+                return Some(s.v.next_back().unwrap());
+            } else if let Some(ct) = s.c.next_back() {
+                self.push_tree_back(ct);
+                if let Some(x) = self.bck_leaf.next_back() {
                     return Some(x);
                 }
-                return None;
+                break;
             }
         }
+        if let Some(x) = self.fwd_leaf.next_back() {
+            return Some(x);
+        }
+        return None;
     }
 }
 impl<'a, K, V> Iterator for Range<'a, K, V> {
