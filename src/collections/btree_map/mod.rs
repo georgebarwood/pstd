@@ -1665,21 +1665,16 @@ impl<'a, K, V> RangeMut<'a, K, V> {
             Tree::NL(nl) => {
                 let (x, y) = nl.v.get_xy(range);
                 let (v, mut c) = (nl.v.range_mut(x, y), nl.c[x..=y].iter_mut());
-
                 let ct = c.next();
                 let ct_back = c.next_back();
-                let both = ct_back.is_none();
-
                 self.fwd_stk.push(StkMut { v, c });
                 if let Some(ct) = ct {
-                    if both {
-                        self.push_range(ct, range);
-                    } else {
+                    if let Some(ct_back) = ct_back {
                         self.push_bound(ct, range.start_bound());
+                        self.push_bound_back(ct_back, range.end_bound());
+                    } else {
+                        self.push_range(ct, range);
                     }
-                }
-                if let Some(ct_back) = ct_back {
-                    self.push_bound_back(ct_back, range.end_bound());
                 }
             }
         }
@@ -2081,21 +2076,16 @@ impl<'a, K, V> Range<'a, K, V> {
             Tree::NL(nl) => {
                 let (x, y) = nl.v.get_xy(range);
                 let (v, mut c) = (nl.v.range(x, y), nl.c[x..=y].iter());
-
                 let ct = c.next();
                 let ct_back = c.next_back();
-                let both = ct_back.is_none();
-
                 self.fwd_stk.push(Stk { v, c });
                 if let Some(ct) = ct {
-                    if both {
-                        self.push_range(ct, range);
-                    } else {
+                    if let Some(ct_back) = ct_back {
                         self.push_bound(ct, range.start_bound());
+                        self.push_bound_back(ct_back, range.end_bound());
+                    } else {
+                        self.push_range(ct, range);
                     }
-                }
-                if let Some(ct_back) = ct_back {
-                    self.push_bound_back(ct_back, range.end_bound());
                 }
             }
         }
