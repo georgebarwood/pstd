@@ -658,19 +658,22 @@ impl<K, V> PairVec<K, V> {
         K: Clone,
         V: Clone,
     {
-        let mut c = Self::new();
-        c.set_alloc(self.alloc as usize, alloc);
+        let mut c = PairDropper {
+            v: Self::new(),
+            alloc,
+        };
+        c.v.set_alloc(self.alloc as usize, alloc);
         let mut n = self.len;
         if n > 0 {
             unsafe {
                 let (mut sk, mut sv) = self.ixp(0);
-                let (mut dk, mut dv) = c.ixmp(0);
+                let (mut dk, mut dv) = c.v.ixmp(0);
                 loop {
                     let k = (*sk).clone();
                     let v = (*sv).clone();
                     dk.write(k);
                     dv.write(v);
-                    c.len += 1;
+                    c.v.len += 1;
                     n -= 1;
                     if n == 0 {
                         break;
@@ -682,7 +685,7 @@ impl<K, V> PairVec<K, V> {
                 }
             }
         }
-        c
+        mem::take(&mut c.v)
     }
 
     pub fn get_xy<T, R>(&self, range: &R) -> (usize, usize)
@@ -753,6 +756,17 @@ impl<K, V> PairVec<K, V> {
             Bound::Included(k) => self.skip_over(k),
             Bound::Excluded(k) => self.skip(k),
         }
+    }
+}
+
+struct PairDropper<'a, K, V, A: Tuning> {
+    v: PairVec<K, V>,
+    alloc: &'a A,
+}
+
+impl<'a, K, V, A: Tuning> Drop for PairDropper<'a, K, V, A> {
+    fn drop(&mut self) {
+        self.v.dealloc(self.alloc);
     }
 }
 

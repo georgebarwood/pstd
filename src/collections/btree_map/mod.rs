@@ -1741,7 +1741,7 @@ impl<'a, K, V> RangeMut<'a, K, V> {
         if let Some(x) = self.bck_leaf.next() {
             return Some(x);
         }
-        return None;
+        None
     }
     #[cold]
     fn next_back_inner(&mut self) -> Option<(&'a K, &'a mut V)> {
@@ -1769,7 +1769,7 @@ impl<'a, K, V> RangeMut<'a, K, V> {
         if let Some(x) = self.fwd_leaf.next_back() {
             return Some(x);
         }
-        return None;
+        None
     }
 }
 impl<'a, K, V> Iterator for RangeMut<'a, K, V> {
@@ -1919,7 +1919,7 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
         if let Some(x) = self.bck_leaf.next(&self.alloc) {
             return Some(x);
         }
-        return None;
+        None
     }
     #[cold]
     fn next_back_inner(&mut self) -> Option<(K, V)> {
@@ -1946,7 +1946,7 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
         if let Some(x) = self.fwd_leaf.next_back(&self.alloc) {
             return Some(x);
         }
-        return None;
+        None
     }
 
     fn next(&mut self) -> Option<(K, V)> {
@@ -2135,7 +2135,7 @@ impl<'a, K, V> Range<'a, K, V> {
         if let Some(x) = self.bck_leaf.next() {
             return Some(x);
         }
-        return None;
+        None
     }
     #[cold]
     fn next_back_inner(&mut self) -> Option<(&'a K, &'a V)> {
@@ -2162,7 +2162,7 @@ impl<'a, K, V> Range<'a, K, V> {
         if let Some(x) = self.fwd_leaf.next_back() {
             return Some(x);
         }
-        return None;
+        None
     }
 }
 impl<'a, K, V> Iterator for Range<'a, K, V> {

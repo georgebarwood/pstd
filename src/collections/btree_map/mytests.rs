@@ -3,6 +3,40 @@ use crate::collections::btree_map::*;
 const REP: usize = if cfg!(miri) { 2 } else { 100 };
 const N: usize = if cfg!(miri) { 100 } else { 100000 };
 
+struct BadClone {
+    x: usize,
+}
+impl Clone for BadClone {
+    fn clone(&self) -> Self {
+        if self.x == 50 {
+            panic!();
+        }
+        Self { x: self.x }
+    }
+}
+
+#[test]
+fn exp_bad_clone_test() {
+    let mut map = BTreeMap::new();
+    for i in 0..100 {
+        map.insert(i, BadClone { x: i });
+    }
+    let _ = std::panic::catch_unwind(|| {
+        let _ = map.clone();
+    });
+}
+
+#[test]
+fn std_bad_clone_test() {
+    let mut map = std::collections::BTreeMap::new();
+    for i in 0..100 {
+        map.insert(i, BadClone { x: i });
+    }
+    let _ = std::panic::catch_unwind(|| {
+        let _ = map.clone();
+    });
+}
+
 #[test]
 fn exp_clear_test() {
     let n = N;
@@ -107,6 +141,7 @@ fn std_get_test() {
 #[test]
 fn exp_clone_test() {
     let mut m = /*std::collections::*/ BTreeMap::<usize, usize>::new();
+    // let mut m = BTreeMap::with_tuning(DefaultTuning::new(6,12));
     let mut c = m.lower_bound_mut(Bound::Unbounded);
     let n = N;
     for i in 0..n {
