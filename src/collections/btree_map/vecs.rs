@@ -13,42 +13,146 @@ use std::{
 
 use crate::collections::btree_map::Tuning;
 
-/// Basic vec, does not have own capacity or length, just a pointer to memory.
-/// Kind-of cribbed from <https://doc.rust-lang.org/nomicon/vec/vec-final.html>.
-struct BasicVec<T> {
-    p: NonNull<T>,
+unsafe impl<T: Send> Send for ShortVec<T> {}
+unsafe impl<T: Sync> Sync for ShortVec<T> {}
+
+/// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise does nothing.
+#[cfg(any(debug_assertions, not(feature = "unsafe-optim")))]
+macro_rules! safe_assert {
+    ( $cond: expr ) => {
+        assert!($cond)
+    };
 }
 
-unsafe impl<T: Send> Send for BasicVec<T> {}
-unsafe impl<T: Sync> Sync for BasicVec<T> {}
+/// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise does nothing.
+#[cfg(all(not(debug_assertions), feature = "unsafe-optim"))]
+macro_rules! safe_assert {
+    ( $cond: expr ) => {
+        if !$cond {
+            unsafe { std::hint::unreachable_unchecked() }
+        }
+    };
+}
 
-impl<T> Default for BasicVec<T> {
+/// Vec with manual allocation.
+pub struct ShortVec<T> {
+    /// Pointer to elements.
+    p: NonNull<T>,
+    /// Current length.
+    len: u16,
+    /// Currently allocated.
+    pub alloc: u16,
+}
+
+impl<T> Default for ShortVec<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> BasicVec<T> {
-    /// Construct new `BasicVec`.
+impl<T> ShortVec<T> {
     pub fn new() -> Self {
         Self {
+            len: 0,
+            alloc: 0,
             p: NonNull::dangling(),
         }
     }
 
-    /// Get mutable raw pointer to specified element.
-    /// # Safety
-    /// index must be < set allocation.
+    pub fn len(&self) -> usize {
+        self.len as usize
+    }
+
+    pub fn set_alloc<A: Tuning>(&mut self, na: usize, alloc: &A) {
+        safe_assert!(na >= self.len());
+        if na == self.alloc as usize {
+            return;
+        }
+        unsafe {
+            self.basic_set_alloc(self.alloc as usize, na, alloc);
+        }
+        self.alloc = na as u16;
+    }
+
     #[inline]
-    pub unsafe fn ix(&self, index: usize) -> *mut T {
-        self.p.as_ptr().add(index)
+    pub fn push(&mut self, value: T) {
+        safe_assert!(self.len < self.alloc);
+        unsafe {
+            self.set(self.len(), value);
+        }
+        self.len += 1;
+    }
+
+    #[inline]
+    pub fn pop(&mut self) -> Option<T> {
+        if self.len == 0 {
+            None
+        } else {
+            self.len -= 1;
+            unsafe { Some(self.get(self.len())) }
+        }
+    }
+
+    pub fn insert(&mut self, at: usize, value: T) {
+        safe_assert!(self.len < self.alloc);
+        unsafe {
+            if at < self.len() {
+                ptr::copy(self.ixp(at), self.ixp(at + 1), self.len() - at);
+            }
+            self.set(at, value);
+            self.len += 1;
+        }
+    }
+
+    pub fn remove(&mut self, at: usize) -> T {
+        safe_assert!(at < self.len());
+        unsafe {
+            let result = self.get(at);
+            ptr::copy(self.ixp(at + 1), self.ixp(at), self.len() - at - 1);
+            self.len -= 1;
+            result
+        }
+    }
+
+    pub fn split<A: Tuning>(&mut self, at: usize, a1: usize, a2: usize, alloc: &A) -> Self {
+        safe_assert!(at < self.len());
+        let len = self.len() - at;
+        safe_assert!(a1 >= at);
+        safe_assert!(a2 >= len);
+        let mut result = Self::new();
+        result.set_alloc(a2, alloc);
+        unsafe {
+            ptr::copy_nonoverlapping(self.ixp(at), result.ixp(0), len);
+        }
+        result.len = len as u16;
+        self.len = at as u16;
+        self.set_alloc(a1, alloc);
+        result
+    }
+
+    /// Get reference to ith element.
+    #[inline]
+    pub fn ix(&self, i: usize) -> &T {
+        safe_assert!(i < self.len());
+        unsafe { &*self.ixp(i) }
+    }
+
+    /// Get mutable reference to ith element.
+    #[inline]
+    pub fn ixm(&mut self, i: usize) -> &mut T {
+        safe_assert!(i < self.len());
+        unsafe { &mut *self.ixp(i) }
+    }
+
+    pub fn sv_into_iter(self) -> IntoIterShortVec<T> {
+        IntoIterShortVec { start: 0, v: self }
     }
 
     /// Set capacity ( allocate or reallocate memory ).
     /// # Safety
     ///
     /// `oa` must be the previous alloc set (0 if no alloc has yet been set).
-    pub unsafe fn set_alloc<A: Tuning>(&mut self, oa: usize, na: usize, alloc: &A) {
+    unsafe fn basic_set_alloc<A: Tuning>(&mut self, oa: usize, na: usize, alloc: &A) {
         if mem::size_of::<T>() == 0 {
             return;
         }
@@ -79,7 +183,7 @@ impl<T> BasicVec<T> {
     /// # Safety
     ///
     /// oa must be the last allocation set.
-    pub unsafe fn free<A: Tuning>(&mut self, oa: usize, alloc: &A) {
+    unsafe fn free<A: Tuning>(&mut self, oa: usize, alloc: &A) {
         let elem_size = mem::size_of::<T>();
         if oa != 0 && elem_size != 0 {
             alloc.deallocate(
@@ -90,13 +194,19 @@ impl<T> BasicVec<T> {
         self.p = NonNull::dangling();
     }
 
+    /// Get pointer to ith element.
+    #[inline]
+    unsafe fn ixp(&self, i: usize) -> *mut T {
+        self.p.as_ptr().add(i)
+    }
+
     /// Set value.
     /// # Safety
     ///
     /// ix must be < alloc, and the element must be unset.
     #[inline]
-    pub unsafe fn set(&mut self, i: usize, elem: T) {
-        ptr::write(self.ix(i), elem);
+    unsafe fn set(&mut self, i: usize, elem: T) {
+        ptr::write(self.ixp(i), elem);
     }
 
     /// Get value.
@@ -104,175 +214,8 @@ impl<T> BasicVec<T> {
     ///
     /// ix must be less < alloc, and the element must have been set.
     #[inline]
-    pub unsafe fn get(&mut self, i: usize) -> T {
-        ptr::read(self.ix(i))
-    }
-
-    /// Get whole as slice.
-    /// # Safety
-    ///
-    /// len must be <= alloc and 0..len elements must have been set.
-    #[inline]
-    pub unsafe fn slice(&self, len: usize) -> &[T] {
-        std::slice::from_raw_parts(self.p.as_ptr(), len)
-    }
-
-    /// Get whole as mut slice.
-    /// # Safety
-    ///
-    /// len must be <= alloc and 0..len elements must have been set.
-    #[inline]
-    pub unsafe fn slice_mut(&mut self, len: usize) -> &mut [T] {
-        std::slice::from_raw_parts_mut(self.p.as_ptr(), len)
-    }
-
-    /// Move elements.
-    /// # Safety
-    ///
-    /// The set status of the elements changes in the obvious way. from, to and len must be in range.
-    pub unsafe fn move_self(&mut self, from: usize, to: usize, len: usize) {
-        ptr::copy(self.ix(from), self.ix(to), len);
-    }
-
-    /// Move elements from another `BasicVec`.
-    /// # Safety
-    ///
-    /// The set status of the elements changes in the obvious way. from, to and len must be in range.
-    pub unsafe fn move_from(&mut self, from: usize, src: &mut Self, to: usize, len: usize) {
-        ptr::copy_nonoverlapping(src.ix(from), self.ix(to), len);
-    }
-}
-
-/// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise does nothing.
-#[cfg(any(debug_assertions, not(feature = "unsafe-optim")))]
-macro_rules! safe_assert {
-    ( $cond: expr ) => {
-        assert!($cond)
-    };
-}
-
-/// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise does nothing.
-#[cfg(all(not(debug_assertions), feature = "unsafe-optim"))]
-macro_rules! safe_assert {
-    ( $cond: expr ) => {
-        if !$cond {
-            unsafe { std::hint::unreachable_unchecked() }
-        }
-    };
-}
-
-/// Vec with manual allocation.
-pub struct ShortVec<T> {
-    len: u16, // Current length.
-    /// Currently allocated.
-    pub alloc: u16,
-    v: BasicVec<T>,
-}
-
-impl<T> Default for ShortVec<T> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<T> ShortVec<T> {
-    pub fn new() -> Self {
-        let v = BasicVec::new();
-        Self {
-            len: 0,
-            alloc: 0,
-            v,
-        }
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.len as usize
-    }
-
-    pub fn set_alloc<A: Tuning>(&mut self, na: usize, alloc: &A) {
-        safe_assert!(na >= self.len());
-        if na == self.alloc as usize {
-            return;
-        }
-        unsafe {
-            self.v.set_alloc(self.alloc as usize, na, alloc);
-        }
-        self.alloc = na as u16;
-    }
-
-    #[inline]
-    pub fn push(&mut self, value: T) {
-        safe_assert!(self.len < self.alloc);
-        unsafe {
-            self.v.set(self.len(), value);
-        }
-        self.len += 1;
-    }
-
-    #[inline]
-    pub fn pop(&mut self) -> Option<T> {
-        if self.len == 0 {
-            None
-        } else {
-            self.len -= 1;
-            unsafe { Some(self.v.get(self.len())) }
-        }
-    }
-
-    pub fn insert(&mut self, at: usize, value: T) {
-        safe_assert!(self.len < self.alloc);
-        unsafe {
-            if at < self.len() {
-                self.v.move_self(at, at + 1, self.len() - at);
-            }
-            self.v.set(at, value);
-            self.len += 1;
-        }
-    }
-
-    pub fn remove(&mut self, at: usize) -> T {
-        safe_assert!(at < self.len());
-        unsafe {
-            let result = self.v.get(at);
-            self.v.move_self(at + 1, at, self.len() - at - 1);
-            self.len -= 1;
-            result
-        }
-    }
-
-    pub fn split<A: Tuning>(&mut self, at: usize, a1: usize, a2: usize, alloc: &A) -> Self {
-        safe_assert!(at < self.len());
-        let len = self.len() - at;
-        safe_assert!(a1 >= at);
-        safe_assert!(a2 >= len);
-        let mut result = Self::new();
-        result.set_alloc(a2, alloc);
-        unsafe {
-            result.v.move_from(at, &mut self.v, 0, len);
-        }
-        result.len = len as u16;
-        self.len = at as u16;
-        self.set_alloc(a1, alloc);
-        result
-    }
-
-    /// Get reference to ith element.
-    #[inline]
-    pub fn ix(&self, i: usize) -> &T {
-        safe_assert!(i < self.len());
-        unsafe { &*self.v.ix(i) }
-    }
-
-    /// Get mutable reference to ith element.
-    #[inline]
-    pub fn ixm(&mut self, i: usize) -> &mut T {
-        safe_assert!(i < self.len());
-        unsafe { &mut *self.v.ix(i) }
-    }
-
-    pub fn sv_into_iter(self) -> IntoIterShortVec<T> {
-        IntoIterShortVec { start: 0, v: self }
+    unsafe fn get(&mut self, i: usize) -> T {
+        ptr::read(self.ixp(i))
     }
 }
 
@@ -281,7 +224,7 @@ impl<T> Deref for ShortVec<T> {
     #[inline]
     fn deref(&self) -> &[T] {
         let len: usize = ShortVec::len(self);
-        unsafe { self.v.slice(len) }
+        unsafe { std::slice::from_raw_parts(self.p.as_ptr(), len) }
     }
 }
 
@@ -289,7 +232,7 @@ impl<T> DerefMut for ShortVec<T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut [T] {
         let len: usize = ShortVec::len(self);
-        unsafe { self.v.slice_mut(len) }
+        unsafe { std::slice::from_raw_parts_mut(self.p.as_ptr(), len) }
     }
 }
 
@@ -318,7 +261,7 @@ impl<T> IntoIterShortVec<T> {
         } else {
             let ix = self.start;
             self.start += 1;
-            Some(unsafe { self.v.v.get(ix) })
+            Some(unsafe { self.v.get(ix) })
         }
     }
 
@@ -331,7 +274,7 @@ impl<T> IntoIterShortVec<T> {
             None
         } else {
             self.v.len -= 1;
-            Some(unsafe { self.v.v.get(self.v.len()) })
+            Some(unsafe { self.v.get(self.v.len()) })
         }
     }
 

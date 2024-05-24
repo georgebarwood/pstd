@@ -1233,7 +1233,6 @@ impl<K, V> NonLeafInner<K, V> {
         })
     }
 
-    #[allow(clippy::type_complexity)]
     fn into_iter(mut self) -> (IntoIterPairVec<K, V>, IntoIterShortVec<Tree<K, V>>) {
         let v = mem::take(&mut self.v);
         let c = mem::take(&mut self.c);
