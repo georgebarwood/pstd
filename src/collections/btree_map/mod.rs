@@ -1038,7 +1038,7 @@ impl<K, V> Tree<K, V> {
         R: RangeBounds<T>,
     {
         let mut x = RangeMut::new();
-        x.push_range(self, range, true);
+        x.push_range(self, range);
         x
     }
 
@@ -1049,7 +1049,7 @@ impl<K, V> Tree<K, V> {
         R: RangeBounds<T>,
     {
         let mut x = Range::new();
-        x.push_range(self, range, true);
+        x.push_range(self, range);
         x
     }
 } // End impl Tree
@@ -1651,7 +1651,7 @@ impl<'a, K, V> RangeMut<'a, K, V> {
             }
         }
     }
-    fn push_range<T, R>(&mut self, tree: &'a mut Tree<K, V>, range: &R, both: bool)
+    fn push_range<T, R>(&mut self, tree: &'a mut Tree<K, V>, range: &R)
     where
         T: Ord + ?Sized,
         K: Borrow<T> + Ord,
@@ -1667,37 +1667,61 @@ impl<'a, K, V> RangeMut<'a, K, V> {
                 let (v, mut c) = (nl.v.range_mut(x, y), nl.c[x..=y].iter_mut());
 
                 let ct = c.next();
-                let ct_back = if both { c.next_back() } else { None };
-                let both = both && ct_back.is_none();
+                let ct_back = c.next_back();
+                let both = ct_back.is_none();
 
                 self.fwd_stk.push(StkMut { v, c });
                 if let Some(ct) = ct {
-                    self.push_range(ct, range, both);
+                    if both {
+                        self.push_range(ct, range);
+                    } else {
+                        self.push_bound(ct, range.start_bound());
+                    }
                 }
                 if let Some(ct_back) = ct_back {
-                    self.push_range_back(ct_back, range);
+                    self.push_bound_back(ct_back, range.end_bound());
                 }
             }
         }
     }
-    fn push_range_back<T, R>(&mut self, tree: &'a mut Tree<K, V>, range: &R)
+    fn push_bound<T>(&mut self, tree: &'a mut Tree<K, V>, lb: Bound<&T>)
     where
         T: Ord + ?Sized,
         K: Borrow<T> + Ord,
-        R: RangeBounds<T>,
     {
         match tree {
             Tree::L(leaf) => {
-                let (x, y) = leaf.0.get_xy(range);
+                let (x, y) = (leaf.0.get_lower(lb), leaf.0.len());
+                self.fwd_leaf = leaf.0.range_mut(x, y);
+            }
+            Tree::NL(nl) => {
+                let (x, y) = (nl.v.get_lower(lb), nl.v.len());
+                let (v, mut c) = (nl.v.range_mut(x, y), nl.c[x..=y].iter_mut());
+                let ct = c.next();
+                self.fwd_stk.push(StkMut { v, c });
+                if let Some(ct) = ct {
+                    self.push_bound(ct, lb);
+                }
+            }
+        }
+    }
+    fn push_bound_back<T>(&mut self, tree: &'a mut Tree<K, V>, ub: Bound<&T>)
+    where
+        T: Ord + ?Sized,
+        K: Borrow<T> + Ord,
+    {
+        match tree {
+            Tree::L(leaf) => {
+                let (x, y) = (0, leaf.0.get_upper(ub));
                 self.bck_leaf = leaf.0.range_mut(x, y);
             }
             Tree::NL(nl) => {
-                let (x, y) = nl.v.get_xy(range);
+                let (x, y) = (0, nl.v.get_upper(ub));
                 let (v, mut c) = (nl.v.range_mut(x, y), nl.c[x..=y].iter_mut());
                 let ct_back = c.next_back();
                 self.bck_stk.push(StkMut { v, c });
                 if let Some(ct_back) = ct_back {
-                    self.push_range_back(ct_back, range);
+                    self.push_bound_back(ct_back, ub);
                 }
             }
         }
@@ -1715,7 +1739,6 @@ impl<'a, K, V> RangeMut<'a, K, V> {
             }
         }
     }
-
     #[cold]
     fn next_inner(&mut self) -> Option<(&'a K, &'a mut V)> {
         while let Some(s) = self.fwd_stk.last_mut() {
@@ -2044,7 +2067,7 @@ impl<'a, K, V> Range<'a, K, V> {
             }
         }
     }
-    fn push_range<T, R>(&mut self, tree: &'a Tree<K, V>, range: &R, both: bool)
+    fn push_range<T, R>(&mut self, tree: &'a Tree<K, V>, range: &R)
     where
         T: Ord + ?Sized,
         K: Borrow<T> + Ord,
@@ -2060,37 +2083,61 @@ impl<'a, K, V> Range<'a, K, V> {
                 let (v, mut c) = (nl.v.range(x, y), nl.c[x..=y].iter());
 
                 let ct = c.next();
-                let ct_back = if both { c.next_back() } else { None };
-                let both = both && ct_back.is_none();
+                let ct_back = c.next_back();
+                let both = ct_back.is_none();
 
                 self.fwd_stk.push(Stk { v, c });
                 if let Some(ct) = ct {
-                    self.push_range(ct, range, both);
+                    if both {
+                        self.push_range(ct, range);
+                    } else {
+                        self.push_bound(ct, range.start_bound());
+                    }
                 }
                 if let Some(ct_back) = ct_back {
-                    self.push_range_back(ct_back, range);
+                    self.push_bound_back(ct_back, range.end_bound());
                 }
             }
         }
     }
-    fn push_range_back<T, R>(&mut self, tree: &'a Tree<K, V>, range: &R)
+    fn push_bound<T>(&mut self, tree: &'a Tree<K, V>, lb: Bound<&T>)
     where
         T: Ord + ?Sized,
         K: Borrow<T> + Ord,
-        R: RangeBounds<T>,
     {
         match tree {
             Tree::L(leaf) => {
-                let (x, y) = leaf.0.get_xy(range);
+                let (x, y) = (leaf.0.get_lower(lb), leaf.0.len());
+                self.fwd_leaf = leaf.0.range(x, y);
+            }
+            Tree::NL(nl) => {
+                let (x, y) = (nl.v.get_lower(lb), nl.v.len());
+                let (v, mut c) = (nl.v.range(x, y), nl.c[x..=y].iter());
+                let ct = c.next();
+                self.fwd_stk.push(Stk { v, c });
+                if let Some(ct) = ct {
+                    self.push_bound(ct, lb);
+                }
+            }
+        }
+    }
+    fn push_bound_back<T>(&mut self, tree: &'a Tree<K, V>, ub: Bound<&T>)
+    where
+        T: Ord + ?Sized,
+        K: Borrow<T> + Ord,
+    {
+        match tree {
+            Tree::L(leaf) => {
+                let (x, y) = (0, leaf.0.get_upper(ub));
                 self.bck_leaf = leaf.0.range(x, y);
             }
             Tree::NL(nl) => {
-                let (x, y) = nl.v.get_xy(range);
+                let (x, y) = (0, nl.v.get_upper(ub));
                 let (v, mut c) = (nl.v.range(x, y), nl.c[x..=y].iter());
                 let ct_back = c.next_back();
                 self.bck_stk.push(Stk { v, c });
                 if let Some(ct_back) = ct_back {
-                    self.push_range_back(ct_back, range);
+                    self.push_bound_back(ct_back, ub);
                 }
             }
         }
