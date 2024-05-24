@@ -45,6 +45,9 @@ use std::{
 
 use crate::alloc::{AllocError, Allocator, Global};
 
+mod vecs;
+use vecs::{IntoIterPairVec, IntoIterShortVec, IterMutPairVec, IterPairVec, PairVec, ShortVec};
+
 /// `BTreeMap` similar to [`std::collections::BTreeMap`].
 ///
 /// General guide to implementation:
@@ -836,16 +839,12 @@ where
     }
 }
 
-// Vector types.
+/// StkVec is used for stacks of pointers, length is maximum tree depth.
 type StkVec<T> = arrayvec::ArrayVec<T, 15>;
-
-mod vecs;
-use vecs::*;
-
-type TreeVec<K, V> = ShortVec<Tree<K, V>>;
 
 type Split<K, V> = ((K, V), Tree<K, V>);
 
+/// Context for [`BTreeMap::insert`]
 struct InsertCtx<'a, K, V, A: Tuning> {
     value: Option<V>,
     split: Option<Split<K, V>>,
@@ -1200,13 +1199,13 @@ type NonLeaf<K, V> = Box<NonLeafInner<K, V>>;
 #[derive(Debug)]
 struct NonLeafInner<K, V> {
     v: PairVec<K, V>,
-    c: TreeVec<K, V>,
+    c: ShortVec<Tree<K, V>>,
 }
 impl<K, V> NonLeafInner<K, V> {
     fn new() -> Box<Self> {
         Box::new(Self {
             v: PairVec::new(),
-            c: TreeVec::new(),
+            c: ShortVec::new(),
         })
     }
 
