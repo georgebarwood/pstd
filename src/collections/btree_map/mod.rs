@@ -84,7 +84,7 @@ where
     fn clone(&self) -> Self {
         Self {
             len: self.len,
-            tree: self.tree.clone(&self.atune),
+            tree: self.tree.aclone(&self.atune),
             atune: self.atune.clone(),
         }
     }
@@ -888,24 +888,21 @@ impl<K, V> Tree<K, V> {
         Tree::L(Leaf::new())
     }
 
-    fn dealloc<A: Tuning>(&mut self, alloc: &A) {
-        match self {
-            Tree::L(leaf) => leaf.dealloc(alloc),
-            Tree::NL(nonleaf) => nonleaf.dealloc(alloc),
-        }
-    }
-
-    fn clone<A: Tuning>(&self, a: &A) -> Self
+    fn aclone<A: Tuning>(&self, a: &A) -> Self
     where
         K: Clone,
         V: Clone,
     {
         match self {
             Tree::L(leaf) => Tree::L(Leaf(leaf.0.clone(a))),
-            Tree::NL(nonleaf) => {
-                let nl: &NonLeafInner<K, V> = nonleaf;
-                Tree::NL(nl.clone(a))
-            }
+            Tree::NL(nonleaf) => Tree::NL(nonleaf.aclone(a)),
+        }
+    }
+
+    fn dealloc<A: Tuning>(&mut self, alloc: &A) {
+        match self {
+            Tree::L(leaf) => leaf.dealloc(alloc),
+            Tree::NL(nonleaf) => nonleaf.dealloc(alloc),
         }
     }
 
@@ -1196,6 +1193,25 @@ impl<K, V> Leaf<K, V> {
 /* Boxing NonLeaf saves some memory by reducing size of Tree enum */
 type NonLeaf<K, V> = Box<NonLeafInner<K, V>>;
 
+struct TreeVecDropper<'a, K, V, A>
+where
+    A: Tuning,
+{
+    c: ShortVec<Tree<K, V>>,
+    alloc: &'a A,
+}
+impl<'a, K, V, A> Drop for TreeVecDropper<'a, K, V, A>
+where
+    A: Tuning,
+{
+    fn drop(&mut self) {
+        while let Some(mut t) = self.c.pop() {
+            t.dealloc(self.alloc);
+        }
+        self.c.set_alloc(0, self.alloc);
+    }
+}
+
 #[derive(Debug)]
 struct NonLeafInner<K, V> {
     v: PairVec<K, V>,
@@ -1217,16 +1233,18 @@ impl<K, V> NonLeafInner<K, V> {
         self.c.set_alloc(0, alloc);
     }
 
-    fn clone<A: Tuning>(&self, alloc: &A) -> Box<Self>
+    fn aclone<A: Tuning>(&self, alloc: &A) -> Box<Self>
     where
         K: Clone,
         V: Clone,
     {
         let mut c = ShortVec::new();
         c.set_alloc(self.v.alloc as usize + 1, alloc);
+        let mut tvd = TreeVecDropper { c, alloc };
         for t in self.c.iter() {
-            c.push(t.clone(alloc));
+            tvd.c.push(t.aclone(alloc));
         }
+        let c = mem::take(&mut tvd.c);
         Box::new(Self {
             v: self.v.clone(alloc),
             c,

@@ -8,7 +8,7 @@ struct BadClone {
 }
 impl Clone for BadClone {
     fn clone(&self) -> Self {
-        if self.x == 50 {
+        if self.x == 200 {
             panic!();
         }
         Self { x: self.x }
@@ -18,7 +18,7 @@ impl Clone for BadClone {
 #[test]
 fn exp_bad_clone_test() {
     let mut map = BTreeMap::new();
-    for i in 0..100 {
+    for i in 0..1000 {
         map.insert(i, BadClone { x: i });
     }
     let _ = std::panic::catch_unwind(|| {

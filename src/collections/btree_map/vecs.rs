@@ -589,7 +589,7 @@ impl<K, V> PairVec<K, V> {
         K: Clone,
         V: Clone,
     {
-        let mut c = PairDropper {
+        let mut c = PairVecDropper {
             v: Self::new(),
             alloc,
         };
@@ -685,12 +685,12 @@ impl<K, V> PairVec<K, V> {
     }
 }
 
-struct PairDropper<'a, K, V, A: Tuning> {
+struct PairVecDropper<'a, K, V, A: Tuning> {
     v: PairVec<K, V>,
     alloc: &'a A,
 }
 
-impl<'a, K, V, A: Tuning> Drop for PairDropper<'a, K, V, A> {
+impl<'a, K, V, A: Tuning> Drop for PairVecDropper<'a, K, V, A> {
     fn drop(&mut self) {
         self.v.dealloc(self.alloc);
     }
