@@ -885,4 +885,7 @@ fn test_custom_alloc3() {
     let t = ExTuning(Global {});
     let mut map = BTreeMap::with_tuning(t);
     map.insert("hello", "there");
+    for _ in &mut map
+    {
+    }
 }

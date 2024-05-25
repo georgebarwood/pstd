@@ -508,20 +508,20 @@ impl<K: Hash, V: Hash> Hash for BTreeMap<K, V> {
         }
     }
 }
-impl<K: PartialEq, V: PartialEq> PartialEq for BTreeMap<K, V> {
-    fn eq(&self, other: &BTreeMap<K, V>) -> bool {
+impl<K: PartialEq, V: PartialEq, A: Tuning> PartialEq for BTreeMap<K, V, A> {
+    fn eq(&self, other: &BTreeMap<K, V, A>) -> bool {
         self.len() == other.len() && self.iter().zip(other.iter()).all(|(a, b)| a == b)
     }
 }
-impl<K: Eq, V: Eq> Eq for BTreeMap<K, V> {}
+impl<K: Eq, V: Eq, A: Tuning> Eq for BTreeMap<K, V, A> {}
 
-impl<K: PartialOrd, V: PartialOrd> PartialOrd for BTreeMap<K, V> {
-    fn partial_cmp(&self, other: &BTreeMap<K, V>) -> Option<Ordering> {
+impl<K: PartialOrd, V: PartialOrd, A: Tuning> PartialOrd for BTreeMap<K, V, A> {
+    fn partial_cmp(&self, other: &BTreeMap<K, V, A>) -> Option<Ordering> {
         self.iter().partial_cmp(other.iter())
     }
 }
-impl<K: Ord, V: Ord> Ord for BTreeMap<K, V> {
-    fn cmp(&self, other: &BTreeMap<K, V>) -> Ordering {
+impl<K: Ord, V: Ord, A: Tuning> Ord for BTreeMap<K, V, A> {
+    fn cmp(&self, other: &BTreeMap<K, V, A>) -> Ordering {
         self.iter().cmp(other.iter())
     }
 }
@@ -534,14 +534,14 @@ impl<K, V, A: Tuning> IntoIterator for BTreeMap<K, V, A> {
         IntoIter::new(self)
     }
 }
-impl<'a, K, V> IntoIterator for &'a BTreeMap<K, V> {
+impl<'a, K, V, A: Tuning> IntoIterator for &'a BTreeMap<K, V, A> {
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
     fn into_iter(self) -> Iter<'a, K, V> {
         self.iter()
     }
 }
-impl<'a, K, V> IntoIterator for &'a mut BTreeMap<K, V> {
+impl<'a, K, V, A: Tuning> IntoIterator for &'a mut BTreeMap<K, V, A> {
     type Item = (&'a K, &'a mut V);
     type IntoIter = IterMut<'a, K, V>;
     fn into_iter(self) -> IterMut<'a, K, V> {
@@ -569,7 +569,7 @@ where
         map
     }
 }
-impl<K, V> Extend<(K, V)> for BTreeMap<K, V>
+impl<K, V, A: Tuning> Extend<(K, V)> for BTreeMap<K, V, A>
 where
     K: Ord,
 {
@@ -582,7 +582,7 @@ where
         }
     }
 }
-impl<'a, K, V> Extend<(&'a K, &'a V)> for BTreeMap<K, V>
+impl<'a, K, V, A: Tuning> Extend<(&'a K, &'a V)> for BTreeMap<K, V, A>
 where
     K: Ord + Copy,
     V: Copy,
@@ -611,7 +611,7 @@ where
         self.get(key).expect("no entry found for key")
     }
 }
-impl<K: Debug, V: Debug> Debug for BTreeMap<K, V> {
+impl<K: Debug, V: Debug, A: Tuning> Debug for BTreeMap<K, V, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
@@ -625,7 +625,7 @@ use serde::{
 };
 
 #[cfg(feature = "serde")]
-impl<K, V> Serialize for BTreeMap<K, V>
+impl<K, V, A: Tuning> Serialize for BTreeMap<K, V, A>
 where
     K: serde::Serialize,
     V: serde::Serialize,
@@ -1190,9 +1190,10 @@ impl<K, V> Leaf<K, V> {
     }
 } // End impl Leaf
 
-/* Boxing NonLeaf saves some memory by reducing size of Tree enum */
+/// Boxing NonLeaf saves some memory by reducing size of Tree enum.
 type NonLeaf<K, V> = Box<NonLeafInner<K, V>>;
 
+/// This stops memory leaking if a panic occurs during clone.
 struct TreeVecDropper<'a, K, V, A>
 where
     A: Tuning,
@@ -3038,11 +3039,8 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
 // Tests.
 
 #[cfg(all(test, not(miri), feature = "cap"))]
-use {cap::Cap, std::alloc};
-
-#[cfg(all(test, not(miri), feature = "cap"))]
 #[global_allocator]
-static ALLOCATOR: Cap<alloc::System> = Cap::new(alloc::System, usize::max_value());
+static ALLOCATOR: cap::Cap<std::alloc::System> = cap::Cap::new(std::alloc::System, usize::max_value());
 
 #[cfg(test)]
 fn print_memory() {
@@ -3052,11 +3050,9 @@ fn print_memory() {
 
 /* mimalloc cannot be used with miri */
 #[cfg(all(test, not(miri), not(feature = "cap")))]
-use mimalloc::MiMalloc;
-
-#[cfg(all(test, not(miri), not(feature = "cap")))]
 #[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 
 #[cfg(test)]
 mod mytests;
