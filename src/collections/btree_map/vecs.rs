@@ -638,16 +638,11 @@ impl<K, V> PairVec<K, V> {
         K: Borrow<T> + Ord,
         R: RangeBounds<T>,
     {
-        let y = match range.end_bound() {
-            Bound::Unbounded => self.len(),
-            Bound::Included(k) => self.skip_over(k),
-            Bound::Excluded(k) => self.skip(k),
-        };
+        let y = self.get_upper(range.end_bound());
         let x = match range.start_bound() {
             Bound::Unbounded => 0,
             Bound::Included(k) => match self.search_to(y, k) {
-                Ok(i) => i,
-                Err(i) => i,
+                Ok(i) | Err(i) => i,
             },
             Bound::Excluded(k) => match self.search_to(y, k) {
                 Ok(i) => i + 1,
