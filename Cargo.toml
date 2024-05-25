@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "0.1.13"
+version = "0.1.14"
 edition = "2021"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
