@@ -76,11 +76,7 @@ impl<K, V, A: Tuning> Drop for BTreeMap<K, V, A> {
         self.tree.dealloc(&self.atune);
     }
 }
-impl<K, V, A: Tuning> Clone for BTreeMap<K, V, A>
-where
-    K: Clone,
-    V: Clone,
-{
+impl<K: Clone, V: Clone, A: Tuning> Clone for BTreeMap<K, V, A> {
     fn clone(&self) -> Self {
         Self {
             len: self.len,
@@ -557,10 +553,7 @@ impl<K: Ord, V> FromIterator<(K, V)> for BTreeMap<K, V> {
         map
     }
 }
-impl<K, V, const N: usize> From<[(K, V); N]> for BTreeMap<K, V>
-where
-    K: Ord,
-{
+impl<K: Ord, V, const N: usize> From<[(K, V); N]> for BTreeMap<K, V> {
     fn from(arr: [(K, V); N]) -> BTreeMap<K, V> {
         let mut map = BTreeMap::new();
         for (k, v) in arr {
@@ -569,10 +562,7 @@ where
         map
     }
 }
-impl<K, V, A: Tuning> Extend<(K, V)> for BTreeMap<K, V, A>
-where
-    K: Ord,
-{
+impl<K: Ord, V, A: Tuning> Extend<(K, V)> for BTreeMap<K, V, A> {
     fn extend<T>(&mut self, iter: T)
     where
         T: IntoIterator<Item = (K, V)>,
@@ -582,11 +572,7 @@ where
         }
     }
 }
-impl<'a, K, V, A: Tuning> Extend<(&'a K, &'a V)> for BTreeMap<K, V, A>
-where
-    K: Ord + Copy,
-    V: Copy,
-{
+impl<'a, K: Ord + Copy, V: Copy, A: Tuning> Extend<(&'a K, &'a V)> for BTreeMap<K, V, A> {
     fn extend<I>(&mut self, iter: I)
     where
         I: IntoIterator<Item = (&'a K, &'a V)>,
@@ -621,19 +607,12 @@ impl<K: Debug, V: Debug, A: Tuning> Debug for BTreeMap<K, V, A> {
 use serde::{
     de::{MapAccess, Visitor},
     ser::SerializeMap,
-    Deserialize, Deserializer, Serialize,
+    Deserialize, Deserializer, Serialize, Serializer,
 };
 
 #[cfg(feature = "serde")]
-impl<K, V, A: Tuning> Serialize for BTreeMap<K, V, A>
-where
-    K: serde::Serialize,
-    V: serde::Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
+impl<K: Serialize, V: Serialize, A: Tuning> Serialize for BTreeMap<K, V, A> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(Some(self.len()))?;
         for (k, v) in self {
             map.serialize_entry(k, v)?;
@@ -737,19 +716,13 @@ pub type DefaultTuning = CustomTuning<Global>;
 
 /// Implementation of [Tuning]. Default branch is 64, default allocation unit is 8.
 #[derive(Clone)]
-pub struct CustomTuning<AL = Global>
-where
-    AL: Allocator + Clone,
-{
+pub struct CustomTuning<AL: Allocator + Clone = Global> {
     branch: u16,
     alloc_unit: u16,
     seq: bool,
     allocator: AL,
 }
-impl<AL> CustomTuning<AL>
-where
-    AL: Allocator + Clone,
-{
+impl<AL: Allocator + Clone> CustomTuning<AL> {
     /// Construct with specified branch and allocation unit.
     pub fn new(branch: u16, alloc_unit: u16) -> Self
     where
@@ -777,10 +750,7 @@ where
         }
     }
 }
-impl<AL> Default for CustomTuning<AL>
-where
-    AL: Allocator + Clone + Default,
-{
+impl<AL: Allocator + Clone + Default> Default for CustomTuning<AL> {
     fn default() -> Self {
         Self {
             branch: 64,
@@ -790,10 +760,7 @@ where
         }
     }
 }
-impl<AL> Tuning for CustomTuning<AL>
-where
-    AL: Allocator + Clone,
-{
+impl<AL: Allocator + Clone> Tuning for CustomTuning<AL> {
     fn full_action(&self, i: usize, len: usize) -> FullAction {
         let lim = (self.branch as usize) * 2 + 1;
         if len >= lim {
@@ -827,10 +794,7 @@ where
         self.seq = true;
     }
 }
-unsafe impl<AL> Allocator for CustomTuning<AL>
-where
-    AL: Allocator + Clone,
-{
+unsafe impl<AL: Allocator + Clone> Allocator for CustomTuning<AL> {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         self.allocator.allocate(layout)
     }
@@ -1194,17 +1158,11 @@ impl<K, V> Leaf<K, V> {
 type NonLeaf<K, V> = Box<NonLeafInner<K, V>>;
 
 /// This stops memory leaking if a panic occurs during clone.
-struct TreeVecDropper<'a, K, V, A>
-where
-    A: Tuning,
-{
+struct TreeVecDropper<'a, K, V, A: Tuning> {
     c: ShortVec<Tree<K, V>>,
     alloc: &'a A,
 }
-impl<'a, K, V, A> Drop for TreeVecDropper<'a, K, V, A>
-where
-    A: Tuning,
-{
+impl<'a, K, V, A: Tuning> Drop for TreeVecDropper<'a, K, V, A> {
     fn drop(&mut self) {
         while let Some(mut t) = self.c.pop() {
             t.dealloc(self.alloc);
@@ -3040,7 +2998,8 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
 
 #[cfg(all(test, not(miri), feature = "cap"))]
 #[global_allocator]
-static ALLOCATOR: cap::Cap<std::alloc::System> = cap::Cap::new(std::alloc::System, usize::max_value());
+static ALLOCATOR: cap::Cap<std::alloc::System> =
+    cap::Cap::new(std::alloc::System, usize::max_value());
 
 #[cfg(test)]
 fn print_memory() {
@@ -3052,7 +3011,6 @@ fn print_memory() {
 #[cfg(all(test, not(miri), not(feature = "cap")))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 
 #[cfg(test)]
 mod mytests;
