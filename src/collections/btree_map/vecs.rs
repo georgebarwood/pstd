@@ -154,11 +154,14 @@ impl<T> ShortVec<T> {
             return;
         }
         if na == 0 {
-            self.free(oa, alloc);
+            alloc.deallocate(
+                NonNull::new(self.p.as_ptr().cast::<u8>()).unwrap(),
+                Layout::array::<T>(oa).unwrap(),
+            );
+            self.p = NonNull::dangling();
             return;
         }
         let new_layout = Layout::array::<T>(na).unwrap();
-
         let new_ptr = if oa == 0 {
             alloc.allocate(new_layout)
         } else {
@@ -172,23 +175,7 @@ impl<T> ShortVec<T> {
             }
         }
         .unwrap();
-
         self.p = NonNull::new(new_ptr.as_ptr().cast::<T>()).unwrap();
-    }
-
-    /// Free memory.
-    /// # Safety
-    ///
-    /// oa must be the last allocation set.
-    unsafe fn free<A: Tuning>(&mut self, oa: usize, alloc: &A) {
-        let elem_size = mem::size_of::<T>();
-        if oa != 0 && elem_size != 0 {
-            alloc.deallocate(
-                NonNull::new(self.p.as_ptr().cast::<u8>()).unwrap(),
-                Layout::array::<T>(oa).unwrap(),
-            );
-        }
-        self.p = NonNull::dangling();
     }
 
     /// Get pointer to ith element.
