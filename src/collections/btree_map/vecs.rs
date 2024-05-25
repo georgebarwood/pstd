@@ -194,7 +194,7 @@ impl<T> ShortVec<T> {
     /// Get pointer to ith element.
     /// # Safety
     ///
-    /// ix must be < alloc.
+    /// ix must be <= alloc.
     #[inline]
     unsafe fn ixp(&self, i: usize) -> *mut T {
         self.p.as_ptr().add(i)
