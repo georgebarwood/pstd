@@ -67,6 +67,7 @@ pub struct BTreeMap<K, V, A: Tuning = DefaultTuning> {
     atune: A,
 }
 impl<K, V> Default for BTreeMap<K, V> {
+    /// Creates an empty BTreeMap.
     fn default() -> Self {
         Self::new()
     }
@@ -496,7 +497,7 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
 } // End impl BTreeMap
 
 use std::hash::{Hash, Hasher};
-impl<K: Hash, V: Hash> Hash for BTreeMap<K, V> {
+impl<K: Hash, V: Hash, A: Tuning> Hash for BTreeMap<K, V, A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // state.write_length_prefix(self.len());
         for elt in self {
