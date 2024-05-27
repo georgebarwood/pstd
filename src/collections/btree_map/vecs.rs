@@ -353,7 +353,13 @@ impl<K, V> PairVec<K, V> {
                 NonNull::dangling()
             } else {
                 let (layout, off) = Self::layout(na);
-                println!("len={} allocating old={} new={} size={}", self.len, self.alloc, na, layout.size());
+                println!(
+                    "len={} allocating old={} new={} size={}",
+                    self.len,
+                    self.alloc,
+                    na,
+                    layout.size()
+                );
                 let np = alloc.allocate(layout).unwrap();
                 let np = np.cast::<u8>();
 
