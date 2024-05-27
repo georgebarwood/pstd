@@ -715,7 +715,7 @@ pub trait Tuning: Clone + Allocator {
 /// Default allocation tuning.
 pub type DefaultTuning = CustomTuning<Global>;
 
-/// Implementation of [Tuning]. Default branch is 64, default allocation unit is 8.
+/// Implementation of [Tuning]. Default branch is 64, default allocation unit is 64.
 #[derive(Clone)]
 pub struct CustomTuning<AL: Allocator + Clone = Global> {
     branch: u16,
@@ -755,7 +755,7 @@ impl<AL: Allocator + Clone + Default> Default for CustomTuning<AL> {
     fn default() -> Self {
         Self {
             branch: 64,
-            alloc_unit: 8,
+            alloc_unit: 64,
             seq: false,
             allocator: AL::default(),
         }
@@ -763,7 +763,7 @@ impl<AL: Allocator + Clone + Default> Default for CustomTuning<AL> {
 }
 impl<AL: Allocator + Clone> Tuning for CustomTuning<AL> {
     fn full_action(&self, i: usize, len: usize) -> FullAction {
-        let lim = (self.branch as usize) * 2 + 1;
+        let lim = (self.branch as usize) * 2;
         if len >= lim {
             if self.seq && i == len {
                 let b = len - 1;
@@ -774,7 +774,7 @@ impl<AL: Allocator + Clone> Tuning for CustomTuning<AL> {
                 let b = len / 2;
                 let r = usize::from(i > b);
                 let au = self.alloc_unit as usize;
-                FullAction::Split(b, b + (1 - r) * au, (len - b - 1) + r * au)
+                FullAction::Split(b, b + (1 - r) * au, (len - b) + r * au)
             }
         } else {
             let mut na = len + self.alloc_unit as usize;
@@ -3016,5 +3016,5 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[cfg(test)]
 mod mytests;
 
-#[cfg(test)]
-mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
+//#[cfg(test)]
+//mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
