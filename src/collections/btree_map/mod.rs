@@ -715,7 +715,7 @@ pub trait Tuning: Clone + Allocator {
 /// Default allocation tuning.
 pub type DefaultTuning = CustomTuning<Global>;
 
-/// Implementation of [Tuning]. Default branch is 64, default allocation unit is 64.
+/// Implementation of [Tuning]. Default branch is 64, default allocation unit is 16.
 #[derive(Clone)]
 pub struct CustomTuning<AL: Allocator + Clone = Global> {
     branch: u16,
@@ -755,7 +755,7 @@ impl<AL: Allocator + Clone + Default> Default for CustomTuning<AL> {
     fn default() -> Self {
         Self {
             branch: 64,
-            alloc_unit: 64,
+            alloc_unit: 16,
             seq: false,
             allocator: AL::default(),
         }
@@ -3016,5 +3016,5 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[cfg(test)]
 mod mytests;
 
-//#[cfg(test)]
-//mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
+#[cfg(test)]
+mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
