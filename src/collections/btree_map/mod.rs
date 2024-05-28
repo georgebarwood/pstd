@@ -3093,4 +3093,4 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 mod mytests;
 
 #[cfg(all(test, feature = "stdtests"))]
-mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
+mod stdtests;
