@@ -2968,20 +2968,7 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
     pub fn next(&mut self) -> Option<(&K, &V)> {
         unsafe {
             if self.index == (*self.leaf).0.len() {
-                let mut tsp = self.stack.len();
-                while tsp > 0 {
-                    tsp -= 1;
-                    let (nl, mut ix) = self.stack[tsp];
-                    if ix < (*nl).v.len() {
-                        let kv = (*nl).v.ix(ix);
-                        ix += 1;
-                        self.stack[tsp] = (nl, ix);
-                        let ct = (*nl).c.ix(ix);
-                        self.push(tsp + 1, ct);
-                        return Some(kv);
-                    }
-                }
-                None
+                self.next_cold()
             } else {
                 let kv = (*self.leaf).0.ix(self.index);
                 self.index += 1;
@@ -2990,28 +2977,55 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
         }
     }
 
+    #[cold]
+    fn next_cold(&mut self) -> Option<(&K, &V)> {
+        unsafe {
+            let mut tsp = self.stack.len();
+            while tsp > 0 {
+                tsp -= 1;
+                let (nl, mut ix) = self.stack[tsp];
+                if ix < (*nl).v.len() {
+                    let kv = (*nl).v.ix(ix);
+                    ix += 1;
+                    self.stack[tsp] = (nl, ix);
+                    let ct = (*nl).c.ix(ix);
+                    self.push(tsp + 1, ct);
+                    return Some(kv);
+                }
+            }
+            None
+        }
+    }
+
     /// Move the cursor back, returns references to the key and value of the element that it moved over.
     pub fn prev(&mut self) -> Option<(&K, &V)> {
         unsafe {
             if self.index == 0 {
-                let mut tsp = self.stack.len();
-                while tsp > 0 {
-                    tsp -= 1;
-                    let (nl, mut ix) = self.stack[tsp];
-                    if ix > 0 {
-                        ix -= 1;
-                        let kv = (*nl).v.ix(ix);
-                        self.stack[tsp] = (nl, ix);
-                        let ct = (*nl).c.ix(ix);
-                        self.push_back(tsp + 1, ct);
-                        return Some(kv);
-                    }
-                }
-                None
+                self.prev_cold()
             } else {
                 self.index -= 1;
                 Some((*self.leaf).0.ix(self.index))
             }
+        }
+    }
+
+    #[cold]
+    fn prev_cold(&mut self) -> Option<(&K, &V)> {
+        unsafe {
+            let mut tsp = self.stack.len();
+            while tsp > 0 {
+                tsp -= 1;
+                let (nl, mut ix) = self.stack[tsp];
+                if ix > 0 {
+                    ix -= 1;
+                    let kv = (*nl).v.ix(ix);
+                    self.stack[tsp] = (nl, ix);
+                    let ct = (*nl).c.ix(ix);
+                    self.push_back(tsp + 1, ct);
+                    return Some(kv);
+                }
+            }
+            None
         }
     }
 
@@ -3020,15 +3034,22 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
     pub fn peek_next(&self) -> Option<(&K, &V)> {
         unsafe {
             if self.index == (*self.leaf).0.len() {
-                for (nl, ix) in self.stack.iter().rev() {
-                    if *ix < (**nl).v.len() {
-                        return Some((**nl).v.ix(*ix));
-                    }
-                }
-                None
+                self.peek_next_cold()
             } else {
                 Some((*self.leaf).0.ix(self.index))
             }
+        }
+    }
+
+    #[cold]
+    fn peek_next_cold(&self) -> Option<(&K, &V)> {
+        unsafe {
+            for (nl, ix) in self.stack.iter().rev() {
+                if *ix < (**nl).v.len() {
+                    return Some((**nl).v.ix(*ix));
+                }
+            }
+            None
         }
     }
     /// Returns references to the previous key/value pair.
@@ -3036,15 +3057,22 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
     pub fn peek_prev(&self) -> Option<(&K, &V)> {
         unsafe {
             if self.index == 0 {
-                for (nl, ix) in self.stack.iter().rev() {
-                    if *ix > 0 {
-                        return Some((**nl).v.ix(*ix - 1));
-                    }
-                }
-                None
+                self.peek_prev_cold()
             } else {
                 Some((*self.leaf).0.ix(self.index - 1))
             }
+        }
+    }
+
+    #[cold]
+    fn peek_prev_cold(&self) -> Option<(&K, &V)> {
+        unsafe {
+            for (nl, ix) in self.stack.iter().rev() {
+                if *ix > 0 {
+                    return Some((**nl).v.ix(*ix - 1));
+                }
+            }
+            None
         }
     }
 }
