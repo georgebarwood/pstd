@@ -691,7 +691,6 @@ fn std_into_iter() {
 fn various_tests() {
     for _rep in 0..REP {
         let mut t = /*std::collections::*/ BTreeMap::<usize, usize>::default();
-        t.check();
         let n = N;
         for i in 0..n {
             t.insert(i, i);

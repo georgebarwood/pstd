@@ -114,7 +114,7 @@ impl<K, V> BTreeMap<K, V> {
 }
 
 impl<K, V, A: Tuning> BTreeMap<K, V, A> {
-    #[cfg(feature="stdtests")]
+    #[cfg(all(test, feature = "stdtests"))]
     pub(crate) fn check(&self) {}
 
     /// Returns a new, empty map with specified allocation tuning.
@@ -3089,8 +3089,8 @@ static ALLOCATOR: cap::Cap<std::alloc::System> =
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[cfg(all(test,feature="mytests"))]
+#[cfg(all(test, feature = "mytests"))]
 mod mytests;
 
-#[cfg(all(test, feature="stdtests"))]
+#[cfg(all(test, feature = "stdtests"))]
 mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!
