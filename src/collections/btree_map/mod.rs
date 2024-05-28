@@ -2731,19 +2731,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     pub fn next(&mut self) -> Option<(&mut K, &mut V)> {
         unsafe {
             if self.index == (*self.leaf).0.len() {
-                let mut tsp = self.stack.len();
-                while tsp > 0 {
-                    tsp -= 1;
-                    let (nl, mut ix) = self.stack[tsp];
-                    if ix < (*nl).v.len() {
-                        let kv = (*nl).v.ixbm(ix);
-                        ix += 1;
-                        self.stack[tsp] = (nl, ix);
-                        self.push(tsp + 1, (*nl).c.ixm(ix));
-                        return Some(kv);
-                    }
-                }
-                None
+                self.next_cold()
             } else {
                 let kv = (*self.leaf).0.ixbm(self.index);
                 self.index += 1;
@@ -2752,27 +2740,53 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
         }
     }
 
+    #[cold]
+    fn next_cold(&mut self) -> Option<(&mut K, &mut V)> {
+        unsafe {
+            let mut tsp = self.stack.len();
+            while tsp > 0 {
+                tsp -= 1;
+                let (nl, mut ix) = self.stack[tsp];
+                if ix < (*nl).v.len() {
+                    let kv = (*nl).v.ixbm(ix);
+                    ix += 1;
+                    self.stack[tsp] = (nl, ix);
+                    self.push(tsp + 1, (*nl).c.ixm(ix));
+                    return Some(kv);
+                }
+            }
+            None
+        }
+    }
+
     /// Move the cursor back, returns references to the key and value of the element that it moved over.
     pub fn prev(&mut self) -> Option<(&mut K, &mut V)> {
         unsafe {
             if self.index == 0 {
-                let mut tsp = self.stack.len();
-                while tsp > 0 {
-                    tsp -= 1;
-                    let (nl, mut ix) = self.stack[tsp];
-                    if ix > 0 {
-                        ix -= 1;
-                        let kv = (*nl).v.ixbm(ix);
-                        self.stack[tsp] = (nl, ix);
-                        self.push_back(tsp + 1, (*nl).c.ixm(ix));
-                        return Some(kv);
-                    }
-                }
-                None
+                self.prev_cold()
             } else {
                 self.index -= 1;
                 Some((*self.leaf).0.ixbm(self.index))
             }
+        }
+    }
+
+    #[cold]
+    fn prev_cold(&mut self) -> Option<(&mut K, &mut V)> {
+        unsafe {
+            let mut tsp = self.stack.len();
+            while tsp > 0 {
+                tsp -= 1;
+                let (nl, mut ix) = self.stack[tsp];
+                if ix > 0 {
+                    ix -= 1;
+                    let kv = (*nl).v.ixbm(ix);
+                    self.stack[tsp] = (nl, ix);
+                    self.push_back(tsp + 1, (*nl).c.ixm(ix));
+                    return Some(kv);
+                }
+            }
+            None
         }
     }
 
@@ -2781,31 +2795,46 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     pub fn peek_next(&self) -> Option<(&mut K, &mut V)> {
         unsafe {
             if self.index == (*self.leaf).0.len() {
-                for (nl, ix) in self.stack.iter().rev() {
-                    if *ix < (**nl).v.len() {
-                        return Some((**nl).v.ixbm(*ix));
-                    }
-                }
-                None
+                self.peek_next_cold()
             } else {
                 Some((*self.leaf).0.ixbm(self.index))
             }
         }
     }
+
+    #[cold]
+    fn peek_next_cold(&self) -> Option<(&mut K, &mut V)> {
+        unsafe {
+            for (nl, ix) in self.stack.iter().rev() {
+                if *ix < (**nl).v.len() {
+                    return Some((**nl).v.ixbm(*ix));
+                }
+            }
+            None
+        }
+    }
+
     /// Returns mutable references to the previous key/value pair.
     #[must_use]
     pub fn peek_prev(&self) -> Option<(&mut K, &mut V)> {
         unsafe {
             if self.index == 0 {
-                for (nl, ix) in self.stack.iter().rev() {
-                    if *ix > 0 {
-                        return Some((**nl).v.ixbm(*ix - 1));
-                    }
-                }
-                None
+                self.peek_prev_cold()
             } else {
                 Some((*self.leaf).0.ixbm(self.index - 1))
             }
+        }
+    }
+
+    #[cold]
+    fn peek_prev_cold(&self) -> Option<(&mut K, &mut V)> {
+        unsafe {
+            for (nl, ix) in self.stack.iter().rev() {
+                if *ix > 0 {
+                    return Some((**nl).v.ixbm(*ix - 1));
+                }
+            }
+            None
         }
     }
 
