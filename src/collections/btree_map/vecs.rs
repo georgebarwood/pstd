@@ -48,6 +48,7 @@ impl<T> Default for ShortVec<T> {
 }
 
 impl<T> ShortVec<T> {
+    /// Construct a new empty ShortVec.
     pub fn new() -> Self {
         Self {
             len: 0,
@@ -56,10 +57,12 @@ impl<T> ShortVec<T> {
         }
     }
 
+    /// Get the vec length.
     pub fn len(&self) -> usize {
         self.len as usize
     }
 
+    /// Set the allocation. This must be at least the current length.
     pub fn set_alloc<A: Tuning>(&mut self, na: usize, alloc: &A) {
         safe_assert!(na >= self.len());
         if na == self.alloc as usize {
@@ -71,6 +74,7 @@ impl<T> ShortVec<T> {
         self.alloc = na as u16;
     }
 
+    /// Push a value onto the end of the vec. The allocation must be greater than the current length.
     #[inline]
     pub fn push(&mut self, value: T) {
         safe_assert!(self.len < self.alloc);
@@ -80,6 +84,7 @@ impl<T> ShortVec<T> {
         self.len += 1;
     }
 
+    /// Pop a value from the end of the vec.
     #[inline]
     pub fn pop(&mut self) -> Option<T> {
         if self.len == 0 {
@@ -90,6 +95,7 @@ impl<T> ShortVec<T> {
         }
     }
 
+    /// Insert a value into the vec. The allocation must be greater than the current length.
     pub fn insert(&mut self, at: usize, value: T) {
         safe_assert!(self.len < self.alloc);
         unsafe {
@@ -101,6 +107,7 @@ impl<T> ShortVec<T> {
         }
     }
 
+    /// Remove a value from the vec.
     pub fn remove(&mut self, at: usize) -> T {
         safe_assert!(at < self.len());
         unsafe {
@@ -111,6 +118,7 @@ impl<T> ShortVec<T> {
         }
     }
 
+    /// Split the vec at the indicated point. a1 and a2 are the new allocations.
     pub fn split<A: Tuning>(&mut self, at: usize, a1: usize, a2: usize, alloc: &A) -> Self {
         safe_assert!(at < self.len());
         let len = self.len() - at;
@@ -141,6 +149,7 @@ impl<T> ShortVec<T> {
         unsafe { &mut *self.ixp(i) }
     }
 
+    /// Get a consuming iterator. The iterator must be called until None is returned before being dropped.
     pub fn sv_into_iter(self) -> IntoIterShortVec<T> {
         IntoIterShortVec { start: 0, v: self }
     }
@@ -187,19 +196,19 @@ impl<T> ShortVec<T> {
         self.p.as_ptr().add(i)
     }
 
-    /// Set value.
+    /// Set ith value.
     /// # Safety
     ///
-    /// ix must be < alloc, and the element must be unset.
+    /// i must be < alloc, and the element must be unset.
     #[inline]
     unsafe fn set(&mut self, i: usize, elem: T) {
         ptr::write(self.ixp(i), elem);
     }
 
-    /// Get value.
+    /// Get ith value.
     /// # Safety
     ///
-    /// ix must be less < alloc, and the element must have been set.
+    /// i must be less < alloc, and the element must have been set.
     #[inline]
     unsafe fn get(&mut self, i: usize) -> T {
         ptr::read(self.ixp(i))
@@ -235,6 +244,7 @@ where
     }
 }
 
+/// Consuming iterator for [`ShortVec`].
 pub struct IntoIterShortVec<T> {
     start: usize,
     v: ShortVec<T>,
@@ -273,7 +283,7 @@ impl<T> IntoIterShortVec<T> {
     }
 }
 
-/// Vector of (key,value) pairs, keys stored separately from values for cache efficient search.
+/// Vector of (key,value) pairs, keys stored separately from values.
 pub struct PairVec<K, V> {
     p: NonNull<u8>,
     len: u16, // Current length
@@ -292,6 +302,7 @@ unsafe impl<K: Send, V: Send> Send for PairVec<K, V> {}
 unsafe impl<K: Sync, V: Sync> Sync for PairVec<K, V> {}
 
 impl<K, V> PairVec<K, V> {
+    /// Construct an empty vec.
     pub fn new() -> Self {
         Self {
             p: NonNull::dangling(),
@@ -301,6 +312,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Drop all elements and free any allocation. This must be called before the PairVec is dropped.
     pub fn dealloc<A: Tuning>(&mut self, alloc: &A) {
         while self.len != 0 {
             self.pop();
@@ -308,22 +320,27 @@ impl<K, V> PairVec<K, V> {
         self.set_alloc(0, alloc);
     }
 
+    /// Get the vec length.
     pub fn len(&self) -> usize {
         self.len as usize
     }
 
+    /// Get the vec length and allocation.
     pub fn state(&self) -> (usize, usize) {
         (self.len as usize, self.alloc as usize)
     }
 
+    /// Is the vec empty.
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
+    /// Is the vec full ( length is equal to allocation ).
     pub fn full(&self) -> bool {
         self.len == self.alloc
     }
 
+    /// Get the layout for the specified allocation.
     #[inline]
     unsafe fn layout(amount: usize) -> (Layout, usize) {
         let layout = Layout::array::<K>(amount).unwrap_unchecked();
@@ -333,11 +350,13 @@ impl<K, V> PairVec<K, V> {
         (layout, off)
     }
 
+    /// Get the value offset for the specified allocation.
     #[inline]
     unsafe fn off(amount: usize) -> usize {
         Self::layout(amount).1
     }
 
+    /// Set the allocation.
     pub fn set_alloc<A: Tuning>(&mut self, na: usize, alloc: &A) {
         safe_assert!(na >= self.len());
         if mem::size_of::<K>() == 0 && mem::size_of::<V>() == 0 {
@@ -378,6 +397,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Split the vec at the indicated point. a1 and a2 are the new allocations.
     pub fn split<A: Tuning>(
         &mut self,
         at: usize,
@@ -405,6 +425,7 @@ impl<K, V> PairVec<K, V> {
         (med, result)
     }
 
+    /// Insert key, value into the vec.
     pub fn insert(&mut self, at: usize, (key, value): (K, V)) {
         safe_assert!(at <= self.len());
         safe_assert!(self.len < self.alloc);
@@ -421,6 +442,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Remove key, value from the vec.
     pub fn remove(&mut self, at: usize) -> (K, V) {
         safe_assert!(at < self.len());
         unsafe {
@@ -436,6 +458,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Push key, value onto the end of the vec, which must not be full.
     pub fn push(&mut self, (key, value): (K, V)) {
         safe_assert!(self.len < self.alloc);
         unsafe {
@@ -446,6 +469,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Pop key, value from the end of the vec.
     pub fn pop(&mut self) -> Option<(K, V)> {
         unsafe {
             if self.len == 0 {
@@ -457,6 +481,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Do binary search for key. Ok means equal key was found at position. Err means no equal key was found, returns insert position.
     #[inline]
     pub fn search<Q>(&self, key: &Q) -> Result<usize, usize>
     where
@@ -466,6 +491,7 @@ impl<K, V> PairVec<K, V> {
         self.search_to(self.len as usize, key)
     }
 
+    /// Binary search up to j.
     #[inline]
     pub fn search_to<Q>(&self, mut j: usize, key: &Q) -> Result<usize, usize>
     where
@@ -487,6 +513,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get raw mut pointers to ith key, value.
     #[inline]
     unsafe fn ixmp(&mut self, i: usize) -> (*mut K, *mut V) {
         let off = Self::off(self.alloc as usize);
@@ -495,6 +522,7 @@ impl<K, V> PairVec<K, V> {
         (kp, vp)
     }
 
+    /// Get raw const pointers to ith key, value.
     #[inline]
     unsafe fn ixp(&self, i: usize) -> (*const K, *const V) {
         let off = Self::off(self.alloc as usize);
@@ -503,6 +531,7 @@ impl<K, V> PairVec<K, V> {
         (kp, vp)
     }
 
+    /// Get non-mutable reference to ith value.
     #[inline]
     pub fn ixv(&self, i: usize) -> &V {
         safe_assert!(i < self.len());
@@ -513,6 +542,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get mutable reference to ith value.
     #[inline]
     pub fn ixmv(&mut self, i: usize) -> &mut V {
         safe_assert!(i < self.len());
@@ -522,6 +552,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get non-mutable references to ith key and value.
     #[inline]
     pub fn ix(&self, i: usize) -> (&K, &V) {
         safe_assert!(i < self.len());
@@ -531,6 +562,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get mutable references to ith key and value.
     #[inline]
     pub fn ixbm(&mut self, i: usize) -> (&mut K, &mut V) {
         safe_assert!(i < self.len());
@@ -540,6 +572,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get reference iterator.
     pub fn iter(&self) -> IterPairVec<K, V> {
         IterPairVec {
             v: Some(self),
@@ -548,6 +581,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get range reference iterator.
     pub fn range(&self, x: usize, y: usize) -> IterPairVec<K, V> {
         safe_assert!(x <= y && y <= self.len());
         IterPairVec {
@@ -557,6 +591,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get mutable reference iterator.
     pub fn iter_mut(&mut self) -> IterMutPairVec<K, V> {
         let ixb = self.len();
         IterMutPairVec {
@@ -566,6 +601,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get mutable reference range iterator.
     pub fn range_mut(&mut self, x: usize, y: usize) -> IterMutPairVec<K, V> {
         safe_assert!(x <= y && y <= self.len());
         IterMutPairVec {
@@ -575,6 +611,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get consuming iterator. The iterator must be called until None is returned before being dropped.
     pub fn into_iter(self) -> IntoIterPairVec<K, V> {
         let ixb = self.len();
         IntoIterPairVec {
@@ -584,6 +621,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Clone the vec.
     pub fn clone<A: Tuning>(&self, alloc: &A) -> Self
     where
         K: Clone,
@@ -619,6 +657,7 @@ impl<K, V> PairVec<K, V> {
         mem::take(&mut c.v)
     }
 
+    /// Get the starting and end positions for the specified range.
     pub fn get_xy<T, R>(&self, range: &R) -> (usize, usize)
     where
         T: Ord + ?Sized,
@@ -634,6 +673,7 @@ impl<K, V> PairVec<K, V> {
         (x, y)
     }
 
+    /// Get the starting point for the specified bound.
     pub fn get_lower<Q>(&self, bound: Bound<&Q>) -> usize
     where
         K: Borrow<Q> + Ord,
@@ -646,6 +686,7 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get the end point for the specified bound.
     pub fn get_upper<Q>(&self, bound: Bound<&Q>) -> usize
     where
         K: Borrow<Q> + Ord,
@@ -659,12 +700,14 @@ impl<K, V> PairVec<K, V> {
     }
 }
 
+/// Returns the position for a search result.
 fn nosk(r: Result<usize, usize>) -> usize {
     match r {
         Ok(i) | Err(i) => i,
     }
 }
 
+/// Returns the position for a search result, adding one if key was found.
 fn skip(r: Result<usize, usize>) -> usize {
     match r {
         Ok(i) => i + 1,
@@ -672,6 +715,7 @@ fn skip(r: Result<usize, usize>) -> usize {
     }
 }
 
+/// Struct to drop [`PairVec`] if panic occurs during clone.
 struct PairVecDropper<'a, K, V, A: Tuning> {
     v: PairVec<K, V>,
     alloc: &'a A,
@@ -693,6 +737,7 @@ where
     }
 }
 
+/// Non-mutable iterator for [`PairVec`].
 #[derive(Debug, Clone)]
 pub struct IterPairVec<'a, K, V> {
     v: Option<&'a PairVec<K, V>>,
@@ -738,6 +783,8 @@ impl<'a, K, V> DoubleEndedIterator for IterPairVec<'a, K, V> {
         Some(kv)
     }
 }
+
+/// Mutable reference iterator for [`PairVec`].
 #[derive(Debug)]
 pub struct IterMutPairVec<'a, K, V> {
     v: Option<&'a mut PairVec<K, V>>,
@@ -788,6 +835,7 @@ impl<'a, K, V> DoubleEndedIterator for IterMutPairVec<'a, K, V> {
     }
 }
 
+/// Consuming iterator for [`PairVec`].
 #[derive(Debug)]
 pub struct IntoIterPairVec<K, V> {
     v: PairVec<K, V>,

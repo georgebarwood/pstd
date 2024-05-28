@@ -45,6 +45,7 @@ use std::{
 
 use crate::alloc::{AllocError, Allocator, Global};
 
+/// Special purpose vectors for implementing [`BTreeMap`] : [`PairVec`] and [`ShortVec`].
 mod vecs;
 use vecs::{IntoIterPairVec, IntoIterShortVec, IterMutPairVec, IterPairVec, PairVec, ShortVec};
 
