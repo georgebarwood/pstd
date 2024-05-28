@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "0.1.15"
+version = "0.1.18"
 edition = "2021"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
@@ -23,6 +23,9 @@ rand = "0.8.5"
 serde = ["dep:serde"]
 unsafe-optim = []
 cap = []
+mytests = ["serde"]
+stdtests = []
+tests = ["mytests", "stdtests"]
 
 [[bench]]
 name = "crit_bench"
