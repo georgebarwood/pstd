@@ -1711,14 +1711,9 @@ impl<'a, K, V> RangeMut<'a, K, V> {
             }
         }
     }
-}
-impl<'a, K, V> Iterator for RangeMut<'a, K, V> {
-    type Item = (&'a K, &'a mut V);
-    fn next(&mut self) -> Option<Self::Item> {
+    #[cold]
+    fn next_cold(&mut self) -> Option<(&'a K, &'a mut V)> {
         'outer: loop {
-            if let Some(x) = self.fwd_leaf.next() {
-                return Some(x);
-            }
             while let Some(s) = self.fwd_stk.last_mut() {
                 if let Some(kv) = s.v.next() {
                     if let Some(ct) = s.c.next() {
@@ -1733,6 +1728,9 @@ impl<'a, K, V> Iterator for RangeMut<'a, K, V> {
                     return Some(s.v.next().unwrap());
                 } else if let Some(ct) = s.c.next() {
                     self.push_tree(ct, false);
+                    if let Some(x) = self.fwd_leaf.next() {
+                        return Some(x);
+                    }
                     continue 'outer;
                 }
             }
@@ -1742,13 +1740,9 @@ impl<'a, K, V> Iterator for RangeMut<'a, K, V> {
             return None;
         }
     }
-}
-impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
-    fn next_back(&mut self) -> Option<Self::Item> {
+    #[cold]
+    fn next_back_cold(&mut self) -> Option<(&'a K, &'a mut V)> {
         'outer: loop {
-            if let Some(x) = self.bck_leaf.next_back() {
-                return Some(x);
-            }
             while let Some(s) = self.bck_stk.last_mut() {
                 if let Some(kv) = s.v.next_back() {
                     if let Some(ct) = s.c.next_back() {
@@ -1764,6 +1758,9 @@ impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
                     return Some(s.v.next_back().unwrap());
                 } else if let Some(ct) = s.c.next_back() {
                     self.push_tree_back(ct);
+                    if let Some(x) = self.bck_leaf.next_back() {
+                        return Some(x);
+                    }
                     continue 'outer;
                 }
             }
@@ -1772,6 +1769,23 @@ impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
             }
             return None;
         }
+    }
+}
+impl<'a, K, V> Iterator for RangeMut<'a, K, V> {
+    type Item = (&'a K, &'a mut V);
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(x) = self.fwd_leaf.next() {
+            return Some(x);
+        }
+        self.next_cold()
+    }
+}
+impl<'a, K, V> DoubleEndedIterator for RangeMut<'a, K, V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if let Some(x) = self.bck_leaf.next_back() {
+            return Some(x);
+        }
+        self.next_back_cold()
     }
 }
 impl<'a, K, V> FusedIterator for RangeMut<'a, K, V> {}
@@ -1879,11 +1893,9 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
             }
         }
     }
-    fn next(&mut self) -> Option<(K, V)> {
+    #[cold]
+    fn next_cold(&mut self) -> Option<(K, V)> {
         'outer: loop {
-            if let Some(x) = self.fwd_leaf.next(&self.alloc) {
-                return Some(x);
-            }
             while let Some(s) = self.fwd_stk.last_mut() {
                 if let Some(kv) = s.v.next(&self.alloc) {
                     if let Some(ct) = s.c.next(&self.alloc) {
@@ -1898,6 +1910,9 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
                     return Some(s.v.next(&self.alloc).unwrap());
                 } else if let Some(ct) = s.c.next(&self.alloc) {
                     self.push_tree(ct, false);
+                    if let Some(x) = self.fwd_leaf.next(&self.alloc) {
+                        return Some(x);
+                    }
                     continue 'outer;
                 }
             }
@@ -1907,11 +1922,9 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
             return None;
         }
     }
-    fn next_back(&mut self) -> Option<(K, V)> {
+    #[cold]
+    fn next_back_cold(&mut self) -> Option<(K, V)> {
         'outer: loop {
-            if let Some(x) = self.bck_leaf.next_back(&self.alloc) {
-                return Some(x);
-            }
             while let Some(s) = self.bck_stk.last_mut() {
                 if let Some(kv) = s.v.next_back(&self.alloc) {
                     if let Some(ct) = s.c.next_back(&self.alloc) {
@@ -1926,6 +1939,9 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
                     return Some(s.v.next_back(&self.alloc).unwrap());
                 } else if let Some(ct) = s.c.next_back(&self.alloc) {
                     self.push_tree_back(ct);
+                    if let Some(x) = self.bck_leaf.next_back(&self.alloc) {
+                        return Some(x);
+                    }
                     continue 'outer;
                 }
             }
@@ -1934,6 +1950,18 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
             }
             return None;
         }
+    }
+    fn next(&mut self) -> Option<(K, V)> {
+        if let Some(x) = self.fwd_leaf.next(&self.alloc) {
+            return Some(x);
+        }
+        self.next_cold()
+    }
+    fn next_back(&mut self) -> Option<(K, V)> {
+        if let Some(x) = self.bck_leaf.next_back(&self.alloc) {
+            return Some(x);
+        }
+        self.next_back_cold()
     }
 }
 
@@ -2102,14 +2130,9 @@ impl<'a, K, V> Range<'a, K, V> {
             }
         }
     }
-}
-impl<'a, K, V> Iterator for Range<'a, K, V> {
-    type Item = (&'a K, &'a V);
-    fn next(&mut self) -> Option<Self::Item> {
+    #[cold]
+    fn next_cold(&mut self) -> Option<(&'a K, &'a V)> {
         'outer: loop {
-            if let Some(x) = self.fwd_leaf.next() {
-                return Some(x);
-            }
             while let Some(s) = self.fwd_stk.last_mut() {
                 if let Some(kv) = s.v.next() {
                     if let Some(ct) = s.c.next() {
@@ -2124,6 +2147,9 @@ impl<'a, K, V> Iterator for Range<'a, K, V> {
                     return Some(s.v.next().unwrap());
                 } else if let Some(ct) = s.c.next() {
                     self.push_tree(ct, false);
+                    if let Some(x) = self.fwd_leaf.next() {
+                        return Some(x);
+                    }
                     continue 'outer;
                 }
             }
@@ -2133,13 +2159,9 @@ impl<'a, K, V> Iterator for Range<'a, K, V> {
             return None;
         }
     }
-}
-impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
-    fn next_back(&mut self) -> Option<Self::Item> {
+    #[cold]
+    fn next_back_cold(&mut self) -> Option<(&'a K, &'a V)> {
         'outer: loop {
-            if let Some(x) = self.bck_leaf.next_back() {
-                return Some(x);
-            }
             while let Some(s) = self.bck_stk.last_mut() {
                 if let Some(kv) = s.v.next_back() {
                     if let Some(ct) = s.c.next_back() {
@@ -2154,6 +2176,9 @@ impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
                     return Some(s.v.next_back().unwrap());
                 } else if let Some(ct) = s.c.next_back() {
                     self.push_tree_back(ct);
+                    if let Some(x) = self.bck_leaf.next_back() {
+                        return Some(x);
+                    }
                     continue 'outer;
                 }
             }
@@ -2162,6 +2187,23 @@ impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
             }
             return None;
         }
+    }
+}
+impl<'a, K, V> Iterator for Range<'a, K, V> {
+    type Item = (&'a K, &'a V);
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(x) = self.fwd_leaf.next() {
+            return Some(x);
+        }
+        self.next_cold()
+    }
+}
+impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if let Some(x) = self.bck_leaf.next_back() {
+            return Some(x);
+        }
+        self.next_back_cold()
     }
 }
 impl<'a, K, V> FusedIterator for Range<'a, K, V> {}
