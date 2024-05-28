@@ -2623,25 +2623,33 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     /// Insert leaving cursor before newly inserted element.
     pub fn insert_after_unchecked(&mut self, key: K, value: V) {
         unsafe {
-            (*self.map).len += 1;
             let mut leaf = self.leaf;
+            (*self.map).len += 1;
             if (*leaf).full() {
-                let a = &(*self.map).atune;
-                match a.full_action(self.index, (*leaf).0.len()) {
-                    FullAction::Split(b, a1, a2) => {
-                        let (med, right) = (*leaf).0.split(b, a1, a2, a);
-                        let right = Tree::L(Leaf(right));
-                        let r = usize::from(self.index > b);
-                        self.index -= r * (b + 1);
-                        assert!(self.index < if r == 1 { a2 } else { a1 });
-                        let t = self.save_split(med, right, r);
-                        leaf = (*t).leaf();
-                        self.leaf = leaf;
-                    }
-                    FullAction::Extend(to) => (*leaf).0.set_alloc(to, a),
-                }
+                leaf = self.insert_after_full(leaf);
             }
             (*leaf).0.insert(self.index, (key, value));
+        }
+    }
+
+    #[cold]
+    fn insert_after_full(&mut self, mut leaf: *mut Leaf<K, V>) -> *mut Leaf<K, V> {
+        unsafe {
+            let a = &(*self.map).atune;
+            match a.full_action(self.index, (*leaf).0.len()) {
+                FullAction::Split(b, a1, a2) => {
+                    let (med, right) = (*leaf).0.split(b, a1, a2, a);
+                    let right = Tree::L(Leaf(right));
+                    let r = usize::from(self.index > b);
+                    self.index -= r * (b + 1);
+                    assert!(self.index < if r == 1 { a2 } else { a1 });
+                    let t = self.save_split(med, right, r);
+                    leaf = (*t).leaf();
+                    self.leaf = leaf;
+                }
+                FullAction::Extend(to) => (*leaf).0.set_alloc(to, a),
+            }
+            leaf
         }
     }
 
@@ -2690,24 +2698,31 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     pub fn remove_next(&mut self) -> Option<(K, V)> {
         unsafe {
             if self.index == (*self.leaf).0.len() {
-                let mut tsp = self.stack.len();
-                while tsp > 0 {
-                    tsp -= 1;
-                    let (nl, ix) = self.stack[tsp];
-                    if ix < (*nl).v.len() {
-                        let a = &(*self.map).atune;
-                        let (kv, ix) = (*nl).remove_at(ix, a);
-                        self.stack[tsp] = (nl, ix);
-                        self.push(tsp + 1, (*nl).c.ixm(ix));
-                        (*self.map).len -= 1;
-                        return Some(kv);
-                    }
-                }
-                None
+                self.remove_next_cold()
             } else {
                 (*self.map).len -= 1;
                 Some((*self.leaf).0.remove(self.index))
             }
+        }
+    }
+
+    #[cold]
+    fn remove_next_cold(&mut self) -> Option<(K, V)> {
+        unsafe {
+            let mut tsp = self.stack.len();
+            while tsp > 0 {
+                tsp -= 1;
+                let (nl, ix) = self.stack[tsp];
+                if ix < (*nl).v.len() {
+                    let a = &(*self.map).atune;
+                    let (kv, ix) = (*nl).remove_at(ix, a);
+                    self.stack[tsp] = (nl, ix);
+                    self.push(tsp + 1, (*nl).c.ixm(ix));
+                    (*self.map).len -= 1;
+                    return Some(kv);
+                }
+            }
+            None
         }
     }
 
