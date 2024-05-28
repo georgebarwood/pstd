@@ -628,36 +628,10 @@ impl<K, V> PairVec<K, V> {
         let y = self.get_upper(range.end_bound());
         let x = match range.start_bound() {
             Bound::Unbounded => 0,
-            Bound::Included(k) => match self.search_to(y, k) {
-                Ok(i) | Err(i) => i,
-            },
-            Bound::Excluded(k) => match self.search_to(y, k) {
-                Ok(i) => i + 1,
-                Err(i) => i,
-            },
+            Bound::Included(k) => nosk(self.search_to(y, k)),
+            Bound::Excluded(k) => skip(self.search_to(y, k)),
         };
         (x, y)
-    }
-
-    fn skip<Q>(&self, key: &Q) -> usize
-    where
-        K: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        match self.search(key) {
-            Ok(i) | Err(i) => i,
-        }
-    }
-
-    fn skip_over<Q>(&self, key: &Q) -> usize
-    where
-        K: Borrow<Q> + Ord,
-        Q: Ord + ?Sized,
-    {
-        match self.search(key) {
-            Ok(i) => i + 1,
-            Err(i) => i,
-        }
     }
 
     pub fn get_lower<Q>(&self, bound: Bound<&Q>) -> usize
@@ -667,8 +641,8 @@ impl<K, V> PairVec<K, V> {
     {
         match bound {
             Bound::Unbounded => 0,
-            Bound::Included(k) => self.skip(k),
-            Bound::Excluded(k) => self.skip_over(k),
+            Bound::Included(k) => nosk(self.search(k)),
+            Bound::Excluded(k) => skip(self.search(k)),
         }
     }
 
@@ -679,9 +653,22 @@ impl<K, V> PairVec<K, V> {
     {
         match bound {
             Bound::Unbounded => self.len(),
-            Bound::Included(k) => self.skip_over(k),
-            Bound::Excluded(k) => self.skip(k),
+            Bound::Included(k) => skip(self.search(k)),
+            Bound::Excluded(k) => nosk(self.search(k)),
         }
+    }
+}
+
+fn nosk(r: Result<usize, usize>) -> usize {
+    match r {
+        Ok(i) | Err(i) => i,
+    }
+}
+
+fn skip(r: Result<usize, usize>) -> usize {
+    match r {
+        Ok(i) => i + 1,
+        Err(i) => i,
     }
 }
 
