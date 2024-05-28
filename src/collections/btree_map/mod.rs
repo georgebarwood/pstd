@@ -114,7 +114,7 @@ impl<K, V> BTreeMap<K, V> {
 }
 
 impl<K, V, A: Tuning> BTreeMap<K, V, A> {
-    #[cfg(test)]
+    #[cfg(feature="stdtests")]
     pub(crate) fn check(&self) {}
 
     /// Returns a new, empty map with specified allocation tuning.
@@ -3084,19 +3084,13 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
 static ALLOCATOR: cap::Cap<std::alloc::System> =
     cap::Cap::new(std::alloc::System, usize::max_value());
 
-#[cfg(test)]
-fn print_memory() {
-    #[cfg(all(test, not(miri), feature = "cap"))]
-    println!("Memory allocated: {} bytes", ALLOCATOR.allocated());
-}
-
 /* mimalloc cannot be used with miri */
 #[cfg(all(test, not(miri), not(feature = "cap")))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-#[cfg(test)]
+#[cfg(all(test,feature="mytests"))]
 mod mytests;
 
-#[cfg(test)]
+#[cfg(all(test, feature="stdtests"))]
 mod stdtests; // Increases compile/link time to 9 seconds from 3 seconds, so sometimes commented out!

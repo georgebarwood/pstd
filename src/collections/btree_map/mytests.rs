@@ -829,6 +829,10 @@ fn test_custom_alloc() {
     let mut map = BTreeMap::with_tuning(ct);
     map.insert("hello", "there");
 }
+fn print_memory() {
+    #[cfg(all(test, not(miri), feature = "cap"))]
+    println!("Memory allocated: {} bytes", ALLOCATOR.allocated());
+}
 
 #[test]
 fn test_custom_alloc2() {
