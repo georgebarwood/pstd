@@ -623,7 +623,7 @@ impl<K: Serialize, V: Serialize, A: Tuning> Serialize for BTreeMap<K, V, A> {
     }
 }
 
-/// For implementation of serde deserialisation. 
+/// For implementation of serde deserialisation.
 #[cfg(feature = "serde")]
 struct BTreeMapVisitor<K, V> {
     marker: PhantomData<fn() -> BTreeMap<K, V>>,
@@ -809,7 +809,7 @@ unsafe impl<AL: Allocator + Clone> Allocator for CustomTuning<AL> {
 /// StkVec is used for stacks of pointers, length is maximum tree depth.
 type StkVec<T> = arrayvec::ArrayVec<T, 15>;
 
-/// Result of splitting a node due to it being full. 
+/// Result of splitting a node due to it being full.
 type Split<K, V> = ((K, V), Tree<K, V>);
 
 /// Context for [`BTreeMap::insert`]
@@ -819,7 +819,7 @@ struct InsertCtx<'a, K, V, A: Tuning> {
     atune: &'a A,
 }
 
-/// Checks range start is less than range end ( can be equal in some cases ). 
+/// Checks range start is less than range end ( can be equal in some cases ).
 fn check_range<T, R>(range: &R)
 where
     T: Ord + ?Sized,
@@ -1178,7 +1178,7 @@ impl<'a, K, V, A: Tuning> Drop for TreeVecDropper<'a, K, V, A> {
     }
 }
 
-/// Branch node for [Tree], vector of key-value pairs and vector of child nodes. 
+/// Branch node for [Tree], vector of key-value pairs and vector of child nodes.
 /// The number of child nodes is always one more than the number of key-value pairs.
 #[derive(Debug)]
 struct NonLeafInner<K, V> {
@@ -1207,7 +1207,7 @@ impl<K, V> NonLeafInner<K, V> {
         V: Clone,
     {
         let mut c = ShortVec::new();
-        c.set_alloc(self.v.alloc as usize + 1, alloc);
+        c.set_alloc(self.v.alloc() as usize + 1, alloc);
         let mut tvd = TreeVecDropper { c, alloc };
         for t in self.c.iter() {
             tvd.c.push(t.aclone(alloc));
@@ -1254,8 +1254,8 @@ impl<K, V> NonLeafInner<K, V> {
             v: right,
             c: self.c.split(b + 1, a1 + 1, a2 + 1, alloc),
         });
-        debug_assert!(right.v.alloc + 1 == right.c.alloc);
-        debug_assert!(self.v.alloc + 1 == self.c.alloc);
+        debug_assert!(right.v.alloc() + 1 == right.c.alloc());
+        debug_assert!(self.v.alloc() + 1 == self.c.alloc());
         (med, right)
     }
 

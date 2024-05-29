@@ -37,8 +37,8 @@ pub struct ShortVec<T> {
     p: NonNull<T>,
     /// Current length.
     len: u16,
-    /// Currently allocated.
-    pub alloc: u16,
+    /// Current allocation.
+    alloc: u16,
 }
 
 impl<T> Default for ShortVec<T> {
@@ -60,6 +60,11 @@ impl<T> ShortVec<T> {
     /// Get the vec length.
     pub fn len(&self) -> usize {
         self.len as usize
+    }
+
+    /// Get the current allocation.
+    pub fn alloc(&self) -> usize {
+        self.alloc as usize
     }
 
     /// Set the allocation. This must be at least the current length.
@@ -285,10 +290,12 @@ impl<T> IntoIterShortVec<T> {
 
 /// Vector of (key,value) pairs, keys stored separately from values.
 pub struct PairVec<K, V> {
+    /// Pointer to data.
     p: NonNull<u8>,
-    len: u16, // Current length
-    // Currently allocated.
-    pub alloc: u16,
+    /// Current length.
+    len: u16,
+    /// Current allocation.  
+    alloc: u16,
     _pd: PhantomData<(K, V)>,
 }
 
@@ -323,6 +330,11 @@ impl<K, V> PairVec<K, V> {
     /// Get the vec length.
     pub fn len(&self) -> usize {
         self.len as usize
+    }
+
+    /// Get the current allocation.
+    pub fn alloc(&self) -> usize {
+        self.alloc as usize
     }
 
     /// Get the vec length and allocation.
