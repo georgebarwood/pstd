@@ -13,7 +13,7 @@ use std::{
 
 use crate::collections::btree_map::Tuning;
 
-/// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise does nothing.
+/// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise unsafe unreachable hint.
 #[cfg(any(debug_assertions, not(feature = "unsafe-optim")))]
 macro_rules! safe_assert {
     ( $cond: expr ) => {
@@ -21,7 +21,7 @@ macro_rules! safe_assert {
     };
 }
 
-/// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise does nothing.
+/// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise unsafe unreachable hint.
 #[cfg(all(not(debug_assertions), feature = "unsafe-optim"))]
 macro_rules! safe_assert {
     ( $cond: expr ) => {

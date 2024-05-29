@@ -623,6 +623,7 @@ impl<K: Serialize, V: Serialize, A: Tuning> Serialize for BTreeMap<K, V, A> {
     }
 }
 
+/// For implementation of serde deserialisation. 
 #[cfg(feature = "serde")]
 struct BTreeMapVisitor<K, V> {
     marker: PhantomData<fn() -> BTreeMap<K, V>>,
@@ -808,6 +809,7 @@ unsafe impl<AL: Allocator + Clone> Allocator for CustomTuning<AL> {
 /// StkVec is used for stacks of pointers, length is maximum tree depth.
 type StkVec<T> = arrayvec::ArrayVec<T, 15>;
 
+/// Result of splitting a node due to it being full. 
 type Split<K, V> = ((K, V), Tree<K, V>);
 
 /// Context for [`BTreeMap::insert`]
@@ -817,6 +819,7 @@ struct InsertCtx<'a, K, V, A: Tuning> {
     atune: &'a A,
 }
 
+/// Checks range start is less than range end ( can be equal in some cases ). 
 fn check_range<T, R>(range: &R)
 where
     T: Ord + ?Sized,
@@ -838,6 +841,7 @@ where
     }
 }
 
+/// For implementation of [`BTreeMap`], either [`Leaf`] or [`NonLeaf`].
 #[derive(Debug)]
 enum Tree<K, V> {
     L(Leaf<K, V>),
@@ -1023,6 +1027,7 @@ impl<K, V> Default for Leaf<K, V> {
     }
 }
 
+/// Leaf of [`Tree`] = vector of key value pairs.
 #[derive(Debug)]
 struct Leaf<K, V>(PairVec<K, V>);
 
@@ -1173,6 +1178,8 @@ impl<'a, K, V, A: Tuning> Drop for TreeVecDropper<'a, K, V, A> {
     }
 }
 
+/// Branch node for [Tree], vector of key-value pairs and vector of child nodes. 
+/// The number of child nodes is always one more than the number of key-value pairs.
 #[derive(Debug)]
 struct NonLeafInner<K, V> {
     v: PairVec<K, V>,
@@ -1583,6 +1590,7 @@ impl<'a, K, V> DoubleEndedIterator for IterMut<'a, K, V> {
 }
 impl<'a, K, V> FusedIterator for IterMut<'a, K, V> {}
 
+/// Stack element for [`RangeMut`].
 #[derive(Debug)]
 struct StkMut<'a, K, V> {
     v: IterMutPairVec<'a, K, V>,
@@ -1836,11 +1844,13 @@ impl<K, V, A: Tuning> ExactSizeIterator for IntoIter<K, V, A> {
 }
 impl<K, V, A: Tuning> FusedIterator for IntoIter<K, V, A> {}
 
+/// Stack element for [`IntoIterInner`].
 struct StkCon<K, V> {
     v: IntoIterPairVec<K, V>,
     c: IntoIterShortVec<Tree<K, V>>,
 }
 
+/// For implementation of [`IntoIter`].
 struct IntoIterInner<K, V, A: Tuning> {
     fwd_leaf: IntoIterPairVec<K, V>,
     bck_leaf: IntoIterPairVec<K, V>,
@@ -2005,6 +2015,7 @@ impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
 }
 impl<'a, K, V> FusedIterator for Iter<'a, K, V> {}
 
+/// Stack element for [`Range`].
 #[derive(Clone, Debug)]
 struct Stk<'a, K, V> {
     v: IterPairVec<'a, K, V>,
