@@ -1207,7 +1207,7 @@ impl<K, V> NonLeafInner<K, V> {
         V: Clone,
     {
         let mut c = ShortVec::new();
-        c.set_alloc(self.v.alloc() as usize + 1, alloc);
+        c.set_alloc(self.v.alloc() + 1, alloc);
         let mut tvd = TreeVecDropper { c, alloc };
         for t in self.c.iter() {
             tvd.c.push(t.aclone(alloc));
