@@ -2493,8 +2493,8 @@ pub struct CursorMutKey<'a, K, V, A: Tuning> {
     _pd: PhantomData<&'a mut BTreeMap<K, V, A>>,
 }
 
-unsafe impl<'a, K, V, A: Tuning> Send for CursorMutKey<'a, K, V, A> {}
-unsafe impl<'a, K, V, A: Tuning> Sync for CursorMutKey<'a, K, V, A> {}
+unsafe impl<'a, K: Send, V: Send, A: Tuning + Send> Send for CursorMutKey<'a, K, V, A> {}
+unsafe impl<'a, K: Sync, V: Sync, A: Tuning + Sync> Sync for CursorMutKey<'a, K, V, A> {}
 
 impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     fn lower<Q>(map: &mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
@@ -2882,8 +2882,8 @@ pub struct Cursor<'a, K, V, A: Tuning> {
     _pd: PhantomData<&'a BTreeMap<K, V, A>>,
 }
 
-unsafe impl<'a, K, V, A: Tuning> Send for Cursor<'a, K, V, A> {}
-unsafe impl<'a, K, V, A: Tuning> Sync for Cursor<'a, K, V, A> {}
+unsafe impl<'a, K: Send, V: Send, A: Tuning + Send> Send for Cursor<'a, K, V, A> {}
+unsafe impl<'a, K: Sync, V: Sync, A: Tuning + Sync> Sync for Cursor<'a, K, V, A> {}
 
 impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
     fn lower_bound<Q>(bt: &'a BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
