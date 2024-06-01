@@ -381,7 +381,7 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
 
     /// Returns iterator that visits all elements (key-value pairs) in ascending key order
     /// and uses a closure to determine if an element should be removed.
-    pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, K, V, A, F>
+    pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, K, V, F, A>
     where
         K: Ord,
         F: FnMut(&K, &mut V) -> bool,
@@ -1382,7 +1382,7 @@ impl<'a, K: Debug + Ord, V: Debug, A: Tuning> fmt::Display for OccupiedError<'a,
 impl<'a, K: Debug + Ord, V: Debug, A: Tuning> Error for OccupiedError<'a, K, V, A> {}
 
 /// Entry in `BTreeMap`, returned by [`BTreeMap::entry`].
-pub enum Entry<'a, K, V, A: Tuning> {
+pub enum Entry<'a, K, V, A: Tuning = DefaultTuning> {
     /// Vacant entry - map doesn't yet contain key.
     Vacant(VacantEntry<'a, K, V, A>),
     /// Occupied entry - map already contains key.
@@ -1461,7 +1461,7 @@ where
 }
 
 /// Vacant [Entry].
-pub struct VacantEntry<'a, K, V, A: Tuning> {
+pub struct VacantEntry<'a, K, V, A: Tuning = DefaultTuning> {
     key: K,
     cursor: CursorMut<'a, K, V, A>,
 }
@@ -1494,7 +1494,7 @@ where
 }
 
 /// Occupied [Entry].
-pub struct OccupiedEntry<'a, K, V, A: Tuning> {
+pub struct OccupiedEntry<'a, K, V, A: Tuning = DefaultTuning> {
     cursor: CursorMut<'a, K, V, A>,
 }
 impl<K: Debug + Ord, V: Debug, A: Tuning> Debug for OccupiedEntry<'_, K, V, A> {
@@ -1851,7 +1851,7 @@ struct StkCon<K, V> {
 }
 
 /// For implementation of [`IntoIter`].
-struct IntoIterInner<K, V, A: Tuning> {
+struct IntoIterInner<K, V, A: Tuning = DefaultTuning> {
     fwd_leaf: IntoIterPairVec<K, V>,
     bck_leaf: IntoIterPairVec<K, V>,
     fwd_stk: StkVec<StkCon<K, V>>,
@@ -2333,14 +2333,14 @@ impl<'a, K, V> FusedIterator for Keys<'a, K, V> {}
 
 /// Iterator returned by [`BTreeMap::extract_if`].
 // #[derive(Debug)]
-pub struct ExtractIf<'a, K, V, A: Tuning, F>
+pub struct ExtractIf<'a, K, V, F, A: Tuning = DefaultTuning>
 where
     F: FnMut(&K, &mut V) -> bool,
 {
     source: CursorMut<'a, K, V, A>,
     pred: F,
 }
-impl<K, V, A: Tuning, F> fmt::Debug for ExtractIf<'_, K, V, A, F>
+impl<K, V, A: Tuning, F> fmt::Debug for ExtractIf<'_, K, V, F, A>
 where
     K: fmt::Debug,
     V: fmt::Debug,
@@ -2352,7 +2352,7 @@ where
             .finish()
     }
 }
-impl<'a, K, V, A: Tuning, F> Iterator for ExtractIf<'a, K, V, A, F>
+impl<'a, K, V, A: Tuning, F> Iterator for ExtractIf<'a, K, V, F, A>
 where
     F: FnMut(&K, &mut V) -> bool,
 {
@@ -2367,7 +2367,7 @@ where
         }
     }
 }
-impl<'a, K, V, A: Tuning, F> FusedIterator for ExtractIf<'a, K, V, A, F> where
+impl<'a, K, V, A: Tuning, F> FusedIterator for ExtractIf<'a, K, V, F, A> where
     F: FnMut(&K, &mut V) -> bool
 {
 }
@@ -2385,7 +2385,7 @@ impl fmt::Display for UnorderedKeyError {
 impl std::error::Error for UnorderedKeyError {}
 
 /// Cursor that allows mutation of map, returned by [`BTreeMap::lower_bound_mut`], [`BTreeMap::upper_bound_mut`].
-pub struct CursorMut<'a, K, V, A: Tuning>(CursorMutKey<'a, K, V, A>);
+pub struct CursorMut<'a, K, V, A: Tuning = DefaultTuning>(CursorMutKey<'a, K, V, A>);
 impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
     fn lower_bound<Q>(map: &'a mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
     where
@@ -2485,7 +2485,7 @@ impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
 }
 
 /// Cursor that allows mutation of map keys, returned by [`CursorMut::with_mutable_key`].
-pub struct CursorMutKey<'a, K, V, A: Tuning> {
+pub struct CursorMutKey<'a, K, V, A: Tuning = DefaultTuning> {
     map: *mut BTreeMap<K, V, A>,
     leaf: *mut Leaf<K, V>,
     index: usize,
@@ -2875,7 +2875,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
 
 /// Cursor returned by [`BTreeMap::lower_bound`], [`BTreeMap::upper_bound`].
 #[derive(Debug, Clone)]
-pub struct Cursor<'a, K, V, A: Tuning> {
+pub struct Cursor<'a, K, V, A: Tuning = DefaultTuning> {
     leaf: *const Leaf<K, V>,
     index: usize,
     stack: StkVec<(*const NonLeaf<K, V>, usize)>,
