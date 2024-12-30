@@ -152,6 +152,7 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     pub fn clear(&mut self) {
         self.len = 0;
         self.tree.dealloc(&self.atune);
+        self.tree = Tree::new();
     }
 
     /// Get number of key-value pairs in the map.
