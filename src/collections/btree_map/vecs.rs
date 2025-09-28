@@ -750,11 +750,20 @@ where
 }
 
 /// Non-mutable iterator for [`PairVec`].
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct IterPairVec<'a, K, V> {
     v: Option<&'a PairVec<K, V>>,
     ix: usize,
     ixb: usize,
+}
+impl<K, V> Clone for IterPairVec<'_, K, V> {
+    fn clone(&self) -> Self {
+        Self {
+            v: self.v,
+            ix: self.ix,
+            ixb: self.ixb,
+        }
+    }
 }
 impl<'a, K, V> Default for IterPairVec<'a, K, V> {
     fn default() -> Self {
