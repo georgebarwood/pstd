@@ -1838,6 +1838,11 @@ impl<K, V, A: Tuning> IntoIter<K, V, A> {
         s
     }
 }
+impl<K, V> Default for IntoIter<K, V> {
+    fn default() -> Self {
+        BTreeMap::new().into_iter()
+    }
+}
 impl<K, V, A: Tuning> Iterator for IntoIter<K, V, A> {
     type Item = (K, V);
     fn next(&mut self) -> Option<Self::Item> {
@@ -2285,6 +2290,11 @@ impl<'a, K, V> FusedIterator for Range<'a, K, V> {}
 
 /// Consuming iterator returned by [`BTreeMap::into_keys`].
 pub struct IntoKeys<K, V, A: Tuning = DefaultTuning>(IntoIter<K, V, A>);
+impl<K, V> Default for IntoKeys<K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<K, V, A: Tuning> Iterator for IntoKeys<K, V, A> {
     type Item = K;
     fn next(&mut self) -> Option<Self::Item> {
@@ -2308,6 +2318,11 @@ impl<K, V, A: Tuning> FusedIterator for IntoKeys<K, V, A> {}
 
 /// Consuming iterator returned by [`BTreeMap::into_values`].
 pub struct IntoValues<K, V, A: Tuning = DefaultTuning>(IntoIter<K, V, A>);
+impl<K, V> Default for IntoValues<K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<K, V, A: Tuning> Iterator for IntoValues<K, V, A> {
     type Item = V;
     fn next(&mut self) -> Option<Self::Item> {
@@ -2334,6 +2349,11 @@ impl<K, V, A: Tuning> FusedIterator for IntoValues<K, V, A> {}
 /// Iterator returned by [`BTreeMap::values_mut`].
 #[derive(Debug)]
 pub struct ValuesMut<'a, K, V>(IterMut<'a, K, V>);
+impl<K, V> Default for ValuesMut<'_, K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<'a, K, V> Iterator for ValuesMut<'a, K, V> {
     type Item = &'a mut V;
     fn next(&mut self) -> Option<Self::Item> {
