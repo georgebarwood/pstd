@@ -1389,6 +1389,19 @@ pub enum Entry<'a, K, V, A: Tuning = DefaultTuning> {
     /// Occupied entry - map already contains key.
     Occupied(OccupiedEntry<'a, K, V, A>),
 }
+impl<K, V, A> Debug for Entry<'_, K, V, A>
+where
+    K: Debug + Ord,
+    V: Debug,
+    A: Tuning,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Vacant(x) => f.debug_tuple("Vacant").field(x).finish(),
+            Self::Occupied(x) => f.debug_tuple("Occupied").field(x).finish(),
+        }
+    }
+}
 impl<'a, K, V, A: Tuning> Entry<'a, K, V, A>
 where
     K: Ord,
@@ -1821,6 +1834,7 @@ impl<'a, K, V> FusedIterator for RangeMut<'a, K, V> {}
 // Consuming iteration.
 
 /// Consuming iterator for [`BTreeMap`].
+#[derive(Debug)]
 pub struct IntoIter<K, V, A: Tuning = DefaultTuning> {
     len: usize,
     inner: IntoIterInner<K, V, A>,
@@ -1869,12 +1883,14 @@ impl<K, V, A: Tuning> ExactSizeIterator for IntoIter<K, V, A> {
 impl<K, V, A: Tuning> FusedIterator for IntoIter<K, V, A> {}
 
 /// Stack element for [`IntoIterInner`].
+#[derive(Debug)]
 struct StkCon<K, V> {
     v: IntoIterPairVec<K, V>,
     c: IntoIterShortVec<Tree<K, V>>,
 }
 
 /// For implementation of [`IntoIter`].
+#[derive(Debug)]
 struct IntoIterInner<K, V, A: Tuning = DefaultTuning> {
     fwd_leaf: IntoIterPairVec<K, V>,
     bck_leaf: IntoIterPairVec<K, V>,
@@ -2289,6 +2305,7 @@ impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
 impl<'a, K, V> FusedIterator for Range<'a, K, V> {}
 
 /// Consuming iterator returned by [`BTreeMap::into_keys`].
+#[derive(Debug)]
 pub struct IntoKeys<K, V, A: Tuning = DefaultTuning>(IntoIter<K, V, A>);
 impl<K, V> Default for IntoKeys<K, V> {
     fn default() -> Self {
@@ -2317,6 +2334,7 @@ impl<K, V, A: Tuning> ExactSizeIterator for IntoKeys<K, V, A> {
 impl<K, V, A: Tuning> FusedIterator for IntoKeys<K, V, A> {}
 
 /// Consuming iterator returned by [`BTreeMap::into_values`].
+#[derive(Debug)]
 pub struct IntoValues<K, V, A: Tuning = DefaultTuning>(IntoIter<K, V, A>);
 impl<K, V> Default for IntoValues<K, V> {
     fn default() -> Self {
@@ -2488,6 +2506,7 @@ impl fmt::Display for UnorderedKeyError {
 impl std::error::Error for UnorderedKeyError {}
 
 /// Cursor that allows mutation of map, returned by [`BTreeMap::lower_bound_mut`], [`BTreeMap::upper_bound_mut`].
+#[derive(Debug)]
 pub struct CursorMut<'a, K, V, A: Tuning = DefaultTuning>(CursorMutKey<'a, K, V, A>);
 impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
     fn lower_bound<Q>(map: &'a mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
@@ -2588,6 +2607,7 @@ impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
 }
 
 /// Cursor that allows mutation of map keys, returned by [`CursorMut::with_mutable_key`].
+#[derive(Debug)]
 pub struct CursorMutKey<'a, K, V, A: Tuning = DefaultTuning> {
     map: *mut BTreeMap<K, V, A>,
     leaf: *mut Leaf<K, V>,

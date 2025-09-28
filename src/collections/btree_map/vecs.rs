@@ -250,6 +250,7 @@ where
 }
 
 /// Consuming iterator for [`ShortVec`].
+#[derive(Debug)]
 pub struct IntoIterShortVec<T> {
     start: usize,
     v: ShortVec<T>,
