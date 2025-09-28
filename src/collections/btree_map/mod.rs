@@ -1834,7 +1834,6 @@ impl<'a, K, V> FusedIterator for RangeMut<'a, K, V> {}
 // Consuming iteration.
 
 /// Consuming iterator for [`BTreeMap`].
-#[derive(Debug)]
 pub struct IntoIter<K, V, A: Tuning = DefaultTuning> {
     len: usize,
     inner: IntoIterInner<K, V, A>,
@@ -1850,6 +1849,14 @@ impl<K, V, A: Tuning> IntoIter<K, V, A> {
         let t = mem::take(&mut bt.tree);
         s.inner.push_tree(t, true);
         s
+    }
+}
+impl<K: Debug, V: Debug, A: Tuning> Debug for IntoIter<K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IntoIter")
+            .field("len", &self.len)
+            .field("inner", &self.inner)
+            .finish()
     }
 }
 impl<K, V> Default for IntoIter<K, V> {
@@ -1890,13 +1897,22 @@ struct StkCon<K, V> {
 }
 
 /// For implementation of [`IntoIter`].
-#[derive(Debug)]
 struct IntoIterInner<K, V, A: Tuning = DefaultTuning> {
     fwd_leaf: IntoIterPairVec<K, V>,
     bck_leaf: IntoIterPairVec<K, V>,
     fwd_stk: StkVec<StkCon<K, V>>,
     bck_stk: StkVec<StkCon<K, V>>,
     alloc: A,
+}
+impl<K: Debug, V: Debug, A: Tuning> Debug for IntoIterInner<K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IntoIterInner")
+            .field("fwd_leaf", &self.fwd_leaf)
+            .field("bck_leaf", &self.bck_leaf)
+            .field("fwd_stk", &self.fwd_stk)
+            .field("bck_stk", &self.bck_stk)
+            .finish_non_exhaustive()
+    }
 }
 impl<K, V, A: Tuning> Drop for IntoIterInner<K, V, A> {
     fn drop(&mut self) {
@@ -2334,8 +2350,12 @@ impl<K, V, A: Tuning> ExactSizeIterator for IntoKeys<K, V, A> {
 impl<K, V, A: Tuning> FusedIterator for IntoKeys<K, V, A> {}
 
 /// Consuming iterator returned by [`BTreeMap::into_values`].
-#[derive(Debug)]
 pub struct IntoValues<K, V, A: Tuning = DefaultTuning>(IntoIter<K, V, A>);
+impl<K: Debug, V: Debug, A: Tuning> Debug for IntoValues<K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("IntoValues").field(&self.0).finish()
+    }
+}
 impl<K, V> Default for IntoValues<K, V> {
     fn default() -> Self {
         Self(Default::default())
@@ -2506,7 +2526,6 @@ impl fmt::Display for UnorderedKeyError {
 impl std::error::Error for UnorderedKeyError {}
 
 /// Cursor that allows mutation of map, returned by [`BTreeMap::lower_bound_mut`], [`BTreeMap::upper_bound_mut`].
-#[derive(Debug)]
 pub struct CursorMut<'a, K, V, A: Tuning = DefaultTuning>(CursorMutKey<'a, K, V, A>);
 impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
     fn lower_bound<Q>(map: &'a mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
@@ -2606,8 +2625,13 @@ impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
     }
 }
 
+impl<K: Debug, V: Debug, A: Tuning> Debug for CursorMut<'_, K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("CursorMut").field(&self.0).finish()
+    }
+}
+
 /// Cursor that allows mutation of map keys, returned by [`CursorMut::with_mutable_key`].
-#[derive(Debug)]
 pub struct CursorMutKey<'a, K, V, A: Tuning = DefaultTuning> {
     map: *mut BTreeMap<K, V, A>,
     leaf: *mut Leaf<K, V>,
@@ -2996,8 +3020,18 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     }
 }
 
+impl<K: Debug, V: Debug, A: Tuning> Debug for CursorMutKey<'_, K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CursorMutKey")
+            .field("map", &self.map)
+            .field("leaf", &self.leaf)
+            .field("index", &self.index)
+            .field("stack", &self.stack)
+            .finish()
+    }
+}
+
 /// Cursor returned by [`BTreeMap::lower_bound`], [`BTreeMap::upper_bound`].
-#[derive(Debug)]
 pub struct Cursor<'a, K, V, A: Tuning = DefaultTuning> {
     leaf: *const Leaf<K, V>,
     index: usize,
@@ -3007,17 +3041,6 @@ pub struct Cursor<'a, K, V, A: Tuning = DefaultTuning> {
 
 unsafe impl<'a, K: Send, V: Send, A: Tuning + Send> Send for Cursor<'a, K, V, A> {}
 unsafe impl<'a, K: Sync, V: Sync, A: Tuning + Sync> Sync for Cursor<'a, K, V, A> {}
-
-impl<K, V, A: Tuning> Clone for Cursor<'_, K, V, A> {
-    fn clone(&self) -> Self {
-        Self {
-            leaf: self.leaf,
-            index: self.index,
-            stack: self.stack.clone(),
-            _pd: self._pd,
-        }
-    }
-}
 
 impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
     fn lower_bound<Q>(bt: &'a BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
@@ -3220,6 +3243,27 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
             }
             None
         }
+    }
+}
+
+impl<K, V, A: Tuning> Clone for Cursor<'_, K, V, A> {
+    fn clone(&self) -> Self {
+        Self {
+            leaf: self.leaf,
+            index: self.index,
+            stack: self.stack.clone(),
+            _pd: self._pd,
+        }
+    }
+}
+
+impl<K: Debug, V: Debug, A: Tuning> Debug for Cursor<'_, K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Cursor")
+            .field("leaf", &self.leaf)
+            .field("index", &self.index)
+            .field("stack", &self.stack)
+            .finish()
     }
 }
 
