@@ -1389,6 +1389,19 @@ pub enum Entry<'a, K, V, A: Tuning = DefaultTuning> {
     /// Occupied entry - map already contains key.
     Occupied(OccupiedEntry<'a, K, V, A>),
 }
+impl<K, V, A> Debug for Entry<'_, K, V, A>
+where
+    K: Debug + Ord,
+    V: Debug,
+    A: Tuning,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Vacant(x) => f.debug_tuple("Vacant").field(x).finish(),
+            Self::Occupied(x) => f.debug_tuple("Occupied").field(x).finish(),
+        }
+    }
+}
 impl<'a, K, V, A: Tuning> Entry<'a, K, V, A>
 where
     K: Ord,
@@ -1555,10 +1568,18 @@ where
 // Mutable reference iteration.
 
 /// Iterator returned by [`BTreeMap::iter_mut`].
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct IterMut<'a, K, V> {
     len: usize,
     inner: RangeMut<'a, K, V>,
+}
+impl<K, V> Default for IterMut<'_, K, V> {
+    fn default() -> Self {
+        Self {
+            len: Default::default(),
+            inner: Default::default(),
+        }
+    }
 }
 impl<'a, K, V> Iterator for IterMut<'a, K, V> {
     type Item = (&'a K, &'a mut V);
@@ -1599,7 +1620,7 @@ struct StkMut<'a, K, V> {
 }
 
 /// Iterator returned by [`BTreeMap::range_mut`].
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct RangeMut<'a, K, V> {
     /* There are two iterations going on to implement DoubleEndedIterator.
        fwd_leaf and fwd_stk are initially used for forward (next) iteration,
@@ -1781,6 +1802,16 @@ impl<'a, K, V> RangeMut<'a, K, V> {
         }
     }
 }
+impl<K, V> Default for RangeMut<'_, K, V> {
+    fn default() -> Self {
+        Self {
+            fwd_leaf: Default::default(),
+            bck_leaf: Default::default(),
+            fwd_stk: Default::default(),
+            bck_stk: Default::default(),
+        }
+    }
+}
 impl<'a, K, V> Iterator for RangeMut<'a, K, V> {
     type Item = (&'a K, &'a mut V);
     fn next(&mut self) -> Option<Self::Item> {
@@ -1820,6 +1851,19 @@ impl<K, V, A: Tuning> IntoIter<K, V, A> {
         s
     }
 }
+impl<K: Debug, V: Debug, A: Tuning> Debug for IntoIter<K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IntoIter")
+            .field("len", &self.len)
+            .field("inner", &self.inner)
+            .finish()
+    }
+}
+impl<K, V> Default for IntoIter<K, V> {
+    fn default() -> Self {
+        BTreeMap::new().into_iter()
+    }
+}
 impl<K, V, A: Tuning> Iterator for IntoIter<K, V, A> {
     type Item = (K, V);
     fn next(&mut self) -> Option<Self::Item> {
@@ -1846,6 +1890,7 @@ impl<K, V, A: Tuning> ExactSizeIterator for IntoIter<K, V, A> {
 impl<K, V, A: Tuning> FusedIterator for IntoIter<K, V, A> {}
 
 /// Stack element for [`IntoIterInner`].
+#[derive(Debug)]
 struct StkCon<K, V> {
     v: IntoIterPairVec<K, V>,
     c: IntoIterShortVec<Tree<K, V>>,
@@ -1858,6 +1903,16 @@ struct IntoIterInner<K, V, A: Tuning = DefaultTuning> {
     fwd_stk: StkVec<StkCon<K, V>>,
     bck_stk: StkVec<StkCon<K, V>>,
     alloc: A,
+}
+impl<K: Debug, V: Debug, A: Tuning> Debug for IntoIterInner<K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IntoIterInner")
+            .field("fwd_leaf", &self.fwd_leaf)
+            .field("bck_leaf", &self.bck_leaf)
+            .field("fwd_stk", &self.fwd_stk)
+            .field("bck_stk", &self.bck_stk)
+            .finish_non_exhaustive()
+    }
 }
 impl<K, V, A: Tuning> Drop for IntoIterInner<K, V, A> {
     fn drop(&mut self) {
@@ -1980,10 +2035,26 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
 // Immutable reference iteration.
 
 /// Iterator returned by [`BTreeMap::iter`].
-#[derive(Clone, Debug, Default)]
+#[derive(Debug)]
 pub struct Iter<'a, K, V> {
     len: usize,
     inner: Range<'a, K, V>,
+}
+impl<K, V> Clone for Iter<'_, K, V> {
+    fn clone(&self) -> Self {
+        Self {
+            len: self.len,
+            inner: self.inner.clone(),
+        }
+    }
+}
+impl<K, V> Default for Iter<'_, K, V> {
+    fn default() -> Self {
+        Self {
+            len: Default::default(),
+            inner: Default::default(),
+        }
+    }
 }
 impl<'a, K, V> Iterator for Iter<'a, K, V> {
     type Item = (&'a K, &'a V);
@@ -2017,14 +2088,22 @@ impl<'a, K, V> DoubleEndedIterator for Iter<'a, K, V> {
 impl<'a, K, V> FusedIterator for Iter<'a, K, V> {}
 
 /// Stack element for [`Range`].
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Stk<'a, K, V> {
     v: IterPairVec<'a, K, V>,
     c: std::slice::Iter<'a, Tree<K, V>>,
 }
+impl<K, V> Clone for Stk<'_, K, V> {
+    fn clone(&self) -> Self {
+        Self {
+            v: self.v.clone(),
+            c: self.c.clone(),
+        }
+    }
+}
 
 /// Iterator returned by [`BTreeMap::range`].
-#[derive(Clone, Debug, Default)]
+#[derive(Debug)]
 pub struct Range<'a, K, V> {
     fwd_leaf: IterPairVec<'a, K, V>,
     bck_leaf: IterPairVec<'a, K, V>,
@@ -2202,6 +2281,26 @@ impl<'a, K, V> Range<'a, K, V> {
         }
     }
 }
+impl<K, V> Clone for Range<'_, K, V> {
+    fn clone(&self) -> Self {
+        Self {
+            fwd_leaf: self.fwd_leaf.clone(),
+            bck_leaf: self.bck_leaf.clone(),
+            fwd_stk: self.fwd_stk.clone(),
+            bck_stk: self.bck_stk.clone(),
+        }
+    }
+}
+impl<K, V> Default for Range<'_, K, V> {
+    fn default() -> Self {
+        Self {
+            fwd_leaf: Default::default(),
+            bck_leaf: Default::default(),
+            fwd_stk: Default::default(),
+            bck_stk: Default::default(),
+        }
+    }
+}
 impl<'a, K, V> Iterator for Range<'a, K, V> {
     type Item = (&'a K, &'a V);
     fn next(&mut self) -> Option<Self::Item> {
@@ -2222,7 +2321,13 @@ impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
 impl<'a, K, V> FusedIterator for Range<'a, K, V> {}
 
 /// Consuming iterator returned by [`BTreeMap::into_keys`].
+#[derive(Debug)]
 pub struct IntoKeys<K, V, A: Tuning = DefaultTuning>(IntoIter<K, V, A>);
+impl<K, V> Default for IntoKeys<K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<K, V, A: Tuning> Iterator for IntoKeys<K, V, A> {
     type Item = K;
     fn next(&mut self) -> Option<Self::Item> {
@@ -2246,6 +2351,16 @@ impl<K, V, A: Tuning> FusedIterator for IntoKeys<K, V, A> {}
 
 /// Consuming iterator returned by [`BTreeMap::into_values`].
 pub struct IntoValues<K, V, A: Tuning = DefaultTuning>(IntoIter<K, V, A>);
+impl<K: Debug, V: Debug, A: Tuning> Debug for IntoValues<K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("IntoValues").field(&self.0).finish()
+    }
+}
+impl<K, V> Default for IntoValues<K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<K, V, A: Tuning> Iterator for IntoValues<K, V, A> {
     type Item = V;
     fn next(&mut self) -> Option<Self::Item> {
@@ -2272,6 +2387,11 @@ impl<K, V, A: Tuning> FusedIterator for IntoValues<K, V, A> {}
 /// Iterator returned by [`BTreeMap::values_mut`].
 #[derive(Debug)]
 pub struct ValuesMut<'a, K, V>(IterMut<'a, K, V>);
+impl<K, V> Default for ValuesMut<'_, K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<'a, K, V> Iterator for ValuesMut<'a, K, V> {
     type Item = &'a mut V;
     fn next(&mut self) -> Option<Self::Item> {
@@ -2291,8 +2411,18 @@ impl<'a, K, V> ExactSizeIterator for ValuesMut<'a, K, V> {
 impl<'a, K, V> FusedIterator for ValuesMut<'a, K, V> {}
 
 /// Iterator returned by [`BTreeMap::values`].
-#[derive(Clone, Debug, Default)]
+#[derive(Debug)]
 pub struct Values<'a, K, V>(Iter<'a, K, V>);
+impl<K, V> Clone for Values<'_, K, V> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+impl<K, V> Default for Values<'_, K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<'a, K, V> Iterator for Values<'a, K, V> {
     type Item = &'a V;
     fn next(&mut self) -> Option<Self::Item> {
@@ -2312,8 +2442,18 @@ impl<'a, K, V> ExactSizeIterator for Values<'a, K, V> {
 impl<'a, K, V> FusedIterator for Values<'a, K, V> {}
 
 /// Iterator returned by [`BTreeMap::keys`].
-#[derive(Clone, Debug, Default)]
+#[derive(Debug)]
 pub struct Keys<'a, K, V>(Iter<'a, K, V>);
+impl<K, V> Clone for Keys<'_, K, V> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+impl<K, V> Default for Keys<'_, K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 impl<'a, K, V> Iterator for Keys<'a, K, V> {
     type Item = &'a K;
     fn next(&mut self) -> Option<Self::Item> {
@@ -2482,6 +2622,12 @@ impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
     /// This is needed for the implementation of the [Entry] API.
     fn into_mut(self) -> &'a mut V {
         self.0.into_mut()
+    }
+}
+
+impl<K: Debug, V: Debug, A: Tuning> Debug for CursorMut<'_, K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("CursorMut").field(&self.0).finish()
     }
 }
 
@@ -2874,8 +3020,18 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     }
 }
 
+impl<K: Debug, V: Debug, A: Tuning> Debug for CursorMutKey<'_, K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CursorMutKey")
+            .field("map", &self.map)
+            .field("leaf", &self.leaf)
+            .field("index", &self.index)
+            .field("stack", &self.stack)
+            .finish()
+    }
+}
+
 /// Cursor returned by [`BTreeMap::lower_bound`], [`BTreeMap::upper_bound`].
-#[derive(Debug, Clone)]
 pub struct Cursor<'a, K, V, A: Tuning = DefaultTuning> {
     leaf: *const Leaf<K, V>,
     index: usize,
@@ -3087,6 +3243,27 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
             }
             None
         }
+    }
+}
+
+impl<K, V, A: Tuning> Clone for Cursor<'_, K, V, A> {
+    fn clone(&self) -> Self {
+        Self {
+            leaf: self.leaf,
+            index: self.index,
+            stack: self.stack.clone(),
+            _pd: self._pd,
+        }
+    }
+}
+
+impl<K: Debug, V: Debug, A: Tuning> Debug for Cursor<'_, K, V, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Cursor")
+            .field("leaf", &self.leaf)
+            .field("index", &self.index)
+            .field("stack", &self.stack)
+            .finish()
     }
 }
 
