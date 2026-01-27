@@ -586,7 +586,7 @@ impl<K, V> PairVec<K, V> {
     }
 
     /// Get reference iterator.
-    pub fn iter(&self) -> IterPairVec<K, V> {
+    pub fn iter(&self) -> IterPairVec<'_, K, V> {
         IterPairVec {
             v: Some(self),
             ix: 0,
@@ -595,7 +595,7 @@ impl<K, V> PairVec<K, V> {
     }
 
     /// Get range reference iterator.
-    pub fn range(&self, x: usize, y: usize) -> IterPairVec<K, V> {
+    pub fn range(&self, x: usize, y: usize) -> IterPairVec<'_, K, V> {
         safe_assert!(x <= y && y <= self.len());
         IterPairVec {
             v: Some(self),
@@ -605,7 +605,7 @@ impl<K, V> PairVec<K, V> {
     }
 
     /// Get mutable reference iterator.
-    pub fn iter_mut(&mut self) -> IterMutPairVec<K, V> {
+    pub fn iter_mut(&mut self) -> IterMutPairVec<'_, K, V> {
         let ixb = self.len();
         IterMutPairVec {
             v: Some(self),
@@ -615,7 +615,7 @@ impl<K, V> PairVec<K, V> {
     }
 
     /// Get mutable reference range iterator.
-    pub fn range_mut(&mut self, x: usize, y: usize) -> IterMutPairVec<K, V> {
+    pub fn range_mut(&mut self, x: usize, y: usize) -> IterMutPairVec<'_, K, V> {
         safe_assert!(x <= y && y <= self.len());
         IterMutPairVec {
             v: Some(self),
