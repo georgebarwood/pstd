@@ -60,23 +60,25 @@ pub unsafe trait Allocator {
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        debug_assert!(
-            new_layout.size() >= old_layout.size(),
-            "`new_layout.size()` must be greater than or equal to `old_layout.size()`"
-        );
+        unsafe {
+            debug_assert!(
+                new_layout.size() >= old_layout.size(),
+                "`new_layout.size()` must be greater than or equal to `old_layout.size()`"
+            );
 
-        let new_ptr = self.allocate(new_layout)?;
+            let new_ptr = self.allocate(new_layout)?;
 
-        let len = old_layout.size();
+            let len = old_layout.size();
 
-        ptr::copy_nonoverlapping(
-            ptr.as_ptr().cast::<u8>(),
-            new_ptr.as_ptr().cast::<u8>(),
-            len,
-        );
-        self.deallocate(ptr, old_layout);
+            ptr::copy_nonoverlapping(
+                ptr.as_ptr().cast::<u8>(),
+                new_ptr.as_ptr().cast::<u8>(),
+                len,
+            );
+            self.deallocate(ptr, old_layout);
 
-        Ok(new_ptr)
+            Ok(new_ptr)
+        }
     }
 
     /// Behaves like `grow`, but also ensures that the new contents are set to zero before being
@@ -90,23 +92,25 @@ pub unsafe trait Allocator {
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        debug_assert!(
-            new_layout.size() >= old_layout.size(),
-            "`new_layout.size()` must be greater than or equal to `old_layout.size()`"
-        );
+        unsafe {
+            debug_assert!(
+                new_layout.size() >= old_layout.size(),
+                "`new_layout.size()` must be greater than or equal to `old_layout.size()`"
+            );
 
-        let new_ptr = self.allocate_zeroed(new_layout)?;
+            let new_ptr = self.allocate_zeroed(new_layout)?;
 
-        let len = old_layout.size();
+            let len = old_layout.size();
 
-        ptr::copy_nonoverlapping(
-            ptr.as_ptr().cast::<u8>(),
-            new_ptr.as_ptr().cast::<u8>(),
-            len,
-        );
-        self.deallocate(ptr, old_layout);
+            ptr::copy_nonoverlapping(
+                ptr.as_ptr().cast::<u8>(),
+                new_ptr.as_ptr().cast::<u8>(),
+                len,
+            );
+            self.deallocate(ptr, old_layout);
 
-        Ok(new_ptr)
+            Ok(new_ptr)
+        }
     }
 
     /// Attempts to shrink the memory block.
@@ -119,20 +123,22 @@ pub unsafe trait Allocator {
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        debug_assert!(
-            new_layout.size() <= old_layout.size(),
-            "`new_layout.size()` must be smaller than or equal to `old_layout.size()`"
-        );
+        unsafe {
+            debug_assert!(
+                new_layout.size() <= old_layout.size(),
+                "`new_layout.size()` must be smaller than or equal to `old_layout.size()`"
+            );
 
-        let new_ptr = self.allocate(new_layout)?;
-        let len = new_layout.size();
-        ptr::copy_nonoverlapping(
-            ptr.as_ptr().cast::<u8>(),
-            new_ptr.as_ptr().cast::<u8>(),
-            len,
-        );
-        self.deallocate(ptr, old_layout);
-        Ok(new_ptr)
+            let new_ptr = self.allocate(new_layout)?;
+            let len = new_layout.size();
+            ptr::copy_nonoverlapping(
+                ptr.as_ptr().cast::<u8>(),
+                new_ptr.as_ptr().cast::<u8>(),
+                len,
+            );
+            self.deallocate(ptr, old_layout);
+            Ok(new_ptr)
+        }
     }
 
     /// Creates a "by reference" adapter for this instance of `Allocator`.
@@ -214,6 +220,8 @@ unsafe impl Allocator for Global {
         }
     }
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        std::alloc::dealloc(ptr.as_ptr(), layout);
+        unsafe {
+            std::alloc::dealloc(ptr.as_ptr(), layout);
+        }
     }
 }
