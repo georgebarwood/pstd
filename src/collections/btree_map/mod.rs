@@ -608,9 +608,9 @@ impl<K: Debug, V: Debug, A: Tuning> Debug for BTreeMap<K, V, A> {
 
 #[cfg(feature = "serde")]
 use serde::{
+    Deserialize, Deserializer, Serialize, Serializer,
     de::{MapAccess, Visitor},
     ser::SerializeMap,
-    Deserialize, Deserializer, Serialize, Serializer,
 };
 
 #[cfg(feature = "serde")]
@@ -804,7 +804,9 @@ unsafe impl<AL: Allocator + Clone> Allocator for CustomTuning<AL> {
         self.allocator.allocate(layout)
     }
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        self.allocator.deallocate(ptr, layout);
+        unsafe {
+            self.allocator.deallocate(ptr, layout);
+        }
     }
 }
 
@@ -1228,19 +1230,22 @@ impl<K, V> NonLeafInner<K, V> {
     }
 
     fn remove_at<A: Tuning>(&mut self, i: usize, atune: &A) -> ((K, V), usize) {
-        if let Some(kv) = self.c.ixm(i).pop_last(atune) {
-            let (kp, vp) = self.v.ixbm(i);
-            let k = mem::replace(kp, kv.0);
-            let v = mem::replace(vp, kv.1);
-            ((k, v), i + 1)
-        } else {
-            self.c.remove(i);
-            let kv = self.v.remove(i);
-            if let Some(na) = atune.space_action(self.v.state()) {
-                self.v.set_alloc(na, atune);
-                self.c.set_alloc(na + 1, atune);
+        match self.c.ixm(i).pop_last(atune) {
+            Some(kv) => {
+                let (kp, vp) = self.v.ixbm(i);
+                let k = mem::replace(kp, kv.0);
+                let v = mem::replace(vp, kv.1);
+                ((k, v), i + 1)
             }
-            (kv, i)
+            _ => {
+                self.c.remove(i);
+                let kv = self.v.remove(i);
+                if let Some(na) = atune.space_action(self.v.state()) {
+                    self.v.set_alloc(na, atune);
+                    self.c.set_alloc(na + 1, atune);
+                }
+                (kv, i)
+            }
         }
     }
 
@@ -1317,35 +1322,41 @@ impl<K, V> NonLeafInner<K, V> {
     }
 
     fn pop_first<A: Tuning>(&mut self, atune: &A) -> Option<(K, V)> {
-        if let Some(x) = self.c.ixm(0).pop_first(atune) {
-            Some(x)
-        } else if self.v.is_empty() {
-            None
-        } else {
-            self.c.remove(0);
-            let result = Some(self.v.remove(0));
-            if let Some(na) = atune.space_action(self.v.state()) {
-                self.v.set_alloc(na, atune);
-                self.c.set_alloc(na + 1, atune);
+        match self.c.ixm(0).pop_first(atune) {
+            Some(x) => Some(x),
+            _ => {
+                if self.v.is_empty() {
+                    None
+                } else {
+                    self.c.remove(0);
+                    let result = Some(self.v.remove(0));
+                    if let Some(na) = atune.space_action(self.v.state()) {
+                        self.v.set_alloc(na, atune);
+                        self.c.set_alloc(na + 1, atune);
+                    }
+                    result
+                }
             }
-            result
         }
     }
 
     fn pop_last<A: Tuning>(&mut self, atune: &A) -> Option<(K, V)> {
         let i = self.c.len();
-        if let Some(x) = self.c.ixm(i - 1).pop_last(atune) {
-            Some(x)
-        } else if self.v.is_empty() {
-            None
-        } else {
-            self.c.pop();
-            let result = self.v.pop();
-            if let Some(na) = atune.space_action(self.v.state()) {
-                self.v.set_alloc(na, atune);
-                self.c.set_alloc(na + 1, atune);
+        match self.c.ixm(i - 1).pop_last(atune) {
+            Some(x) => Some(x),
+            _ => {
+                if self.v.is_empty() {
+                    None
+                } else {
+                    self.c.pop();
+                    let result = self.v.pop();
+                    if let Some(na) = atune.space_action(self.v.state()) {
+                        self.v.set_alloc(na, atune);
+                        self.c.set_alloc(na + 1, atune);
+                    }
+                    result
+                }
             }
-            result
         }
     }
 } // End impl NonLeafInner

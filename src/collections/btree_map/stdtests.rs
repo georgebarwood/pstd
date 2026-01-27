@@ -4,11 +4,14 @@ https://github.com/rust-lang/rust/blob/master/library/alloc/src/collections/btre
    Some could be restored if I ever find time.
 */
 
-use crate::collections::btree_map::*;
-use Entry::*;
+// use crate::collections::btree_map::*;
+
+use super::{
+    BTreeMap, Borrow, Bound, Entry::*, IntoIter, IntoKeys, IntoValues, Ordering, RangeBounds,
+};
 
 use std::{
-    assert_matches::assert_matches,
+    assert_matches,
     fmt::Debug,
     ops::Bound::{Excluded, Included, Unbounded},
     rc::Rc,
@@ -202,6 +205,7 @@ fn test_iter_rev() {
     test(size, map.into_iter().rev());
 }
 
+/*
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[repr(align(32))]
 struct Align32(usize);
@@ -213,6 +217,7 @@ impl TryFrom<usize> for Align32 {
         Ok(Align32(s))
     }
 }
+*/
 
 #[test]
 fn test_values_mut_mutation() {
@@ -710,12 +715,13 @@ mod test_extract_if {
     fn mutating_and_keeping() {
         let pairs = (0..3).map(|i| (i, i));
         let mut map = BTreeMap::from_iter(pairs);
-        assert!(map
-            .extract_if(|_, v| {
+        assert!(
+            map.extract_if(|_, v| {
                 *v += 6;
                 false
             })
-            .eq(iter::empty()));
+            .eq(iter::empty())
+        );
         assert!(map.keys().copied().eq(0..3));
         assert!(map.values().copied().eq(6..9));
         map.check();
@@ -726,12 +732,13 @@ mod test_extract_if {
     fn mutating_and_removing() {
         let pairs = (0..3).map(|i| (i, i));
         let mut map = BTreeMap::from_iter(pairs);
-        assert!(map
-            .extract_if(|_, v| {
+        assert!(
+            map.extract_if(|_, v| {
                 *v += 6;
                 true
             })
-            .eq((0..3).map(|i| (i, i + 6))));
+            .eq((0..3).map(|i| (i, i + 6)))
+        );
         assert!(map.is_empty());
         map.check();
     }

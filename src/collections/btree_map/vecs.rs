@@ -16,7 +16,7 @@ use crate::collections::btree_map::Tuning;
 /// In debug mode or feature unsafe-optim not enabled, same as assert! otherwise unsafe unreachable hint.
 #[cfg(any(debug_assertions, not(feature = "unsafe-optim")))]
 macro_rules! safe_assert {
-    ( $cond: expr ) => {
+    ( $cond: expr_2021 ) => {
         assert!($cond)
     };
 }
@@ -164,32 +164,34 @@ impl<T> ShortVec<T> {
     ///
     /// `oa` must be the previous alloc set (0 if no alloc has yet been set).
     unsafe fn basic_set_alloc<A: Tuning>(&mut self, oa: usize, na: usize, alloc: &A) {
-        if mem::size_of::<T>() == 0 {
-            return;
-        }
-        if na == 0 {
-            alloc.deallocate(
-                NonNull::new(self.p.as_ptr().cast::<u8>()).unwrap(),
-                Layout::array::<T>(oa).unwrap(),
-            );
-            self.p = NonNull::dangling();
-            return;
-        }
-        let new_layout = Layout::array::<T>(na).unwrap();
-        let new_ptr = if oa == 0 {
-            alloc.allocate(new_layout)
-        } else {
-            let old_layout = Layout::array::<T>(oa).unwrap();
-            let old_ptr = self.p.as_ptr().cast::<u8>();
-            let old_ptr = NonNull::new(old_ptr).unwrap();
-            if new_layout.size() > old_layout.size() {
-                alloc.grow(old_ptr, old_layout, new_layout)
-            } else {
-                alloc.shrink(old_ptr, old_layout, new_layout)
+        unsafe {
+            if mem::size_of::<T>() == 0 {
+                return;
             }
+            if na == 0 {
+                alloc.deallocate(
+                    NonNull::new(self.p.as_ptr().cast::<u8>()).unwrap(),
+                    Layout::array::<T>(oa).unwrap(),
+                );
+                self.p = NonNull::dangling();
+                return;
+            }
+            let new_layout = Layout::array::<T>(na).unwrap();
+            let new_ptr = if oa == 0 {
+                alloc.allocate(new_layout)
+            } else {
+                let old_layout = Layout::array::<T>(oa).unwrap();
+                let old_ptr = self.p.as_ptr().cast::<u8>();
+                let old_ptr = NonNull::new(old_ptr).unwrap();
+                if new_layout.size() > old_layout.size() {
+                    alloc.grow(old_ptr, old_layout, new_layout)
+                } else {
+                    alloc.shrink(old_ptr, old_layout, new_layout)
+                }
+            }
+            .unwrap();
+            self.p = NonNull::new(new_ptr.as_ptr().cast::<T>()).unwrap();
         }
-        .unwrap();
-        self.p = NonNull::new(new_ptr.as_ptr().cast::<T>()).unwrap();
     }
 
     /// Get pointer to ith element.
@@ -198,7 +200,7 @@ impl<T> ShortVec<T> {
     /// ix must be <= alloc.
     #[inline]
     unsafe fn ixp(&self, i: usize) -> *mut T {
-        self.p.as_ptr().add(i)
+        unsafe { self.p.as_ptr().add(i) }
     }
 
     /// Set ith value.
@@ -207,7 +209,9 @@ impl<T> ShortVec<T> {
     /// i must be < alloc, and the element must be unset.
     #[inline]
     unsafe fn set(&mut self, i: usize, elem: T) {
-        ptr::write(self.ixp(i), elem);
+        unsafe {
+            ptr::write(self.ixp(i), elem);
+        }
     }
 
     /// Get ith value.
@@ -216,7 +220,7 @@ impl<T> ShortVec<T> {
     /// i must be less < alloc, and the element must have been set.
     #[inline]
     unsafe fn get(&mut self, i: usize) -> T {
-        ptr::read(self.ixp(i))
+        unsafe { ptr::read(self.ixp(i)) }
     }
 }
 
@@ -356,17 +360,19 @@ impl<K, V> PairVec<K, V> {
     /// Get the layout for the specified allocation.
     #[inline]
     unsafe fn layout(amount: usize) -> (Layout, usize) {
-        let layout = Layout::array::<K>(amount).unwrap_unchecked();
-        let (layout, off) = layout
-            .extend(Layout::array::<V>(amount).unwrap_unchecked())
-            .unwrap_unchecked();
-        (layout, off)
+        unsafe {
+            let layout = Layout::array::<K>(amount).unwrap_unchecked();
+            let (layout, off) = layout
+                .extend(Layout::array::<V>(amount).unwrap_unchecked())
+                .unwrap_unchecked();
+            (layout, off)
+        }
     }
 
     /// Get the value offset for the specified allocation.
     #[inline]
     unsafe fn off(amount: usize) -> usize {
-        Self::layout(amount).1
+        unsafe { Self::layout(amount).1 }
     }
 
     /// Set the allocation.
@@ -529,19 +535,23 @@ impl<K, V> PairVec<K, V> {
     /// Get raw mut pointers to ith key, value.
     #[inline]
     unsafe fn ixmp(&mut self, i: usize) -> (*mut K, *mut V) {
-        let off = Self::off(self.alloc as usize);
-        let kp = self.p.as_ptr().cast::<K>().add(i);
-        let vp = self.p.as_ptr().add(off).cast::<V>().add(i);
-        (kp, vp)
+        unsafe {
+            let off = Self::off(self.alloc as usize);
+            let kp = self.p.as_ptr().cast::<K>().add(i);
+            let vp = self.p.as_ptr().add(off).cast::<V>().add(i);
+            (kp, vp)
+        }
     }
 
     /// Get raw const pointers to ith key, value.
     #[inline]
     unsafe fn ixp(&self, i: usize) -> (*const K, *const V) {
-        let off = Self::off(self.alloc as usize);
-        let kp = self.p.as_ptr().cast::<K>().add(i);
-        let vp = self.p.as_ptr().add(off).cast::<V>().add(i);
-        (kp, vp)
+        unsafe {
+            let off = Self::off(self.alloc as usize);
+            let kp = self.p.as_ptr().cast::<K>().add(i);
+            let vp = self.p.as_ptr().add(off).cast::<V>().add(i);
+            (kp, vp)
+        }
     }
 
     /// Get non-mutable reference to ith value.
