@@ -671,6 +671,7 @@ where
                     }
                     c.insert_before_unchecked(k, v);
                 } else {
+                    map.set_tuning(save);
                     return Ok(map);
                 }
             }
