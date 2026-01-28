@@ -90,8 +90,8 @@ impl<K: Clone, V: Clone, A: Tuning> Clone for BTreeMap<K, V, A> {
 impl<K, V> BTreeMap<K, V> {
     /// Returns a new, empty map.
     #[must_use]
-    pub fn new() -> Self {
-        Self::with_tuning(CustomTuning::default())
+    pub const fn new() -> Self {
+        Self::new_in(Global{})
     }
 
     /// Returns a new, empty map with specified allocator.
@@ -105,11 +105,11 @@ impl<K, V> BTreeMap<K, V> {
     /// map.insert("England", "London");
     /// ```
     #[must_use]
-    pub fn new_in<AL>(a: AL) -> BTreeMap<K, V, CustomTuning<AL>>
+    pub const fn new_in<AL>(a: AL) -> BTreeMap<K, V, CustomTuning<AL>>
     where
         AL: Allocator + Clone,
     {
-        BTreeMap::with_tuning(CustomTuning::new_in(32, 8, a))
+        BTreeMap::with_tuning(CustomTuning::new_in_def(a))
     }
 }
 
@@ -129,7 +129,7 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     ///     println!("The capital of France is {}", mymap["France"]);
     /// ```
     #[must_use]
-    pub fn with_tuning(atune: A) -> Self {
+    pub const fn with_tuning(atune: A) -> Self {
         Self {
             len: 0,
             tree: Tree::new(),
@@ -743,7 +743,7 @@ impl<AL: Allocator + Clone> CustomTuning<AL> {
     }
 
     /// Construct with specified branch, allocation unit and allocator.
-    pub fn new_in(branch: u16, alloc_unit: u16, alloc: AL) -> Self {
+    pub const fn new_in(branch: u16, alloc_unit: u16, alloc: AL) -> Self {
         assert!(branch >= 6);
         assert!(alloc_unit > 0);
         Self {
@@ -752,6 +752,11 @@ impl<AL: Allocator + Clone> CustomTuning<AL> {
             seq: false,
             allocator: alloc,
         }
+    }
+
+    /// Construct with specified allocator.
+    pub const fn new_in_def(alloc: AL) -> Self {
+        Self::new_in(64, 16, alloc)
     }
 }
 impl<AL: Allocator + Clone + Default> Default for CustomTuning<AL> {
@@ -857,7 +862,7 @@ impl<K, V> Default for Tree<K, V> {
 }
 
 impl<K, V> Tree<K, V> {
-    fn new() -> Self {
+    const fn new() -> Self {
         Tree::L(Leaf::new())
     }
 
@@ -1035,7 +1040,7 @@ impl<K, V> Default for Leaf<K, V> {
 struct Leaf<K, V>(PairVec<K, V>);
 
 impl<K, V> Leaf<K, V> {
-    fn new() -> Self {
+    const fn new() -> Self {
         Self(PairVec::new())
     }
 
