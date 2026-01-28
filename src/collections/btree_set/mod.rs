@@ -9,10 +9,12 @@ pub struct BTreeSet<T, A: Tuning = DefaultTuning> {
 }
 
 impl<T> BTreeSet<T> {
-    /// Makes a new, empty `BTreeSet`.
+    /// Returns a new, empty `BTreeSet`.
     #[must_use]
-    pub fn new() -> BTreeSet<T> {
-        BTreeSet { map: BTreeMap::new() }
+    pub const fn new() -> BTreeSet<T> {
+        BTreeSet {
+            map: BTreeMap::new(),
+        }
     }
 }
 
@@ -21,7 +23,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     pub const fn len(&self) -> usize {
         self.map.len()
     }
-    
+
     /// Does the set have any elements
     pub const fn is_empty(&self) -> bool {
         self.map.is_empty()
@@ -29,10 +31,12 @@ impl<T, A: Tuning> BTreeSet<T, A> {
 
     /// Returns new set with specified tuning
     #[must_use]
-    pub fn new_in(tuning: A) -> BTreeSet<T, A> {
-        BTreeSet { map: BTreeMap::with_tuning(tuning) }
+    pub const fn new_in(tuning: A) -> BTreeSet<T, A> {
+        BTreeSet {
+            map: BTreeMap::with_tuning(tuning),
+        }
     }
-    
+
     /// Clears the set, removing all elements.
     pub fn clear(&mut self) {
         self.map.clear();
