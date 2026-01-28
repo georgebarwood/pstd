@@ -1866,11 +1866,13 @@ impl<K: Debug, V: Debug, A: Tuning> Debug for IntoIter<K, V, A> {
             .finish()
     }
 }
+
 impl<K, V> Default for IntoIter<K, V> {
     fn default() -> Self {
         BTreeMap::new().into_iter()
     }
 }
+
 impl<K, V, A: Tuning> Iterator for IntoIter<K, V, A> {
     type Item = (K, V);
     fn next(&mut self) -> Option<Self::Item> {
