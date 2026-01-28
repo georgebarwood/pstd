@@ -2,11 +2,11 @@
 
 use crate::collections::btree_map::*;
 use std::borrow::Borrow;
-use std::fmt::{self, Debug};
-use std::iter::FusedIterator;
-use std::hash::Hasher;
-use std::hash::Hash;
 use std::cmp::Ordering;
+use std::fmt::{self, Debug};
+use std::hash::Hash;
+use std::hash::Hasher;
+use std::iter::FusedIterator;
 
 /// `BTreeSet` similar to [`std::collections::BTreeSet`].
 /// An ordered set based on a B-Tree.
@@ -222,7 +222,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         Q: Ord,
     {
         self.map.get_key_value(value).map(|(k, _)| k)
-    }  
+    }
 
     /// Retains only the elements specified by the predicate.
     ///
@@ -244,7 +244,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         T: Ord,
         F: FnMut(&T) -> bool,
     {
-        self.map.retain(|k,_|{f(k)});
+        self.map.retain(|k, _| f(k));
     }
 
     /// Moves all elements from `other` into `self`, leaving `other` empty.
@@ -299,9 +299,106 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// assert_eq!(set_iter.next(), None);
     /// ```
     pub fn iter(&self) -> Iter<'_, T> {
-        Iter { iter: self.map.keys() }
+        Iter {
+            iter: self.map.keys(),
+        }
     }
-    
+
+    /// Returns a reference to the first element in the set, if any.
+    /// This element is always the minimum of all elements in the set.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    /// assert_eq!(set.first(), None);
+    /// set.insert(1);
+    /// assert_eq!(set.first(), Some(&1));
+    /// set.insert(2);
+    /// assert_eq!(set.first(), Some(&1));
+    /// ```
+    #[must_use]
+    pub fn first(&self) -> Option<&T>
+    where
+        T: Ord,
+    {
+        self.map.first_key_value().map(|(k, _)| k)
+    }
+
+    /// Returns a reference to the last element in the set, if any.
+    /// This element is always the maximum of all elements in the set.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    /// assert_eq!(set.last(), None);
+    /// set.insert(1);
+    /// assert_eq!(set.last(), Some(&1));
+    /// set.insert(2);
+    /// assert_eq!(set.last(), Some(&2));
+    /// ```
+    #[must_use]
+    pub fn last(&self) -> Option<&T>
+    where
+        T: Ord,
+    {
+        self.map.last_key_value().map(|(k, _)| k)
+    }
+
+    /// Removes the first element from the set and returns it, if any.
+    /// The first element is always the minimum element in the set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    ///
+    /// set.insert(1);
+    /// while let Some(n) = set.pop_first() {
+    ///     assert_eq!(n, 1);
+    /// }
+    /// assert!(set.is_empty());
+    /// ```
+    pub fn pop_first(&mut self) -> Option<T>
+    where
+        T: Ord,
+    {
+        self.map.pop_first().map(|kv| kv.0)
+    }
+
+    /// Removes the last element from the set and returns it, if any.
+    /// The last element is always the maximum element in the set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    ///
+    /// set.insert(1);
+    /// while let Some(n) = set.pop_last() {
+    ///     assert_eq!(n, 1);
+    /// }
+    /// assert!(set.is_empty());
+    /// ```
+    pub fn pop_last(&mut self) -> Option<T>
+    where
+        T: Ord,
+    {
+        self.map.pop_last().map(|kv| kv.0)
+    }
 } // end impl BTreeSet
 
 // start impl for BTreeSet
@@ -323,8 +420,7 @@ impl<T: Ord, const N: usize> From<[T; N]> for BTreeSet<T> {
     /// ```
     fn from(arr: [T; N]) -> Self {
         let mut result = BTreeSet::new();
-        for e in arr
-        {
+        for e in arr {
             result.insert(e);
         }
         result
@@ -359,7 +455,9 @@ impl<T: Ord, A: Tuning> Ord for BTreeSet<T, A> {
 
 impl<T: Clone, A: Tuning> Clone for BTreeSet<T, A> {
     fn clone(&self) -> Self {
-        BTreeSet { map: self.map.clone() }
+        BTreeSet {
+            map: self.map.clone(),
+        }
     }
 
     fn clone_from(&mut self, source: &Self) {
@@ -390,7 +488,9 @@ impl<T, A: Tuning> IntoIterator for BTreeSet<T, A> {
     /// assert_eq!(v, [1, 2, 3, 4]);
     /// ```
     fn into_iter(self) -> IntoIter<T, A> {
-        IntoIter { iter: self.map.into_iter() }
+        IntoIter {
+            iter: self.map.into_iter(),
+        }
     }
 }
 
