@@ -848,7 +848,9 @@ unsafe impl Allocator for ExTuning {
         self.0.allocate(layout)
     }
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        self.0.deallocate(ptr, layout);
+        unsafe {
+            self.0.deallocate(ptr, layout);
+        }
     }
 }
 

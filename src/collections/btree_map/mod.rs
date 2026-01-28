@@ -61,7 +61,6 @@ use vecs::{IntoIterPairVec, IntoIterShortVec, IterMutPairVec, IterPairVec, PairV
 /// to keep track of non-leaf positions.
 ///
 /// Roughly speaking, unsafe code is limited to the vecs module and the implementation of [`CursorMut`] and [`CursorMutKey`].
-
 pub struct BTreeMap<K, V, A: Tuning = DefaultTuning> {
     len: usize,
     tree: Tree<K, V>,
@@ -157,13 +156,13 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
 
     /// Get number of key-value pairs in the map.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.len
     }
 
     /// Is the map empty?
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.len == 0
     }
 
@@ -1230,22 +1229,19 @@ impl<K, V> NonLeafInner<K, V> {
     }
 
     fn remove_at<A: Tuning>(&mut self, i: usize, atune: &A) -> ((K, V), usize) {
-        match self.c.ixm(i).pop_last(atune) {
-            Some(kv) => {
-                let (kp, vp) = self.v.ixbm(i);
-                let k = mem::replace(kp, kv.0);
-                let v = mem::replace(vp, kv.1);
-                ((k, v), i + 1)
+        if let Some(kv) = self.c.ixm(i).pop_last(atune) {
+            let (kp, vp) = self.v.ixbm(i);
+            let k = mem::replace(kp, kv.0);
+            let v = mem::replace(vp, kv.1);
+            ((k, v), i + 1)
+        } else {
+            self.c.remove(i);
+            let kv = self.v.remove(i);
+            if let Some(na) = atune.space_action(self.v.state()) {
+                self.v.set_alloc(na, atune);
+                self.c.set_alloc(na + 1, atune);
             }
-            _ => {
-                self.c.remove(i);
-                let kv = self.v.remove(i);
-                if let Some(na) = atune.space_action(self.v.state()) {
-                    self.v.set_alloc(na, atune);
-                    self.c.set_alloc(na + 1, atune);
-                }
-                (kv, i)
-            }
+            (kv, i)
         }
     }
 
@@ -1322,41 +1318,35 @@ impl<K, V> NonLeafInner<K, V> {
     }
 
     fn pop_first<A: Tuning>(&mut self, atune: &A) -> Option<(K, V)> {
-        match self.c.ixm(0).pop_first(atune) {
-            Some(x) => Some(x),
-            _ => {
-                if self.v.is_empty() {
-                    None
-                } else {
-                    self.c.remove(0);
-                    let result = Some(self.v.remove(0));
-                    if let Some(na) = atune.space_action(self.v.state()) {
-                        self.v.set_alloc(na, atune);
-                        self.c.set_alloc(na + 1, atune);
-                    }
-                    result
-                }
+        if let Some(x) = self.c.ixm(0).pop_first(atune) {
+            Some(x)
+        } else if self.v.is_empty() {
+            None
+        } else {
+            self.c.remove(0);
+            let result = Some(self.v.remove(0));
+            if let Some(na) = atune.space_action(self.v.state()) {
+                self.v.set_alloc(na, atune);
+                self.c.set_alloc(na + 1, atune);
             }
+            result
         }
     }
 
     fn pop_last<A: Tuning>(&mut self, atune: &A) -> Option<(K, V)> {
         let i = self.c.len();
-        match self.c.ixm(i - 1).pop_last(atune) {
-            Some(x) => Some(x),
-            _ => {
-                if self.v.is_empty() {
-                    None
-                } else {
-                    self.c.pop();
-                    let result = self.v.pop();
-                    if let Some(na) = atune.space_action(self.v.state()) {
-                        self.v.set_alloc(na, atune);
-                        self.c.set_alloc(na + 1, atune);
-                    }
-                    result
-                }
+        if let Some(x) = self.c.ixm(i - 1).pop_last(atune) {
+            Some(x)
+        } else if self.v.is_empty() {
+            None
+        } else {
+            self.c.pop();
+            let result = self.v.pop();
+            if let Some(na) = atune.space_action(self.v.state()) {
+                self.v.set_alloc(na, atune);
+                self.c.set_alloc(na + 1, atune);
             }
+            result
         }
     }
 } // End impl NonLeafInner
@@ -2752,15 +2742,15 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     where
         K: Ord,
     {
-        if let Some((prev, _)) = self.peek_prev() {
-            if &key <= prev {
-                return Err(UnorderedKeyError {});
-            }
+        if let Some((prev, _)) = self.peek_prev()
+            && &key <= prev
+        {
+            return Err(UnorderedKeyError {});
         }
-        if let Some((next, _)) = self.peek_next() {
-            if &key >= next {
-                return Err(UnorderedKeyError {});
-            }
+        if let Some((next, _)) = self.peek_next()
+            && &key >= next
+        {
+            return Err(UnorderedKeyError {});
         }
         self.insert_before_unchecked(key, value);
         Ok(())
@@ -2771,15 +2761,15 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     where
         K: Ord,
     {
-        if let Some((prev, _)) = self.peek_prev() {
-            if &key <= prev {
-                return Err(UnorderedKeyError {});
-            }
+        if let Some((prev, _)) = self.peek_prev()
+            && &key <= prev
+        {
+            return Err(UnorderedKeyError {});
         }
-        if let Some((next, _)) = self.peek_next() {
-            if &key >= next {
-                return Err(UnorderedKeyError {});
-            }
+        if let Some((next, _)) = self.peek_next()
+            && &key >= next
+        {
+            return Err(UnorderedKeyError {});
         }
         self.insert_after_unchecked(key, value);
         Ok(())

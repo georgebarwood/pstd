@@ -49,7 +49,7 @@ impl<T> Default for ShortVec<T> {
 
 impl<T> ShortVec<T> {
     /// Construct a new empty ShortVec.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             len: 0,
             alloc: 0,
@@ -315,7 +315,7 @@ unsafe impl<K: Sync, V: Sync> Sync for PairVec<K, V> {}
 
 impl<K, V> PairVec<K, V> {
     /// Construct an empty vec.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             p: NonNull::dangling(),
             len: 0,
