@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "1.0.9"
+version = "1.0.11"
 edition = "2024"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
@@ -19,13 +19,14 @@ criterion = "0.5.1"
 bincode = "1.3.3"
 rand = "0.8.5"
 
+# Note: lib.cs needs to be edited and nightly must be used to for -F tests.
 [features]
 serde = ["dep:serde"]
 unsafe-optim = []
 cap = []
 mytests = ["serde"]
 stdtests = []
-tests = ["mytests", "stdtests"]
+tests = ["mytests", "stdtests"] 
 
 [[bench]]
 name = "crit_bench"
