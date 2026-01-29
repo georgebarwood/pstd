@@ -91,7 +91,7 @@ impl<K, V> BTreeMap<K, V> {
     /// Returns a new, empty map.
     #[must_use]
     pub const fn new() -> Self {
-        Self::new_in(Global{})
+        Self::new_in(Global {})
     }
 
     /// Returns a new, empty map with specified allocator.
