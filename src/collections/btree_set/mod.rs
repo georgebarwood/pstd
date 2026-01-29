@@ -76,11 +76,33 @@ impl<T> BTreeSet<T> {
 
 impl<T, A: Tuning> BTreeSet<T, A> {
     /// Returns number of elements in the set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut v = BTreeSet::new();
+    /// assert_eq!(v.len(), 0);
+    /// v.insert(1);
+    /// assert_eq!(v.len(), 1);
+    /// ```
     pub const fn len(&self) -> usize {
         self.map.len()
     }
 
     /// Does the set have any elements
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut v = BTreeSet::new();
+    /// assert!(v.is_empty());
+    /// v.insert(1);
+    /// assert!(!v.is_empty());
+    /// ```
     pub const fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
@@ -110,6 +132,19 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     }
 
     /// Adds a value to the set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    /// set.insert(Vec::<i32>::new());
+    ///
+    /// assert_eq!(set.get(&[][..]).unwrap().capacity(), 0);
+    /// set.replace(Vec::with_capacity(10));
+    /// assert_eq!(set.get(&[][..]).unwrap().capacity(), 10);
+    /// ```
     pub fn insert(&mut self, value: T) -> bool
     where
         T: Ord,
@@ -118,6 +153,18 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     }
 
     /// Remove element from set
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    ///
+    /// set.insert(2);
+    /// assert_eq!(set.remove(&2), true);
+    /// assert_eq!(set.remove(&2), false);
+    /// ```
     pub fn remove<Q: ?Sized>(&mut self, value: &Q) -> bool
     where
         T: Borrow<Q> + Ord,
@@ -427,6 +474,13 @@ impl<T: Ord, const N: usize> From<[T; N]> for BTreeSet<T> {
     }
 }
 
+impl<T> Default for BTreeSet<T> {
+    /// Creates an empty `BTreeSet`.
+    fn default() -> BTreeSet<T> {
+        BTreeSet::new()
+    }
+}
+
 impl<T: Hash, A: Tuning> Hash for BTreeSet<T, A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.map.hash(state)
@@ -618,3 +672,13 @@ where
 */
 
 // end impl for IntoIter
+
+/// ToDo
+pub struct Intersection<'a, T>
+{
+    _a: Iter<'a, T>,
+    _b: Iter<'a, T>,
+}
+
+
+    
