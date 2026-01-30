@@ -165,10 +165,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// assert_eq!(set.remove(&2), true);
     /// assert_eq!(set.remove(&2), false);
     /// ```
-    pub fn remove<Q: ?Sized>(&mut self, value: &Q) -> bool
+    pub fn remove<Q>(&mut self, value: &Q) -> bool
     where
         T: Borrow<Q> + Ord,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.map.remove(value).is_some()
     }
@@ -188,10 +188,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// assert_eq!(set.take(&2), Some(2));
     /// assert_eq!(set.take(&2), None);
     /// ```
-    pub fn take<Q: ?Sized>(&mut self, value: &Q) -> Option<T>
+    pub fn take<Q>(&mut self, value: &Q) -> Option<T>
     where
         T: Borrow<Q> + Ord,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.map.remove_entry(value).map(|(k, _)| k)
     }
@@ -216,10 +216,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         T: Ord,
     {
         // self.map.replace(value); // optimised version is todo
-        let result = match self.map.remove_entry(&value) {
-            None => None,
-            Some((k, _v)) => Some(k),
-        };
+        let result = self.map.remove_entry(&value).map(|(k, _v)| k);
         self.insert(value);
         result
     }
@@ -239,10 +236,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// assert_eq!(set.contains(&1), true);
     /// assert_eq!(set.contains(&4), false);
     /// ```
-    pub fn contains<Q: ?Sized>(&self, value: &Q) -> bool
+    pub fn contains<Q>(&self, value: &Q) -> bool
     where
         T: Borrow<Q> + Ord,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.map.contains_key(value)
     }
@@ -263,10 +260,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// assert_eq!(set.get(&2), Some(&2));
     /// assert_eq!(set.get(&4), None);
     /// ```
-    pub fn get<Q: ?Sized>(&self, value: &Q) -> Option<&T>
+    pub fn get<Q>(&self, value: &Q) -> Option<&T>
     where
         T: Borrow<Q> + Ord,
-        Q: Ord,
+        Q: ?Sized + Ord,
     {
         self.map.get_key_value(value).map(|(k, _)| k)
     }
@@ -680,5 +677,28 @@ pub struct Intersection<'a, T>
     _b: Iter<'a, T>,
 }
 
+/// ToDo
+pub struct CursorMutKey<
+    'a,
+    T: 'a,
+    A: Tuning = DefaultTuning,
+> 
+{
+    inner: super::btree_map::CursorMutKey<'a, T, (), A>,
+}
 
-    
+impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
+    /// Inserts a new element into the set in the gap that the
+    /// cursor is currently pointing to.
+    ///
+    /// After the insertion the cursor will be pointing at the gap before the
+    /// newly inserted element.
+    ///
+    /// If the inserted element is not greater than the element before the
+    /// cursor (if any), or if it not less than the element after the cursor (if
+    /// any), then an [`UnorderedKeyError`] is returned since this would
+    /// invalidate the [`Ord`] invariant between the elements of the set.
+    pub fn insert_after(&mut self, value: T) -> Result<(), UnorderedKeyError> {
+        self.inner.insert_after(value, ())
+    }
+}
