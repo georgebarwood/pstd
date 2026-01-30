@@ -171,7 +171,7 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     where
         K: Ord,
     {
-        let cursor = self.lower_bound_mut(Bound::Included(&key));
+        let mut cursor = self.lower_bound_mut(Bound::Included(&key));
         let found = if let Some(kv) = cursor.peek_next() {
             kv.0 == &key
         } else {
@@ -236,6 +236,7 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     ///
     /// If the map already had this key present, nothing is updated, and
     /// an error containing the occupied entry and the value is returned.
+    #[allow(clippy::result_large_err)]
     pub fn try_insert(&mut self, key: K, value: V) -> Result<&mut V, OccupiedError<'_, K, V, A>>
     where
         K: Ord,
@@ -1534,7 +1535,7 @@ where
     /// Get reference to entry key.
     #[must_use]
     pub fn key(&self) -> &K {
-        self.cursor.peek_next().unwrap().0
+        self.cursor.0.peek_next_nonmut().unwrap().0
     }
 
     /// Remove (key,value) from map, returning key and value.
@@ -1552,7 +1553,7 @@ where
     /// Get reference to the value.
     #[must_use]
     pub fn get(&self) -> &V {
-        self.cursor.peek_next().unwrap().1
+        self.cursor.0.peek_next_nonmut().unwrap().1
     }
 
     /// Get mutable reference to the value.
@@ -2498,7 +2499,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("ExtractIf")
-            .field(&self.source.peek_next())
+            .field(&self.source.0.peek_next_nonmut())
             .finish()
     }
 }
@@ -2604,14 +2605,14 @@ impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
 
     /// Get references to the next key/value pair.
     #[must_use]
-    pub fn peek_next(&self) -> Option<(&K, &mut V)> {
+    pub fn peek_next(&mut self) -> Option<(&K, &mut V)> {
         let (k, v) = self.0.peek_next()?;
         Some((&*k, v))
     }
 
     /// Get references to the previous key/value pair.
     #[must_use]
-    pub fn peek_prev(&self) -> Option<(&K, &mut V)> {
+    pub fn peek_prev(&mut self) -> Option<(&K, &mut V)> {
         let (k, v) = self.0.peek_prev()?;
         Some((&*k, v))
     }
@@ -2960,7 +2961,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
 
     /// Returns mutable references to the next key/value pair.
     #[must_use]
-    pub fn peek_next(&self) -> Option<(&mut K, &mut V)> {
+    pub fn peek_next(&mut self) -> Option<(&mut K, &mut V)> {
         unsafe {
             if self.index == (*self.leaf).0.len() {
                 self.peek_next_cold()
@@ -2970,8 +2971,20 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
         }
     }
 
+    /// Returns references to the next key/value pair.
+    #[must_use]
+    pub fn peek_next_nonmut(&self) -> Option<(&K, &V)> {
+        unsafe {
+            if self.index == (*self.leaf).0.len() {
+                self.peek_next_cold_nonmut()
+            } else {
+                Some((*self.leaf).0.ix(self.index))
+            }
+        }
+    }
+
     #[cold]
-    fn peek_next_cold(&self) -> Option<(&mut K, &mut V)> {
+    fn peek_next_cold(&mut self) -> Option<(&mut K, &mut V)> {
         unsafe {
             for (nl, ix) in self.stack.iter().rev() {
                 if *ix < (**nl).v.len() {
@@ -2982,9 +2995,21 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
         }
     }
 
+    #[cold]
+    fn peek_next_cold_nonmut(&self) -> Option<(&K, &V)> {
+        unsafe {
+            for (nl, ix) in self.stack.iter().rev() {
+                if *ix < (**nl).v.len() {
+                    return Some((**nl).v.ix(*ix));
+                }
+            }
+            None
+        }
+    }
+
     /// Returns mutable references to the previous key/value pair.
     #[must_use]
-    pub fn peek_prev(&self) -> Option<(&mut K, &mut V)> {
+    pub fn peek_prev(&mut self) -> Option<(&mut K, &mut V)> {
         unsafe {
             if self.index == 0 {
                 self.peek_prev_cold()
@@ -2995,7 +3020,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     }
 
     #[cold]
-    fn peek_prev_cold(&self) -> Option<(&mut K, &mut V)> {
+    fn peek_prev_cold(&mut self) -> Option<(&mut K, &mut V)> {
         unsafe {
             for (nl, ix) in self.stack.iter().rev() {
                 if *ix > 0 {
