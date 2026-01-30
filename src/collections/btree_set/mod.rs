@@ -606,6 +606,60 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     {
         CursorMut { inner: self.map.upper_bound_mut(bound) }
     }
+
+    /// Creates an iterator that visits elements in the specified range in ascending order and
+    /// uses a closure to determine if an element should be removed.
+    ///
+    /// If the closure returns `true`, the element is removed from the set and
+    /// yielded. If the closure returns `false`, or panics, the element remains
+    /// in the set and will not be yielded.
+    ///
+    /// If the returned `ExtractIf` is not exhausted, e.g. because it is dropped without iterating
+    /// or the iteration short-circuits, then the remaining elements will be retained.
+    /// Use `extract_if().for_each(drop)` if you do not need the returned iterator,
+    /// or [`retain`] with a negated predicate if you also do not need to restrict the range.
+    ///
+    /// [`retain`]: BTreeSet::retain
+        /// Creates an iterator that visits elements in the specified range in ascending order and
+    /// uses a closure to determine if an element should be removed.
+    ///
+    /// If the closure returns `true`, the element is removed from the set and
+    /// yielded. If the closure returns `false`, or panics, the element remains
+    /// in the set and will not be yielded.
+    ///
+    /// If the returned `ExtractIf` is not exhausted, e.g. because it is dropped without iterating
+    /// or the iteration short-circuits, then the remaining elements will be retained.
+    /// Use `extract_if().for_each(drop)` if you do not need the returned iterator,
+    /// or [`retain`] with a negated predicate if you also do not need to restrict the range.
+    ///
+    /// [`retain`]: BTreeSet::retain
+        /// # Examples
+    ///
+    /// ```
+    /// use std::collections::BTreeSet;
+    ///
+    /// // Splitting a set into even and odd values, reusing the original set:
+    /// let mut set: BTreeSet<i32> = (0..8).collect();
+    /// let evens: BTreeSet<_> = set.extract_if(.., |v| v % 2 == 0).collect();
+    /// let odds = set;
+    /// assert_eq!(evens.into_iter().collect::<Vec<_>>(), vec![0, 2, 4, 6]);
+    /// assert_eq!(odds.into_iter().collect::<Vec<_>>(), vec![1, 3, 5, 7]);
+    ///
+    /// // Splitting a set into low and high halves, reusing the original set:
+    /// let mut set: BTreeSet<i32> = (0..8).collect();
+    /// let low: BTreeSet<_> = set.extract_if(0..4, |_v| true).collect();
+    /// let high = set;
+    /// assert_eq!(low.into_iter().collect::<Vec<_>>(), [0, 1, 2, 3]);
+    /// assert_eq!(high.into_iter().collect::<Vec<_>>(), [4, 5, 6, 7]);
+    /// ```
+    pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, T, F, A>
+    where
+        T: Ord,
+        F: FnMut(&T) -> bool,
+    {
+        let source = self.lower_bound_mut(Bound::Unbounded);
+        ExtractIf { source, pred }
+    }
     
 } // end impl BTreeSet
 
@@ -683,6 +737,16 @@ impl<T: Clone, A: Tuning> Clone for BTreeSet<T, A> {
 impl<T: Debug, A: Tuning> Debug for BTreeSet<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_set().entries(self.map.iter()).finish() // ToDo - remove map when iter is done.
+    }
+}
+
+impl<K: Ord> FromIterator<K> for BTreeSet<K> {
+    fn from_iter<T: IntoIterator<Item = K>>(iter: T) -> BTreeSet<K> {
+        let mut result = BTreeSet::new();
+        for k in iter {
+            result.insert(k);
+        }
+        result
     }
 }
 
@@ -1038,7 +1102,18 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
     }
 }
 
-/// ToDo
+/// A cursor over a `BTreeSet` with editing operations.
+///
+/// A `Cursor` is like an iterator, except that it can freely seek back-and-forth, and can
+/// safely mutate the set during iteration. This is because the lifetime of its yielded
+/// references is tied to its own lifetime, instead of just the underlying map. This means
+/// cursors cannot yield multiple elements at once.
+///
+/// Cursors always point to a gap between two elements in the set, and can
+/// operate on the two immediately adjacent elements.
+///
+/// A `CursorMut` is created with the [`BTreeSet::lower_bound_mut`] and [`BTreeSet::upper_bound_mut`]
+/// methods.
 pub struct CursorMut<
     'a,
     T: 'a,
@@ -1174,3 +1249,48 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
         CursorMutKey { inner: self.inner.with_mutable_key() }
     }
 }
+
+/// Iterator returned by [`BTreeSet::extract_if`].
+// #[derive(Debug)]
+pub struct ExtractIf<'a, K, F, A: Tuning = DefaultTuning>
+where
+    F: FnMut(&K) -> bool,
+{
+    source: CursorMut<'a, K, A>,
+    pred: F,
+}
+
+impl<K, A: Tuning, F> fmt::Debug for ExtractIf<'_, K, F, A>
+where
+    K: Ord + fmt::Debug,
+    F: FnMut(&K) -> bool,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ExtractIf")
+            // .field(&self.source.peek_next())
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'a, K, A: Tuning, F> Iterator for ExtractIf<'a, K, F, A>
+where
+    K: Ord,
+    F: FnMut(&K) -> bool,
+{
+    type Item = K;
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let k = self.source.peek_next()?;
+            if (self.pred)(k) {
+                return self.source.remove_next();
+            }
+            self.source.next();
+        }
+    }
+}
+impl<'a, K, A: Tuning, F> FusedIterator for ExtractIf<'a, K, F, A> where
+    K: Ord,
+    F: FnMut(&K) -> bool
+{
+}
+
