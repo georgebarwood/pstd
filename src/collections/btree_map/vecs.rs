@@ -575,6 +575,16 @@ impl<K, V> PairVec<K, V> {
         }
     }
 
+    /// Get mutable reference to ith key.
+    #[inline]
+    pub fn ixmk(&mut self, i: usize) -> &mut K {
+        safe_assert!(i < self.len());
+        unsafe {
+            let (kp, _vp) = self.ixmp(i);
+            &mut *kp
+        }
+    }
+
     /// Get non-mutable references to ith key and value.
     #[inline]
     pub fn ix(&self, i: usize) -> (&K, &V) {

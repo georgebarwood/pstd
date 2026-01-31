@@ -369,7 +369,6 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     pub fn split_off<Q: ?Sized + Ord>(&mut self, key: &Q) -> Self
     where
         K: Borrow<Q> + Ord,
-        A: Default,
     {
         let mut map = Self::with_tuning(self.atune.clone());
         let mut from = self.lower_bound_mut(Bound::Included(key));
@@ -837,14 +836,14 @@ where
     use Bound::{Excluded, Included};
     match (range.start_bound(), range.end_bound()) {
         (Included(s) | Excluded(s), Included(e)) | (Included(s), Excluded(e)) => {
-            assert!(e >= s, "range start is greater than range end in BTreeMap");
+            assert!(e >= s, "range start is greater than range end");
         }
         (Excluded(s), Excluded(e)) => {
             assert!(
                 e != s,
-                "range start and end are equal and excluded in BTreeMap"
+                "range start and end are equal and excluded"
             );
-            assert!(e >= s, "range start is greater than range end in BTreeMap");
+            assert!(e >= s, "range start is greater than range end");
         }
         _ => {}
     }
@@ -1422,6 +1421,29 @@ where
         }
     }
 
+    /// Sets the value of the entry, and returns an `OccupiedEntry`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::collections::BTreeMap;
+    ///
+    /// let mut map: BTreeMap<&str, String> = BTreeMap::new();
+    /// let entry = map.entry("poneyland").insert_entry("hoho".to_string());
+    ///
+    /// assert_eq!(entry.key(), &"poneyland");
+    /// ```
+    #[inline]
+    pub fn insert_entry(self, value: V) -> OccupiedEntry<'a, K, V, A> {
+        match self {
+            Entry::Occupied(mut e) => {
+                e.insert(value);
+                e
+            }
+            Entry::Vacant(e) => e.insert_entry(value),
+        }
+    }
+
     /// Insert default value, returning mutable reference to inserted value.
     pub fn or_default(self) -> &'a mut V
     where
@@ -1513,6 +1535,14 @@ where
         self.cursor.insert_after_unchecked(self.key, value);
         self.cursor.into_mut()
     }
+
+    /// Sets the value of the entry with the `VacantEntry`'s key,
+    /// and returns an `OccupiedEntry`.
+    pub fn insert_entry(mut self, value: V) -> OccupiedEntry<'a, K, V, A> 
+    {
+        self.cursor.insert_after_unchecked(self.key, value);
+        OccupiedEntry{ cursor: self.cursor }
+    }
 }
 
 /// Occupied [Entry].
@@ -1536,6 +1566,11 @@ where
     #[must_use]
     pub fn key(&self) -> &K {
         self.cursor.0.peek_next_nonmut().unwrap().0
+    }
+    
+    /// Converts the entry into a reference to its key.
+    pub(crate) fn into_key(self) -> &'a K {
+        self.cursor.into_mutk()
     }
 
     /// Remove (key,value) from map, returning key and value.
@@ -2633,6 +2668,11 @@ impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
     fn into_mut(self) -> &'a mut V {
         self.0.into_mut()
     }
+
+    /// This is needed for the implementation of the [Entry] API.
+    fn into_mutk(self) -> &'a mut K {
+        self.0.into_mutk()
+    }
 }
 
 impl<K: Debug, V: Debug, A: Tuning> Debug for CursorMut<'_, K, V, A> {
@@ -3051,6 +3091,11 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
     /// This is needed for the implementation of the [Entry] API.
     fn into_mut(self) -> &'a mut V {
         unsafe { (*self.leaf).0.ixmv(self.index) }
+    }
+
+    /// This is needed for the implementation of the [Entry] API.
+    fn into_mutk(self) -> &'a mut K {
+        unsafe { (*self.leaf).0.ixmk(self.index) }
     }
 }
 
