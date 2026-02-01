@@ -207,7 +207,7 @@ where
 
 /// Default implementation of Allocator.
 #[derive(Clone, Default)]
-pub struct Global {}
+pub struct Global;
 unsafe impl Allocator for Global {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
         match layout.size() {

@@ -1,9 +1,8 @@
 #![deny(missing_docs)]
-
 // To run cargo test -F tests or cargo bench, use Nightly ( rustup default nightly ) and enable line below
 // #![cfg_attr(test, feature(btree_cursors, assert_matches))]
 
-//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [`collections::btree_map`].
+//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [`collections::BTreeMap`] and [`collections::BTreeSet`].
 
 /// Memory allocation.
 pub mod alloc;
@@ -17,4 +16,6 @@ pub mod collections {
     pub mod btree_set;
 
     pub use btree_set::BTreeSet;
+
+    mod merge_iter;
 }
