@@ -91,7 +91,7 @@ impl<K, V> BTreeMap<K, V> {
     /// Returns a new, empty map.
     #[must_use]
     pub const fn new() -> Self {
-        Self::new_in(Global {})
+        Self::new_in(Global)
     }
 
     /// Returns a new, empty map with specified allocator.
@@ -100,7 +100,7 @@ impl<K, V> BTreeMap<K, V> {
     ///
     /// ```
     /// use pstd::{ alloc::Global, collections::btree_map::{BTreeMap,CustomTuning} };
-    /// let a = Global {};
+    /// let a = Global;
     /// let mut map = BTreeMap::new_in(a);
     /// map.insert("England", "London");
     /// ```
@@ -137,14 +137,14 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
         }
     }
 
+    /// Set sequential allocation. Returns current setting.
+    pub fn set_seq(&mut self, x: bool) -> bool {
+        self.atune.set_seq(x)
+    }
+
     /// Get a cloned copy of the tuning.
     pub fn get_tuning(&self) -> A {
         self.atune.clone()
-    }
-
-    /// Update the allocation tuning for the map, returns the replaced tuning.
-    pub fn set_tuning(&mut self, atune: A) -> A {
-        mem::replace(&mut self.atune, atune)
     }
 
     /// Clear the map.
@@ -655,9 +655,7 @@ where
         M: MapAccess<'de>,
     {
         let mut map = BTreeMap::new();
-        let mut tuning = map.get_tuning();
-        tuning.set_seq();
-        let save = map.set_tuning(tuning);
+        let save = map.set_seq(true);
         {
             let mut c = map.lower_bound_mut(Bound::Unbounded);
             loop {
@@ -670,12 +668,12 @@ where
                     }
                     c.insert_before_unchecked(k, v);
                 } else {
-                    map.set_tuning(save);
+                    map.set_seq(save);
                     return Ok(map);
                 }
             }
         }
-        map.set_tuning(save);
+        map.set_seq(save);
         while let Some((k, v)) = access.next_entry()? {
             map.insert(k, v);
         }
@@ -712,7 +710,7 @@ pub trait Tuning: Clone + Allocator {
     /// Returns the new allocation if the allocation should be reduced based on the current length and allocation.
     fn space_action(&self, state: (usize, usize)) -> Option<usize>;
     /// Set allocation mode to be optimal for sequential (ordered) inserts.
-    fn set_seq(&mut self);
+    fn set_seq(&mut self, x: bool) -> bool;
 }
 
 /// Default allocation tuning.
@@ -799,8 +797,10 @@ impl<AL: Allocator + Clone> Tuning for CustomTuning<AL> {
             None
         }
     }
-    fn set_seq(&mut self) {
-        self.seq = true;
+    fn set_seq(&mut self, x: bool) -> bool {
+        let result = self.seq;
+        self.seq = x;
+        result
     }
 }
 unsafe impl<AL: Allocator + Clone> Allocator for CustomTuning<AL> {
@@ -839,10 +839,7 @@ where
             assert!(e >= s, "range start is greater than range end");
         }
         (Excluded(s), Excluded(e)) => {
-            assert!(
-                e != s,
-                "range start and end are equal and excluded"
-            );
+            assert!(e != s, "range start and end are equal and excluded");
             assert!(e >= s, "range start is greater than range end");
         }
         _ => {}
@@ -1538,10 +1535,11 @@ where
 
     /// Sets the value of the entry with the `VacantEntry`'s key,
     /// and returns an `OccupiedEntry`.
-    pub fn insert_entry(mut self, value: V) -> OccupiedEntry<'a, K, V, A> 
-    {
+    pub fn insert_entry(mut self, value: V) -> OccupiedEntry<'a, K, V, A> {
         self.cursor.insert_after_unchecked(self.key, value);
-        OccupiedEntry{ cursor: self.cursor }
+        OccupiedEntry {
+            cursor: self.cursor,
+        }
     }
 }
 
@@ -1567,7 +1565,7 @@ where
     pub fn key(&self) -> &K {
         self.cursor.0.peek_next_nonmut().unwrap().0
     }
-    
+
     /// Converts the entry into a reference to its key.
     pub(crate) fn into_key(self) -> &'a K {
         self.cursor.into_mutk()

@@ -446,10 +446,10 @@ fn mut_cursor_test() {
     a.insert(2, "b");
     a.insert(3, "c");
     a.insert(4, "d");
-    let cursor = a.lower_bound_mut(Bound::Included(&2));
+    let mut cursor = a.lower_bound_mut(Bound::Included(&2));
     assert_eq!(cursor.peek_prev(), Some((&1, &mut "a")));
     assert_eq!(cursor.peek_next(), Some((&2, &mut "b")));
-    let cursor = a.lower_bound_mut(Bound::Excluded(&2));
+    let mut cursor = a.lower_bound_mut(Bound::Excluded(&2));
     assert_eq!(cursor.peek_prev(), Some((&2, &mut "b")));
     assert_eq!(cursor.peek_next(), Some((&3, &mut "c")));
 
@@ -458,10 +458,10 @@ fn mut_cursor_test() {
     a.insert(2, "b");
     a.insert(3, "c");
     a.insert(4, "d");
-    let cursor = a.upper_bound_mut(Bound::Included(&3));
+    let mut cursor = a.upper_bound_mut(Bound::Included(&3));
     assert_eq!(cursor.peek_prev(), Some((&3, &mut "c")));
     assert_eq!(cursor.peek_next(), Some((&4, &mut "d")));
-    let cursor = a.upper_bound_mut(Bound::Excluded(&3));
+    let mut cursor = a.upper_bound_mut(Bound::Excluded(&3));
     assert_eq!(cursor.peek_prev(), Some((&2, &mut "b")));
     assert_eq!(cursor.peek_next(), Some((&3, &mut "c")));
 }

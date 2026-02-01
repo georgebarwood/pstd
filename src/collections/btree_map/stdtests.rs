@@ -634,7 +634,7 @@ fn test_range_mut() {
     map.check();
 }
 
-#[should_panic(expected = "range start is greater than range end in BTreeMap")]
+#[should_panic(expected = "range start is greater than range end")]
 #[test]
 fn test_range_panic_1() {
     let mut map = BTreeMap::new();
@@ -645,7 +645,7 @@ fn test_range_panic_1() {
     let _invalid_range = map.range((Included(&8), Included(&3)));
 }
 
-#[should_panic(expected = "range start and end are equal and excluded in BTreeMap")]
+#[should_panic(expected = "range start and end are equal and excluded")]
 #[test]
 fn test_range_panic_2() {
     let mut map = BTreeMap::new();
@@ -656,7 +656,7 @@ fn test_range_panic_2() {
     let _invalid_range = map.range((Excluded(&5), Excluded(&5)));
 }
 
-#[should_panic(expected = "range start and end are equal and excluded in BTreeMap")]
+#[should_panic(expected = "range start and end are equal and excluded")]
 #[test]
 fn test_range_panic_3() {
     let mut map: BTreeMap<i32, ()> = BTreeMap::new();
@@ -1450,7 +1450,7 @@ fn cursor_peek_prev_agrees_with_cursor_mut() {
     assert_matches!(prev, Some((&3, _)));
 
     // Shadow names so the two parts of this test match.
-    let cursor = map.lower_bound_mut(Bound::Excluded(&3));
+    let mut cursor = map.lower_bound_mut(Bound::Excluded(&3));
     assert!(cursor.peek_next().is_none());
 
     let prev = cursor.peek_prev();
