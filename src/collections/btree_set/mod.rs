@@ -1,26 +1,73 @@
 //! [`BTreeSet`] similar to [`std::collections::BTreeSet`].
 
+use super::merge_iter::MergeIterInner;
+use crate::alloc::Allocator;
 use crate::collections::btree_map::*;
 use std::borrow::Borrow;
-use std::cmp::Ordering;
+use std::cmp::{Ordering, max, min};
 use std::fmt::{self, Debug};
-use std::hash::Hash;
-use std::hash::Hasher;
-use std::iter::FusedIterator;
-use std::ops::Bound;
-use std::cmp::min;
-use std::cmp::max;
-use std::ops::RangeBounds;
-use super::merge_iter::MergeIterInner;
-use std::iter::Peekable;
+use std::hash::{Hash, Hasher};
+use std::iter::{FusedIterator, Peekable};
+use std::ops::{BitAnd, BitOr, BitXor, Bound, RangeBounds};
 
 const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 
-/// `BTreeSet` similar to [`std::collections::BTreeSet`].
-/// An ordered set based on a B-Tree.
+/// An ordered set based on a B-Tree similar to [`std::collections::BTreeSet`].
 ///
-/// See [`BTreeMap`]'s documentation for a detailed discussion of this collection's performance
-/// benefits and drawbacks.
+/// # Guide to methods
+///
+/// Set Creation: [`new`], [`new_in`], [`with_tuning`]
+///
+/// Properties: [`len`], [`is_empty`], [`contains`],
+/// [`is_subset`], [`is_superset`], [`is_disjoint`]
+///
+/// Insertion: [`insert`], [`get_or_insert`], [`get_or_insert_with`]
+///
+/// Retrieve: [`get`], [`first`], [`last`]
+///
+/// Removal: [`remove`], [`take`], [`pop_first`], [`pop_last`]
+///
+/// Bulk: [`append`], [`split_off`], [`retain`], [`clear`]
+///
+/// Iterators: [`iter`], [`range`], [`extract_if`], [`union`], [`intersection`]
+/// , [`difference`], [`symmetric_difference`]
+///
+/// Cursors: [`lower_bound`], [`upper_bound`], [`lower_bound_mut`], [`upper_bound_mut`]
+///
+/// [`new`]: BTreeSet::new
+/// [`new_in`]: BTreeSet::new_in
+/// [`with_tuning`]: BTreeSet::with_tuning
+/// [`len`]: BTreeSet::len
+/// [`is_empty`]: BTreeSet::is_empty
+/// [`contains`]: BTreeSet::contains
+/// [`is_subset`]: BTreeSet::is_subset
+/// [`is_superset`]: BTreeSet::is_superset
+/// [`is_disjoint`]: BTreeSet::is_disjoint
+/// [`insert`]: BTreeSet::insert
+/// [`get_or_insert`]: BTreeSet::get_or_insert
+/// [`get_or_insert_with`]: BTreeSet::get_or_insert_with
+/// [`get`]: BTreeSet::get
+/// [`first`]: BTreeSet::first
+/// [`last`]: BTreeSet::last
+/// [`remove`]: BTreeSet::remove
+/// [`take`]: BTreeSet::take
+/// [`pop_first`]: BTreeSet::pop_first
+/// [`pop_last`]: BTreeSet::pop_last
+/// [`append`]: BTreeSet::append
+/// [`split_off`]: BTreeSet::split_off
+/// [`retain`]: BTreeSet::retain
+/// [`clear`]: BTreeSet::clear
+/// [`iter`]: BTreeSet::iter
+/// [`range`]: BTreeSet::range
+/// [`extract_if`]: BTreeSet::extract_if
+/// [`union`]: BTreeSet::union
+/// [`intersection`]: BTreeSet::intersection
+/// [`difference`]: BTreeSet::difference
+/// [`symmetric_difference`]: BTreeSet::symmetric_difference
+/// [`lower_bound`]: BTreeSet::lower_bound
+/// [`upper_bound`]: BTreeSet::upper_bound
+/// [`lower_bound_mut`]: BTreeSet::lower_bound_mut
+/// [`upper_bound_mut`]: BTreeSet::upper_bound_mut
 ///
 /// # Examples
 ///
@@ -66,7 +113,7 @@ pub struct BTreeSet<T, A: Tuning = DefaultTuning> {
 impl<T> BTreeSet<T> {
     /// Returns a new, empty `BTreeSet`.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// # #![allow(unused_mut)]
@@ -80,12 +127,52 @@ impl<T> BTreeSet<T> {
             map: BTreeMap::new(),
         }
     }
+
+    /// Returns new set with specified allocator
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # #![allow(unused_mut)]
+    /// use pstd::collections::BTreeSet;
+    /// use pstd::alloc::Global;
+    ///
+    /// let mut set: BTreeSet<i32> = BTreeSet::new_in(Global);
+    /// ```
+    #[must_use]
+    pub const fn new_in<AL>(a: AL) -> BTreeSet<T, CustomTuning<AL>>
+    where
+        AL: Allocator + Clone,
+    {
+        BTreeSet {
+            map: BTreeMap::with_tuning(CustomTuning::new_in_def(a)),
+        }
+    }
 }
 
 impl<T, A: Tuning> BTreeSet<T, A> {
+    /// Returns a new, empty set with specified tuning.
+    ///
+    /// # Example
+    ///
+    /// ```
+    ///     use pstd::collections::BTreeSet;
+    ///     use pstd::collections::btree_map::DefaultTuning;
+    ///     let mut set = BTreeSet::with_tuning(DefaultTuning::new(8,2));
+    ///     set.insert("England");
+    ///     set.insert("France");
+    ///     assert!(set.contains("England"));
+    /// ```
+    #[must_use]
+    pub const fn with_tuning(atune: A) -> Self {
+        Self {
+            map: BTreeMap::with_tuning(atune),
+        }
+    }
+
     /// Returns number of elements in the set
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -101,7 +188,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
 
     /// Does the set have any elements
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -115,17 +202,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         self.map.is_empty()
     }
 
-    /// Returns new set with specified tuning
-    #[must_use]
-    pub const fn new_in(tuning: A) -> BTreeSet<T, A> {
-        BTreeSet {
-            map: BTreeMap::with_tuning(tuning),
-        }
-    }
-
     /// Clears the set, removing all elements.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -141,7 +220,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
 
     /// Adds a value to the set.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -162,7 +241,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
 
     /// Remove element from set
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use std::collections::BTreeSet;
@@ -187,7 +266,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// but the ordering on the borrowed form *must* match the
     /// ordering on the element type.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -207,7 +286,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Adds a value to the set, replacing the existing element, if any, that is
     /// equal to the value. Returns the replaced element.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -235,7 +314,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// but the ordering on the borrowed form *must* match the
     /// ordering on the element type.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -259,7 +338,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// but the ordering on the borrowed form *must* match the
     /// ordering on the element type.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -279,7 +358,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Inserts the given `value` into the set if it is not present, then
     /// returns a reference to the value in the set.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     ///
@@ -302,7 +381,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Inserts a value computed from `f` into the set if the given `value` is
     /// not present, then returns a reference to the value in the set.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     ///
@@ -335,7 +414,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// In other words, remove all elements `e` for which `f(&e)` returns `false`.
     /// The elements are visited in ascending order.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -353,9 +432,185 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         self.map.retain(|k, _| f(k));
     }
 
+    /// Returns a reference to the first element in the set, if any.
+    /// This element is always the minimum of all elements in the set.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    /// assert_eq!(set.first(), None);
+    /// set.insert(1);
+    /// assert_eq!(set.first(), Some(&1));
+    /// set.insert(2);
+    /// assert_eq!(set.first(), Some(&1));
+    /// ```
+    #[must_use]
+    pub fn first(&self) -> Option<&T>
+    where
+        T: Ord,
+    {
+        self.map.first_key_value().map(|(k, _)| k)
+    }
+
+    /// Returns a reference to the last element in the set, if any.
+    /// This element is always the maximum of all elements in the set.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    /// assert_eq!(set.last(), None);
+    /// set.insert(1);
+    /// assert_eq!(set.last(), Some(&1));
+    /// set.insert(2);
+    /// assert_eq!(set.last(), Some(&2));
+    /// ```
+    #[must_use]
+    pub fn last(&self) -> Option<&T>
+    where
+        T: Ord,
+    {
+        self.map.last_key_value().map(|(k, _)| k)
+    }
+
+    /// Removes the first element from the set and returns it, if any.
+    /// The first element is always the minimum element in the set.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    ///
+    /// set.insert(1);
+    /// while let Some(n) = set.pop_first() {
+    ///     assert_eq!(n, 1);
+    /// }
+    /// assert!(set.is_empty());
+    /// ```
+    pub fn pop_first(&mut self) -> Option<T>
+    where
+        T: Ord,
+    {
+        self.map.pop_first().map(|kv| kv.0)
+    }
+
+    /// Removes the last element from the set and returns it, if any.
+    /// The last element is always the maximum element in the set.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut set = BTreeSet::new();
+    ///
+    /// set.insert(1);
+    /// while let Some(n) = set.pop_last() {
+    ///     assert_eq!(n, 1);
+    /// }
+    /// assert!(set.is_empty());
+    /// ```
+    pub fn pop_last(&mut self) -> Option<T>
+    where
+        T: Ord,
+    {
+        self.map.pop_last().map(|kv| kv.0)
+    }
+
+    /// Creates an iterator that visits elements in the specified range in ascending order and
+    /// uses a closure to determine if an element should be removed.
+    ///
+    /// If the closure returns `true`, the element is removed from the set and
+    /// yielded. If the closure returns `false`, or panics, the element remains
+    /// in the set and will not be yielded.
+    ///
+    /// If the returned `ExtractIf` is not exhausted, e.g. because it is dropped without iterating
+    /// or the iteration short-circuits, then the remaining elements will be retained.
+    /// Use `extract_if().for_each(drop)` if you do not need the returned iterator,
+    /// or [`retain`] with a negated predicate if you also do not need to restrict the range.
+    ///
+    /// [`retain`]: BTreeSet::retain
+    /// # Example
+    ///
+    /// ```
+    /// use std::collections::BTreeSet;
+    ///
+    /// // Splitting a set into even and odd values, reusing the original set:
+    /// let mut set: BTreeSet<i32> = (0..8).collect();
+    /// let evens: BTreeSet<_> = set.extract_if(.., |v| v % 2 == 0).collect();
+    /// let odds = set;
+    /// assert_eq!(evens.into_iter().collect::<Vec<_>>(), vec![0, 2, 4, 6]);
+    /// assert_eq!(odds.into_iter().collect::<Vec<_>>(), vec![1, 3, 5, 7]);
+    ///
+    /// // Splitting a set into low and high halves, reusing the original set:
+    /// let mut set: BTreeSet<i32> = (0..8).collect();
+    /// let low: BTreeSet<_> = set.extract_if(0..4, |_v| true).collect();
+    /// let high = set;
+    /// assert_eq!(low.into_iter().collect::<Vec<_>>(), [0, 1, 2, 3]);
+    /// assert_eq!(high.into_iter().collect::<Vec<_>>(), [4, 5, 6, 7]);
+    /// ```
+    pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, T, F, A>
+    where
+        T: Ord,
+        F: FnMut(&T) -> bool,
+    {
+        let source = self.lower_bound_mut(Bound::Unbounded);
+        ExtractIf { source, pred }
+    }
+
+    /// Splits the collection into two at the value. Returns a new collection
+    /// with all elements greater than or equal to the value.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut a = BTreeSet::new();
+    /// a.insert(1);
+    /// a.insert(2);
+    /// a.insert(3);
+    /// a.insert(17);
+    /// a.insert(41);
+    ///
+    /// let b = a.split_off(&3);
+    ///
+    /// assert_eq!(a.len(), 2);
+    /// assert_eq!(b.len(), 3);
+    ///
+    /// assert!(a.contains(&1));
+    /// assert!(a.contains(&2));
+    ///
+    /// assert!(b.contains(&3));
+    /// assert!(b.contains(&17));
+    /// assert!(b.contains(&41));
+    /// ```
+    pub fn split_off<Q: ?Sized + Ord>(&mut self, value: &Q) -> Self
+    where
+        T: Borrow<Q> + Ord,
+        A: Clone,
+    {
+        BTreeSet {
+            map: self.map.split_off(value),
+        }
+    }
+
     /// Moves all elements from `other` into `self`, leaving `other` empty.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -392,7 +647,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Gets an iterator that visits the elements in the `BTreeSet` in ascending
     /// order.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -410,311 +665,49 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         }
     }
 
-    /// Returns a reference to the first element in the set, if any.
-    /// This element is always the minimum of all elements in the set.
+    /// Constructs a double-ended iterator over a sub-range of elements in the set.
+    /// The simplest way is to use the range syntax `min..max`, thus `range(min..max)` will
+    /// yield elements from min (inclusive) to max (exclusive).
+    /// The range may also be entered as `(Bound<T>, Bound<T>)`, so for example
+    /// `range((Excluded(4), Included(10)))` will yield a left-exclusive, right-inclusive
+    /// range from 4 to 10.
     ///
-    /// # Examples
+    /// # Panics
     ///
-    /// Basic usage:
+    /// Panics if range `start > end`.
+    /// Panics if range `start == end` and both bounds are `Excluded`.
     ///
-    /// ```
-    /// use pstd::collections::BTreeSet;
-    ///
-    /// let mut set = BTreeSet::new();
-    /// assert_eq!(set.first(), None);
-    /// set.insert(1);
-    /// assert_eq!(set.first(), Some(&1));
-    /// set.insert(2);
-    /// assert_eq!(set.first(), Some(&1));
-    /// ```
-    #[must_use]
-    pub fn first(&self) -> Option<&T>
-    where
-        T: Ord,
-    {
-        self.map.first_key_value().map(|(k, _)| k)
-    }
-
-    /// Returns a reference to the last element in the set, if any.
-    /// This element is always the maximum of all elements in the set.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
+    /// use std::ops::Bound::Included;
     ///
     /// let mut set = BTreeSet::new();
-    /// assert_eq!(set.last(), None);
-    /// set.insert(1);
-    /// assert_eq!(set.last(), Some(&1));
-    /// set.insert(2);
-    /// assert_eq!(set.last(), Some(&2));
-    /// ```
-    #[must_use]
-    pub fn last(&self) -> Option<&T>
-    where
-        T: Ord,
-    {
-        self.map.last_key_value().map(|(k, _)| k)
-    }
-
-    /// Removes the first element from the set and returns it, if any.
-    /// The first element is always the minimum element in the set.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pstd::collections::BTreeSet;
-    ///
-    /// let mut set = BTreeSet::new();
-    ///
-    /// set.insert(1);
-    /// while let Some(n) = set.pop_first() {
-    ///     assert_eq!(n, 1);
+    /// set.insert(3);
+    /// set.insert(5);
+    /// set.insert(8);
+    /// for &elem in set.range((Included(&4), Included(&8))) {
+    ///     println!("{elem}");
     /// }
-    /// assert!(set.is_empty());
+    /// assert_eq!(Some(&5), set.range(4..).next());
     /// ```
-    pub fn pop_first(&mut self) -> Option<T>
+    pub fn range<K, R>(&self, range: R) -> Range<'_, T>
     where
-        T: Ord,
+        K: ?Sized + Ord,
+        T: Borrow<K> + Ord,
+        R: RangeBounds<K>,
     {
-        self.map.pop_first().map(|kv| kv.0)
-    }
-
-    /// Removes the last element from the set and returns it, if any.
-    /// The last element is always the maximum element in the set.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pstd::collections::BTreeSet;
-    ///
-    /// let mut set = BTreeSet::new();
-    ///
-    /// set.insert(1);
-    /// while let Some(n) = set.pop_last() {
-    ///     assert_eq!(n, 1);
-    /// }
-    /// assert!(set.is_empty());
-    /// ```
-    pub fn pop_last(&mut self) -> Option<T>
-    where
-        T: Ord,
-    {
-        self.map.pop_last().map(|kv| kv.0)
-    }
-
-    /// Returns a [`Cursor`] pointing at the gap before the smallest element
-    /// greater than the given bound.
-    ///
-    /// Passing `Bound::Included(x)` will return a cursor pointing to the
-    /// gap before the smallest element greater than or equal to `x`.
-    ///
-    /// Passing `Bound::Excluded(x)` will return a cursor pointing to the
-    /// gap before the smallest element greater than `x`.
-    ///
-    /// Passing `Bound::Unbounded` will return a cursor pointing to the
-    /// gap before the smallest element in the set.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    ///
-    /// use pstd::collections::BTreeSet;
-    /// use std::ops::Bound;
-    ///
-    /// let set = BTreeSet::from([1, 2, 3, 4]);
-    ///
-    /// let cursor = set.lower_bound(Bound::Included(&2));
-    /// assert_eq!(cursor.peek_prev(), Some(&1));
-    /// assert_eq!(cursor.peek_next(), Some(&2));
-    ///
-    /// let cursor = set.lower_bound(Bound::Excluded(&2));
-    /// assert_eq!(cursor.peek_prev(), Some(&2));
-    /// assert_eq!(cursor.peek_next(), Some(&3));
-    ///
-    /// let cursor = set.lower_bound(Bound::Unbounded);
-    /// assert_eq!(cursor.peek_prev(), None);
-    /// assert_eq!(cursor.peek_next(), Some(&1));
-    /// ```
-    pub fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Cursor<'_, T, A>
-    where
-        T: Borrow<Q> + Ord,
-        Q: ?Sized + Ord,
-    {
-        Cursor { inner: self.map.lower_bound(bound) }
-    }
-
-    /// Returns a [`Cursor`] pointing at the gap after the greatest element
-    /// smaller than the given bound.
-    ///
-    /// Passing `Bound::Included(x)` will return a cursor pointing to the
-    /// gap after the greatest element smaller than or equal to `x`.
-    ///
-    /// Passing `Bound::Excluded(x)` will return a cursor pointing to the
-    /// gap after the greatest element smaller than `x`.
-    ///
-    /// Passing `Bound::Unbounded` will return a cursor pointing to the
-    /// gap after the greatest element in the set.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pstd::collections::BTreeSet;
-    /// use std::ops::Bound;
-    ///
-    /// let set = BTreeSet::from([1, 2, 3, 4]);
-    ///
-    /// let cursor = set.upper_bound(Bound::Included(&3));
-    /// assert_eq!(cursor.peek_prev(), Some(&3));
-    /// assert_eq!(cursor.peek_next(), Some(&4));
-    ///
-    /// let cursor = set.upper_bound(Bound::Excluded(&3));
-    /// assert_eq!(cursor.peek_prev(), Some(&2));
-    /// assert_eq!(cursor.peek_next(), Some(&3));
-    ///
-    /// let cursor = set.upper_bound(Bound::Unbounded);
-    /// assert_eq!(cursor.peek_prev(), Some(&4));
-    /// assert_eq!(cursor.peek_next(), None);
-    /// ```
-    pub fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Cursor<'_, T, A>
-    where
-        T: Borrow<Q> + Ord,
-        Q: ?Sized + Ord,
-    {
-        Cursor { inner: self.map.upper_bound(bound) }
-    }
-
-    /// Returns a [`CursorMut`] pointing at the gap before the smallest element
-    /// greater than the given bound.
-    ///
-    /// Passing `Bound::Included(x)` will return a cursor pointing to the
-    /// gap before the smallest element greater than or equal to `x`.
-    ///
-    /// Passing `Bound::Excluded(x)` will return a cursor pointing to the
-    /// gap before the smallest element greater than `x`.
-    ///
-    /// Passing `Bound::Unbounded` will return a cursor pointing to the
-    /// gap before the smallest element in the set.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pstd::collections::BTreeSet;
-    /// use std::ops::Bound;
-    ///
-    /// let mut set = BTreeSet::from([1, 2, 3, 4]);
-    ///
-    /// let mut cursor = set.lower_bound_mut(Bound::Included(&2));
-    /// assert_eq!(cursor.peek_prev(), Some(&1));
-    /// assert_eq!(cursor.peek_next(), Some(&2));
-    ///
-    /// let mut cursor = set.lower_bound_mut(Bound::Excluded(&2));
-    /// assert_eq!(cursor.peek_prev(), Some(&2));
-    /// assert_eq!(cursor.peek_next(), Some(&3));
-    ///
-    /// let mut cursor = set.lower_bound_mut(Bound::Unbounded);
-    /// assert_eq!(cursor.peek_prev(), None);
-    /// assert_eq!(cursor.peek_next(), Some(&1));
-    /// ```
-    pub fn lower_bound_mut<Q>(&mut self, bound: Bound<&Q>) -> CursorMut<'_, T, A>
-    where
-        T: Borrow<Q> + Ord,
-        Q: ?Sized + Ord,
-    {
-        CursorMut { inner: self.map.lower_bound_mut(bound) }
-    }
-
-    /// Returns a [`CursorMut`] pointing at the gap after the greatest element
-    /// smaller than the given bound.
-    ///
-    /// Passing `Bound::Included(x)` will return a cursor pointing to the
-    /// gap after the greatest element smaller than or equal to `x`.
-    ///
-    /// Passing `Bound::Excluded(x)` will return a cursor pointing to the
-    /// gap after the greatest element smaller than `x`.
-    ///
-    /// Passing `Bound::Unbounded` will return a cursor pointing to the
-    /// gap after the greatest element in the set.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    ///
-    /// use pstd::collections::BTreeSet;
-    /// use std::ops::Bound;
-    ///
-    /// let mut set = BTreeSet::from([1, 2, 3, 4]);
-    ///
-    /// let mut cursor = set.upper_bound_mut(Bound::Included(&3));
-    /// assert_eq!(cursor.peek_prev(), Some(&3));
-    /// assert_eq!(cursor.peek_next(), Some(&4));
-    ///
-    /// let mut cursor = set.upper_bound_mut(Bound::Excluded(&3));
-    /// assert_eq!(cursor.peek_prev(), Some(&2));
-    /// assert_eq!(cursor.peek_next(), Some(&3));
-    ///
-    /// let mut cursor = set.upper_bound_mut(Bound::Unbounded);
-    /// assert_eq!(cursor.peek_prev(), Some(&4));
-    /// assert_eq!(cursor.peek_next(), None);
-    /// ```
-    pub fn upper_bound_mut<Q>(&mut self, bound: Bound<&Q>) -> CursorMut<'_, T, A>
-    where
-        T: Borrow<Q> + Ord,
-        Q: ?Sized + Ord,
-    {
-        CursorMut { inner: self.map.upper_bound_mut(bound) }
-    }
-
-
-    /// Creates an iterator that visits elements in the specified range in ascending order and
-    /// uses a closure to determine if an element should be removed.
-    ///
-    /// If the closure returns `true`, the element is removed from the set and
-    /// yielded. If the closure returns `false`, or panics, the element remains
-    /// in the set and will not be yielded.
-    ///
-    /// If the returned `ExtractIf` is not exhausted, e.g. because it is dropped without iterating
-    /// or the iteration short-circuits, then the remaining elements will be retained.
-    /// Use `extract_if().for_each(drop)` if you do not need the returned iterator,
-    /// or [`retain`] with a negated predicate if you also do not need to restrict the range.
-    ///
-    /// [`retain`]: BTreeSet::retain
-        /// # Examples
-    ///
-    /// ```
-    /// use std::collections::BTreeSet;
-    ///
-    /// // Splitting a set into even and odd values, reusing the original set:
-    /// let mut set: BTreeSet<i32> = (0..8).collect();
-    /// let evens: BTreeSet<_> = set.extract_if(.., |v| v % 2 == 0).collect();
-    /// let odds = set;
-    /// assert_eq!(evens.into_iter().collect::<Vec<_>>(), vec![0, 2, 4, 6]);
-    /// assert_eq!(odds.into_iter().collect::<Vec<_>>(), vec![1, 3, 5, 7]);
-    ///
-    /// // Splitting a set into low and high halves, reusing the original set:
-    /// let mut set: BTreeSet<i32> = (0..8).collect();
-    /// let low: BTreeSet<_> = set.extract_if(0..4, |_v| true).collect();
-    /// let high = set;
-    /// assert_eq!(low.into_iter().collect::<Vec<_>>(), [0, 1, 2, 3]);
-    /// assert_eq!(high.into_iter().collect::<Vec<_>>(), [4, 5, 6, 7]);
-    /// ```
-    pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, T, F, A>
-    where
-        T: Ord,
-        F: FnMut(&T) -> bool,
-    {
-        let source = self.lower_bound_mut(Bound::Unbounded);
-        ExtractIf { source, pred }
+        Range {
+            iter: self.map.range(range),
+        }
     }
 
     /// Visits the elements representing the intersection,
     /// i.e., the elements that are both in `self` and `other`,
     /// in ascending order.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use std::collections::BTreeSet;
@@ -745,127 +738,35 @@ impl<T, A: Tuning> BTreeSet<T, A> {
                     (Ordering::Equal, _) => IntersectionInner::Answer(Some(self_min)),
                     (_, Ordering::Equal) => IntersectionInner::Answer(Some(self_max)),
                     _ if self.len() <= other.len() / ITER_PERFORMANCE_TIPPING_SIZE_DIFF => {
-                        IntersectionInner::Search { small_iter: self.iter(), large_set: other }
+                        IntersectionInner::Search {
+                            small_iter: self.iter(),
+                            large_set: other,
+                        }
                     }
                     _ if other.len() <= self.len() / ITER_PERFORMANCE_TIPPING_SIZE_DIFF => {
-                        IntersectionInner::Search { small_iter: other.iter(), large_set: self }
+                        IntersectionInner::Search {
+                            small_iter: other.iter(),
+                            large_set: self,
+                        }
                     }
-                    _ => IntersectionInner::Stitch { a: self.iter(), b: other.iter() },
+                    _ => IntersectionInner::Stitch {
+                        a: self.iter(),
+                        b: other.iter(),
+                    },
                 },
             }
         } else {
-            Intersection { inner: IntersectionInner::Answer(None) }
+            Intersection {
+                inner: IntersectionInner::Answer(None),
+            }
         }
-    }
-
-    /// Constructs a double-ended iterator over a sub-range of elements in the set.
-    /// The simplest way is to use the range syntax `min..max`, thus `range(min..max)` will
-    /// yield elements from min (inclusive) to max (exclusive).
-    /// The range may also be entered as `(Bound<T>, Bound<T>)`, so for example
-    /// `range((Excluded(4), Included(10)))` will yield a left-exclusive, right-inclusive
-    /// range from 4 to 10.
-    ///
-    /// # Panics
-    ///
-    /// Panics if range `start > end`.
-    /// Panics if range `start == end` and both bounds are `Excluded`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pstd::collections::BTreeSet;
-    /// use std::ops::Bound::Included;
-    ///
-    /// let mut set = BTreeSet::new();
-    /// set.insert(3);
-    /// set.insert(5);
-    /// set.insert(8);
-    /// for &elem in set.range((Included(&4), Included(&8))) {
-    ///     println!("{elem}");
-    /// }
-    /// assert_eq!(Some(&5), set.range(4..).next());
-    /// ```
-    pub fn range<K, R>(&self, range: R) -> Range<'_, T>
-    where
-        K: ?Sized + Ord,
-        T: Borrow<K> + Ord,
-        R: RangeBounds<K>,
-    {
-        Range { iter: self.map.range(range) }
-    }
-
-    /// Splits the collection into two at the value. Returns a new collection
-    /// with all elements greater than or equal to the value.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    ///
-    /// ```
-    /// use pstd::collections::BTreeSet;
-    ///
-    /// let mut a = BTreeSet::new();
-    /// a.insert(1);
-    /// a.insert(2);
-    /// a.insert(3);
-    /// a.insert(17);
-    /// a.insert(41);
-    ///
-    /// let b = a.split_off(&3);
-    ///
-    /// assert_eq!(a.len(), 2);
-    /// assert_eq!(b.len(), 3);
-    ///
-    /// assert!(a.contains(&1));
-    /// assert!(a.contains(&2));
-    ///
-    /// assert!(b.contains(&3));
-    /// assert!(b.contains(&17));
-    /// assert!(b.contains(&41));
-    /// ```
-    pub fn split_off<Q: ?Sized + Ord>(&mut self, value: &Q) -> Self
-    where
-        T: Borrow<Q> + Ord,
-        A: Clone,
-    {
-        BTreeSet { map: self.map.split_off(value) }
-    }
-
-    /// Visits the elements representing the symmetric difference,
-    /// i.e., the elements that are in `self` or in `other` but not in both,
-    /// in ascending order.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use pstd::collections::BTreeSet;
-    ///
-    /// let mut a = BTreeSet::new();
-    /// a.insert(1);
-    /// a.insert(2);
-    ///
-    /// let mut b = BTreeSet::new();
-    /// b.insert(2);
-    /// b.insert(3);
-    ///
-    /// let sym_diff: Vec<_> = a.symmetric_difference(&b).cloned().collect();
-    /// assert_eq!(sym_diff, [1, 3]);
-    /// ```
-    pub fn symmetric_difference<'a>(
-        &'a self,
-        other: &'a BTreeSet<T, A>,
-    ) -> SymmetricDifference<'a, T>
-    where
-        T: Ord,
-    {
-        SymmetricDifference(MergeIterInner::new(self.iter(), other.iter()))
     }
 
     /// Visits the elements representing the union,
     /// i.e., all the elements in `self` or `other`, without duplicates,
     /// in ascending order.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -890,7 +791,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// i.e., the elements that are in `self` but not in `other`,
     /// in ascending order.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -917,7 +818,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         {
             Difference {
                 inner: match (self_min.cmp(other_max), self_max.cmp(other_min)) {
-                    (Ordering::Greater, _) | (_, Ordering::Less) => DifferenceInner::Iterate(self.iter()),
+                    (Ordering::Greater, _) | (_, Ordering::Less) => {
+                        DifferenceInner::Iterate(self.iter())
+                    }
                     (Ordering::Equal, _) => {
                         let mut self_iter = self.iter();
                         self_iter.next();
@@ -929,7 +832,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
                         DifferenceInner::Iterate(self_iter)
                     }
                     _ if self.len() <= other.len() / ITER_PERFORMANCE_TIPPING_SIZE_DIFF => {
-                        DifferenceInner::Search { self_iter: self.iter(), other_set: other }
+                        DifferenceInner::Search {
+                            self_iter: self.iter(),
+                            other_set: other,
+                        }
                     }
                     _ => DifferenceInner::Stitch {
                         self_iter: self.iter(),
@@ -938,14 +844,46 @@ impl<T, A: Tuning> BTreeSet<T, A> {
                 },
             }
         } else {
-            Difference { inner: DifferenceInner::Iterate(self.iter()) }
+            Difference {
+                inner: DifferenceInner::Iterate(self.iter()),
+            }
         }
+    }
+
+    /// Visits the elements representing the symmetric difference,
+    /// i.e., the elements that are in `self` or in `other` but not in both,
+    /// in ascending order.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let mut a = BTreeSet::new();
+    /// a.insert(1);
+    /// a.insert(2);
+    ///
+    /// let mut b = BTreeSet::new();
+    /// b.insert(2);
+    /// b.insert(3);
+    ///
+    /// let sym_diff: Vec<_> = a.symmetric_difference(&b).cloned().collect();
+    /// assert_eq!(sym_diff, [1, 3]);
+    /// ```
+    pub fn symmetric_difference<'a>(
+        &'a self,
+        other: &'a BTreeSet<T, A>,
+    ) -> SymmetricDifference<'a, T>
+    where
+        T: Ord,
+    {
+        SymmetricDifference(MergeIterInner::new(self.iter(), other.iter()))
     }
 
     /// Returns `true` if `self` has no elements in common with `other`.
     /// This is equivalent to checking for an empty intersection.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -970,7 +908,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Returns `true` if the set is a superset of another,
     /// i.e., `self` contains at least all the elements in `other`.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -998,7 +936,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Returns `true` if the set is a subset of another,
     /// i.e., `other` contains at least all the elements in `self`.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -1071,7 +1009,193 @@ impl<T, A: Tuning> BTreeSet<T, A> {
             })
         }
     }
-    
+
+    /// Returns a [`Cursor`] pointing at the gap before the smallest element
+    /// greater than the given bound.
+    ///
+    /// Passing `Bound::Included(x)` will return a cursor pointing to the
+    /// gap before the smallest element greater than or equal to `x`.
+    ///
+    /// Passing `Bound::Excluded(x)` will return a cursor pointing to the
+    /// gap before the smallest element greater than `x`.
+    ///
+    /// Passing `Bound::Unbounded` will return a cursor pointing to the
+    /// gap before the smallest element in the set.
+    ///
+    /// # Example
+    ///
+    /// ```
+    ///
+    /// use pstd::collections::BTreeSet;
+    /// use std::ops::Bound;
+    ///
+    /// let set = BTreeSet::from([1, 2, 3, 4]);
+    ///
+    /// let cursor = set.lower_bound(Bound::Included(&2));
+    /// assert_eq!(cursor.peek_prev(), Some(&1));
+    /// assert_eq!(cursor.peek_next(), Some(&2));
+    ///
+    /// let cursor = set.lower_bound(Bound::Excluded(&2));
+    /// assert_eq!(cursor.peek_prev(), Some(&2));
+    /// assert_eq!(cursor.peek_next(), Some(&3));
+    ///
+    /// let cursor = set.lower_bound(Bound::Unbounded);
+    /// assert_eq!(cursor.peek_prev(), None);
+    /// assert_eq!(cursor.peek_next(), Some(&1));
+    /// ```
+    pub fn lower_bound<Q>(&self, bound: Bound<&Q>) -> Cursor<'_, T, A>
+    where
+        T: Borrow<Q> + Ord,
+        Q: ?Sized + Ord,
+    {
+        Cursor {
+            inner: self.map.lower_bound(bound),
+        }
+    }
+
+    /// Returns a [`Cursor`] pointing at the gap after the greatest element
+    /// smaller than the given bound.
+    ///
+    /// Passing `Bound::Included(x)` will return a cursor pointing to the
+    /// gap after the greatest element smaller than or equal to `x`.
+    ///
+    /// Passing `Bound::Excluded(x)` will return a cursor pointing to the
+    /// gap after the greatest element smaller than `x`.
+    ///
+    /// Passing `Bound::Unbounded` will return a cursor pointing to the
+    /// gap after the greatest element in the set.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    /// use std::ops::Bound;
+    ///
+    /// let set = BTreeSet::from([1, 2, 3, 4]);
+    ///
+    /// let cursor = set.upper_bound(Bound::Included(&3));
+    /// assert_eq!(cursor.peek_prev(), Some(&3));
+    /// assert_eq!(cursor.peek_next(), Some(&4));
+    ///
+    /// let cursor = set.upper_bound(Bound::Excluded(&3));
+    /// assert_eq!(cursor.peek_prev(), Some(&2));
+    /// assert_eq!(cursor.peek_next(), Some(&3));
+    ///
+    /// let cursor = set.upper_bound(Bound::Unbounded);
+    /// assert_eq!(cursor.peek_prev(), Some(&4));
+    /// assert_eq!(cursor.peek_next(), None);
+    /// ```
+    pub fn upper_bound<Q>(&self, bound: Bound<&Q>) -> Cursor<'_, T, A>
+    where
+        T: Borrow<Q> + Ord,
+        Q: ?Sized + Ord,
+    {
+        Cursor {
+            inner: self.map.upper_bound(bound),
+        }
+    }
+
+    /// Returns a [`CursorMut`] pointing at the gap before the smallest element
+    /// greater than the given bound.
+    ///
+    /// Passing `Bound::Included(x)` will return a cursor pointing to the
+    /// gap before the smallest element greater than or equal to `x`.
+    ///
+    /// Passing `Bound::Excluded(x)` will return a cursor pointing to the
+    /// gap before the smallest element greater than `x`.
+    ///
+    /// Passing `Bound::Unbounded` will return a cursor pointing to the
+    /// gap before the smallest element in the set.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    /// use std::ops::Bound;
+    ///
+    /// let mut set = BTreeSet::from([1, 2, 3, 4]);
+    ///
+    /// let mut cursor = set.lower_bound_mut(Bound::Included(&2));
+    /// assert_eq!(cursor.peek_prev(), Some(&1));
+    /// assert_eq!(cursor.peek_next(), Some(&2));
+    ///
+    /// let mut cursor = set.lower_bound_mut(Bound::Excluded(&2));
+    /// assert_eq!(cursor.peek_prev(), Some(&2));
+    /// assert_eq!(cursor.peek_next(), Some(&3));
+    ///
+    /// let mut cursor = set.lower_bound_mut(Bound::Unbounded);
+    /// assert_eq!(cursor.peek_prev(), None);
+    /// assert_eq!(cursor.peek_next(), Some(&1));
+    /// ```
+    pub fn lower_bound_mut<Q>(&mut self, bound: Bound<&Q>) -> CursorMut<'_, T, A>
+    where
+        T: Borrow<Q> + Ord,
+        Q: ?Sized + Ord,
+    {
+        CursorMut {
+            inner: self.map.lower_bound_mut(bound),
+        }
+    }
+
+    /// Returns a [`CursorMut`] pointing at the gap after the greatest element
+    /// smaller than the given bound.
+    ///
+    /// Passing `Bound::Included(x)` will return a cursor pointing to the
+    /// gap after the greatest element smaller than or equal to `x`.
+    ///
+    /// Passing `Bound::Excluded(x)` will return a cursor pointing to the
+    /// gap after the greatest element smaller than `x`.
+    ///
+    /// Passing `Bound::Unbounded` will return a cursor pointing to the
+    /// gap after the greatest element in the set.
+    ///
+    /// # Example
+    ///
+    /// ```
+    ///
+    /// use pstd::collections::BTreeSet;
+    /// use std::ops::Bound;
+    ///
+    /// let mut set = BTreeSet::from([1, 2, 3, 4]);
+    ///
+    /// let mut cursor = set.upper_bound_mut(Bound::Included(&3));
+    /// assert_eq!(cursor.peek_prev(), Some(&3));
+    /// assert_eq!(cursor.peek_next(), Some(&4));
+    ///
+    /// let mut cursor = set.upper_bound_mut(Bound::Excluded(&3));
+    /// assert_eq!(cursor.peek_prev(), Some(&2));
+    /// assert_eq!(cursor.peek_next(), Some(&3));
+    ///
+    /// let mut cursor = set.upper_bound_mut(Bound::Unbounded);
+    /// assert_eq!(cursor.peek_prev(), Some(&4));
+    /// assert_eq!(cursor.peek_next(), None);
+    /// ```
+    pub fn upper_bound_mut<Q>(&mut self, bound: Bound<&Q>) -> CursorMut<'_, T, A>
+    where
+        T: Borrow<Q> + Ord,
+        Q: ?Sized + Ord,
+    {
+        CursorMut {
+            inner: self.map.upper_bound_mut(bound),
+        }
+    }
+
+    /// Create set from specified iterator and tuning.
+    fn from_sorted_iter<I: Iterator<Item = T>>(iter: I, tuning: A) -> BTreeSet<T, A>
+    where
+        T: Ord,
+    {
+        let mut set = BTreeSet::with_tuning(tuning);
+        let save = set.map.set_seq(true);
+        {
+            let mut cursor = set.lower_bound_mut(Bound::Unbounded);
+            for e in iter {
+                cursor.insert_before_unchecked(e)
+            }
+        }
+        set.map.set_seq(save);
+        set
+    }
 } // end impl BTreeSet
 
 // start impl for BTreeSet
@@ -1082,7 +1206,7 @@ impl<T: Ord, const N: usize> From<[T; N]> for BTreeSet<T> {
     /// If the array contains any equal values,
     /// all but one will be dropped.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -1147,12 +1271,12 @@ impl<T: Clone, A: Tuning> Clone for BTreeSet<T, A> {
 
 impl<T: Debug, A: Tuning> Debug for BTreeSet<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_set().entries(self.map.iter()).finish() // ToDo - remove map when iter is done.
+        f.debug_set().entries(self.map.iter()).finish()
     }
 }
 
-impl<K: Ord> FromIterator<K> for BTreeSet<K> {
-    fn from_iter<T: IntoIterator<Item = K>>(iter: T) -> BTreeSet<K> {
+impl<T: Ord> FromIterator<T> for BTreeSet<T> {
+    fn from_iter<X: IntoIterator<Item = T>>(iter: X) -> BTreeSet<T> {
         let mut result = BTreeSet::new();
         for k in iter {
             result.insert(k);
@@ -1167,7 +1291,7 @@ impl<T, A: Tuning> IntoIterator for BTreeSet<T, A> {
 
     /// Gets an iterator for moving out the `BTreeSet`'s contents in ascending order.
     ///
-    /// # Examples
+    /// # Example
     ///
     /// ```
     /// use pstd::collections::BTreeSet;
@@ -1214,7 +1338,9 @@ impl<T: fmt::Debug> fmt::Debug for Iter<'_, T> {
 
 impl<T> Clone for Iter<'_, T> {
     fn clone(&self) -> Self {
-        Iter { iter: self.iter.clone() }
+        Iter {
+            iter: self.iter.clone(),
+        }
     }
 }
 
@@ -1348,7 +1474,7 @@ impl<'a, K, A: Tuning> Cursor<'a, K, A> {
     /// and the cursor is not moved.
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<&K> {
-         self.inner.next().map(|(k, _)| k)
+        self.inner.next().map(|(k, _)| k)
     }
 
     /// Advances the cursor to the previous gap, returning the element that it
@@ -1394,12 +1520,7 @@ impl<'a, K, A: Tuning> Cursor<'a, K, A> {
 ///
 /// * The newly inserted element should be unique in the tree.
 /// * All elements in the tree should remain in sorted order.
-pub struct CursorMutKey<
-    'a,
-    T: 'a,
-    A: Tuning = DefaultTuning,
-> 
-{
+pub struct CursorMutKey<'a, T: 'a, A: Tuning = DefaultTuning> {
     inner: super::btree_map::CursorMutKey<'a, T, (), A>,
 }
 
@@ -1472,7 +1593,7 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
     pub fn insert_before_unchecked(&mut self, value: T) {
         self.inner.insert_before_unchecked(value, ())
     }
-    
+
     /// Inserts a new element into the set in the gap that the
     /// cursor is currently pointing to.
     ///
@@ -1530,12 +1651,7 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
 ///
 /// A `CursorMut` is created with the [`BTreeSet::lower_bound_mut`] and [`BTreeSet::upper_bound_mut`]
 /// methods.
-pub struct CursorMut<
-    'a,
-    T: 'a,
-    A: Tuning = DefaultTuning,
-> 
-{
+pub struct CursorMut<'a, T: 'a, A: Tuning = DefaultTuning> {
     inner: super::btree_map::CursorMut<'a, T, (), A>,
 }
 
@@ -1608,7 +1724,7 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
     pub fn insert_before_unchecked(&mut self, value: T) {
         self.inner.insert_before_unchecked(value, ())
     }
-    
+
     /// Inserts a new element into the set in the gap that the
     /// cursor is currently pointing to.
     ///
@@ -1662,7 +1778,9 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
     /// * The newly inserted element must be unique in the tree.
     /// * All elements in the tree must remain in sorted order.
     pub fn with_mutable_key(self) -> CursorMutKey<'a, T, A> {
-        CursorMutKey { inner: self.inner.with_mutable_key() }
+        CursorMutKey {
+            inner: self.inner.with_mutable_key(),
+        }
     }
 }
 
@@ -1704,9 +1822,10 @@ where
         }
     }
 }
-impl<'a, K, A: Tuning, F> FusedIterator for ExtractIf<'a, K, F, A> where
+impl<'a, K, A: Tuning, F> FusedIterator for ExtractIf<'a, K, F, A>
+where
     K: Ord,
-    F: FnMut(&K) -> bool
+    F: FnMut(&K) -> bool,
 {
 }
 
@@ -1720,7 +1839,7 @@ impl<'a, K, A: Tuning, F> FusedIterator for ExtractIf<'a, K, F, A> where
 #[must_use = "this returns the intersection as an iterator, \
               without modifying either input set"]
 pub struct Intersection<'a, T: 'a, A: Tuning = DefaultTuning> {
-    inner: IntersectionInner<'a, T, A>
+    inner: IntersectionInner<'a, T, A>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -1754,7 +1873,10 @@ impl<'a, T: Ord, A: Tuning> Iterator for Intersection<'a, T, A> {
                     }
                 }
             }
-            IntersectionInner::Search { small_iter, large_set } => loop {
+            IntersectionInner::Search {
+                small_iter,
+                large_set,
+            } => loop {
                 let small_next = small_iter.next()?;
                 if large_set.contains(small_next) {
                     return Some(small_next);
@@ -1792,7 +1914,9 @@ pub struct Range<'a, T: 'a> {
 
 impl<T> Clone for Range<'_, T> {
     fn clone(&self) -> Self {
-        Range { iter: self.iter.clone() }
+        Range {
+            iter: self.iter.clone(),
+        }
     }
 }
 
@@ -1839,7 +1963,9 @@ impl<T> Default for Range<'_, T> {
     /// assert_eq!(iter.count(), 0);
     /// ```
     fn default() -> Self {
-        Range { iter: Default::default() }
+        Range {
+            iter: Default::default(),
+        }
     }
 }
 
@@ -1967,13 +2093,20 @@ impl<T, A: Tuning> Clone for Difference<'_, T, A> {
     fn clone(&self) -> Self {
         Difference {
             inner: match &self.inner {
-                DifferenceInner::Stitch { self_iter, other_iter } => DifferenceInner::Stitch {
+                DifferenceInner::Stitch {
+                    self_iter,
+                    other_iter,
+                } => DifferenceInner::Stitch {
                     self_iter: self_iter.clone(),
                     other_iter: other_iter.clone(),
                 },
-                DifferenceInner::Search { self_iter, other_set } => {
-                    DifferenceInner::Search { self_iter: self_iter.clone(), other_set }
-                }
+                DifferenceInner::Search {
+                    self_iter,
+                    other_set,
+                } => DifferenceInner::Search {
+                    self_iter: self_iter.clone(),
+                    other_set,
+                },
                 DifferenceInner::Iterate(iter) => DifferenceInner::Iterate(iter.clone()),
             },
         }
@@ -1985,10 +2118,16 @@ impl<'a, T: Ord, A: Tuning> Iterator for Difference<'a, T, A> {
 
     fn next(&mut self) -> Option<&'a T> {
         match &mut self.inner {
-            DifferenceInner::Stitch { self_iter, other_iter } => {
+            DifferenceInner::Stitch {
+                self_iter,
+                other_iter,
+            } => {
                 let mut self_next = self_iter.next()?;
                 loop {
-                    match other_iter.peek().map_or(Ordering::Less, |other_next| self_next.cmp(other_next)) {
+                    match other_iter
+                        .peek()
+                        .map_or(Ordering::Less, |other_next| self_next.cmp(other_next))
+                    {
                         Ordering::Less => return Some(self_next),
                         Ordering::Equal => {
                             self_next = self_iter.next()?;
@@ -2000,7 +2139,10 @@ impl<'a, T: Ord, A: Tuning> Iterator for Difference<'a, T, A> {
                     }
                 }
             }
-            DifferenceInner::Search { self_iter, other_set } => loop {
+            DifferenceInner::Search {
+                self_iter,
+                other_set,
+            } => loop {
                 let self_next = self_iter.next()?;
                 if !other_set.contains(self_next) {
                     return Some(self_next);
@@ -2012,10 +2154,14 @@ impl<'a, T: Ord, A: Tuning> Iterator for Difference<'a, T, A> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         let (self_len, other_len) = match &self.inner {
-            DifferenceInner::Stitch { self_iter, other_iter } => {
-                (self_iter.len(), other_iter.len())
-            }
-            DifferenceInner::Search { self_iter, other_set } => (self_iter.len(), other_set.len()),
+            DifferenceInner::Stitch {
+                self_iter,
+                other_iter,
+            } => (self_iter.len(), other_iter.len()),
+            DifferenceInner::Search {
+                self_iter,
+                other_set,
+            } => (self_iter.len(), other_set.len()),
             DifferenceInner::Iterate(iter) => (iter.len(), 0),
         };
         (self_len.saturating_sub(other_len), Some(self_len))
@@ -2028,5 +2174,95 @@ impl<'a, T: Ord, A: Tuning> Iterator for Difference<'a, T, A> {
 
 impl<T: Ord, A: Tuning> FusedIterator for Difference<'_, T, A> {}
 
-    
+impl<T: Ord + Clone, A: Tuning> BitAnd<&BTreeSet<T, A>> for &BTreeSet<T, A> {
+    type Output = BTreeSet<T, A>;
 
+    /// Returns the intersection of `self` and `rhs` as a new `BTreeSet<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let a = BTreeSet::from([1, 2, 3]);
+    /// let b = BTreeSet::from([2, 3, 4]);
+    ///
+    /// let result = &a & &b;
+    /// assert_eq!(result, BTreeSet::from([2, 3]));
+    /// ```
+    fn bitand(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
+        BTreeSet::from_sorted_iter(self.intersection(rhs).cloned(), self.map.get_tuning())
+    }
+}
+
+impl<T: Ord + Clone, A: Tuning> BitOr<&BTreeSet<T, A>> for &BTreeSet<T, A> {
+    type Output = BTreeSet<T, A>;
+
+    /// Returns the union of `self` and `rhs` as a new `BTreeSet<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let a = BTreeSet::from([1, 2, 3]);
+    /// let b = BTreeSet::from([3, 4, 5]);
+    ///
+    /// let result = &a | &b;
+    /// assert_eq!(result, BTreeSet::from([1, 2, 3, 4, 5]));
+    /// ```
+    fn bitor(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
+        BTreeSet::from_sorted_iter(self.union(rhs).cloned(), self.map.get_tuning())
+    }
+}
+
+impl<T: Ord + Clone, A: Tuning> BitXor<&BTreeSet<T, A>> for &BTreeSet<T, A> {
+    type Output = BTreeSet<T, A>;
+
+    /// Returns the symmetric difference of `self` and `rhs` as a new `BTreeSet<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::collections::BTreeSet;
+    ///
+    /// let a = BTreeSet::from([1, 2, 3]);
+    /// let b = BTreeSet::from([2, 3, 4]);
+    ///
+    /// let result = &a ^ &b;
+    /// assert_eq!(result, BTreeSet::from([1, 4]));
+    /// ```
+    fn bitxor(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
+        BTreeSet::from_sorted_iter(
+            self.symmetric_difference(rhs).cloned(),
+            self.map.get_tuning(),
+        )
+    }
+}
+
+impl<T: Ord, A: Tuning> Extend<T> for BTreeSet<T, A> {
+    #[inline]
+    fn extend<Iter: IntoIterator<Item = T>>(&mut self, iter: Iter) {
+        iter.into_iter().for_each(move |elem| {
+            self.insert(elem);
+        });
+    }
+/*
+    #[inline]
+    fn extend_one(&mut self, elem: T) {
+        self.insert(elem);
+    }
+*/
+}
+
+impl<'a, T: 'a + Ord + Copy, A: Tuning> Extend<&'a T> for BTreeSet<T, A> {
+    fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
+        self.extend(iter.into_iter().cloned());
+    }
+/*
+    #[inline]
+    fn extend_one(&mut self, &elem: &'a T) {
+        self.insert(elem);
+    }
+*/
+}
