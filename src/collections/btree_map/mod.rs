@@ -2668,7 +2668,7 @@ impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
     }
 
     /// This is needed for the implementation of the [Entry] API.
-    fn into_mutk(self) -> &'a mut K {
+    pub (crate) fn into_mutk(self) -> &'a mut K {
         self.0.into_mutk()
     }
 }
