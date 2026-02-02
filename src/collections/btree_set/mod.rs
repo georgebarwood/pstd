@@ -10,6 +10,10 @@ use std::hash::{Hash, Hasher};
 use std::iter::{FusedIterator, Peekable};
 use std::ops::{BitAnd, BitOr, BitXor, Bound, RangeBounds};
 
+mod entry;
+pub use entry::{Entry,VacantEntry,OccupiedEntry};
+use crate::collections::btree_map as map;
+
 const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 
 /// An ordered set based on a B-Tree similar to [`std::collections::BTreeSet`].
@@ -21,7 +25,7 @@ const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 /// Properties: [`len`], [`is_empty`], [`contains`],
 /// [`is_subset`], [`is_superset`], [`is_disjoint`]
 ///
-/// Insertion: [`insert`], [`get_or_insert`], [`get_or_insert_with`]
+/// Insertion: [`insert`], [`get_or_insert`], [`get_or_insert_with`], [`entry`]
 ///
 /// Retrieve: [`get`], [`first`], [`last`]
 ///
@@ -46,6 +50,7 @@ const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 /// [`insert`]: BTreeSet::insert
 /// [`get_or_insert`]: BTreeSet::get_or_insert
 /// [`get_or_insert_with`]: BTreeSet::get_or_insert_with
+/// [`entry`]: BTreeSet::entry
 /// [`get`]: BTreeSet::get
 /// [`first`]: BTreeSet::first
 /// [`last`]: BTreeSet::last
@@ -404,9 +409,16 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         Q: ?Sized + Ord,
         F: FnOnce(&Q) -> T,
     {
-        // ToDo : optimised version - needs special method for BtreeMap.
-        let nv = f(value);
-        self.get_or_insert(nv)
+        // Simple method
+        // let nv = f(value);
+        // self.get_or_insert(nv)
+        let mut cursor = self.lower_bound_mut(Bound::Included(&value));
+        if let Some(vr) = cursor.peek_next() && vr.borrow() == value {
+        } else {
+            let v = f(value);
+            cursor.insert_after_unchecked(v);
+        };
+        cursor.into()
     }
 
     /// Retains only the elements specified by the predicate.
@@ -1196,6 +1208,51 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         set.map.set_seq(save);
         set
     }
+
+    /// Gets the given value's corresponding entry in the set for in-place manipulation.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///
+    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::btree_set::Entry::*;
+    ///
+    /// let mut singles = BTreeSet::new();
+    /// let mut dupes = BTreeSet::new();
+    ///
+    /// for ch in "a short treatise on fungi".chars() {
+    ///     if let Vacant(dupe_entry) = dupes.entry(ch) {
+    ///         // We haven't already seen a duplicate, so
+    ///         // check if we've at least seen it once.
+    ///         match singles.entry(ch) {
+    ///             Vacant(single_entry) => {
+    ///                 // We found a new character for the first time.
+    ///                 single_entry.insert()
+    ///             }
+    ///             Occupied(single_entry) => {
+    ///                 // We've already seen this once, "move" it to dupes.
+    ///                 single_entry.remove();
+    ///                 dupe_entry.insert();
+    ///             }
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// assert!(!singles.contains(&'t') && dupes.contains(&'t'));
+    /// assert!(singles.contains(&'u') && !dupes.contains(&'u'));
+    /// assert!(!singles.contains(&'v') && !dupes.contains(&'v'));
+    /// ```
+    #[inline]
+    pub fn entry(&mut self, value: T) -> Entry<'_, T, A>
+    where
+        T: Ord,
+    {
+        match self.map.entry(value) {
+            map::Entry::Occupied(entry) => Entry::Occupied(OccupiedEntry { inner: entry }),
+            map::Entry::Vacant(entry) => Entry::Vacant(VacantEntry { inner: entry }),
+        }
+    }
 } // end impl BTreeSet
 
 // start impl for BTreeSet
@@ -1781,6 +1838,11 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
         CursorMutKey {
             inner: self.inner.with_mutable_key(),
         }
+    }
+
+    fn into(self) -> &'a T
+    {
+        self.inner.into_mutk()
     }
 }
 
