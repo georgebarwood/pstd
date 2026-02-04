@@ -8,10 +8,10 @@ use std::hash::{Hash, Hasher};
 use std::iter::{FusedIterator, Peekable};
 use std::ops::{BitAnd, BitOr, BitXor, Bound, RangeBounds, Sub};
 
-use crate::collections::btree_map as map;
 use super::merge_iter::MergeIterInner;
+use crate::collections::btree_map as map;
 
-pub use map::{UnorderedKeyError,Tuning,CustomTuning,DefaultTuning};
+pub use map::{CustomTuning, DefaultTuning, Tuning, UnorderedKeyError};
 
 mod entry;
 pub use entry::{Entry, OccupiedEntry, VacantEntry};
@@ -422,7 +422,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
             let v = f(value);
             cursor.insert_after_unchecked(v);
         };
-        unsafe{ cursor.into() }
+        unsafe { cursor.into() }
     }
 
     /// Retains only the elements specified by the predicate.
@@ -1846,7 +1846,7 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
 
     /// Convert into reference to current (next) key.
     unsafe fn into(self) -> &'a T {
-        unsafe{ self.inner.into_mut_key() }
+        unsafe { self.inner.into_mut_key() }
     }
 }
 
