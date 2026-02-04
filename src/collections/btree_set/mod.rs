@@ -1,8 +1,6 @@
 //! [`BTreeSet`] similar to [`std::collections::BTreeSet`].
 
-use super::merge_iter::MergeIterInner;
 use crate::alloc::Allocator;
-use crate::collections::btree_map::*;
 use std::borrow::Borrow;
 use std::cmp::{Ordering, max, min};
 use std::fmt::{self, Debug};
@@ -10,9 +8,12 @@ use std::hash::{Hash, Hasher};
 use std::iter::{FusedIterator, Peekable};
 use std::ops::{BitAnd, BitOr, BitXor, Bound, RangeBounds, Sub};
 
-mod entry;
 use crate::collections::btree_map as map;
-pub use crate::collections::btree_map::UnorderedKeyError;
+use super::merge_iter::MergeIterInner;
+
+pub use map::{UnorderedKeyError,Tuning,CustomTuning,DefaultTuning};
+
+mod entry;
 pub use entry::{Entry, OccupiedEntry, VacantEntry};
 
 const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
@@ -113,7 +114,7 @@ const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 /// let set = BTreeSet::from([1, 2, 3]);
 /// ```
 pub struct BTreeSet<T, A: Tuning = DefaultTuning> {
-    map: BTreeMap<T, (), A>,
+    map: map::BTreeMap<T, (), A>,
 }
 
 impl<T> BTreeSet<T> {
@@ -130,7 +131,7 @@ impl<T> BTreeSet<T> {
     #[must_use]
     pub const fn new() -> BTreeSet<T> {
         BTreeSet {
-            map: BTreeMap::new(),
+            map: map::BTreeMap::new(),
         }
     }
 
@@ -151,7 +152,7 @@ impl<T> BTreeSet<T> {
         AL: Allocator + Clone,
     {
         BTreeSet {
-            map: BTreeMap::with_tuning(CustomTuning::new_in_def(a)),
+            map: map::BTreeMap::with_tuning(CustomTuning::new_in_def(a)),
         }
     }
 }
@@ -163,7 +164,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     ///
     /// ```
     ///     use pstd::collections::BTreeSet;
-    ///     use pstd::collections::btree_map::DefaultTuning;
+    ///     use pstd::collections::btree_set::DefaultTuning;
     ///     let mut set = BTreeSet::with_tuning(DefaultTuning::new(8,2));
     ///     set.insert("England");
     ///     set.insert("France");
@@ -172,7 +173,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     #[must_use]
     pub const fn with_tuning(atune: A) -> Self {
         Self {
-            map: BTreeMap::with_tuning(atune),
+            map: map::BTreeMap::with_tuning(atune),
         }
     }
 
@@ -1387,7 +1388,7 @@ impl<'a, T, A: Tuning> IntoIterator for &'a BTreeSet<T, A> {
 /// [`iter`]: BTreeSet::iter
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Iter<'a, T: 'a> {
-    iter: Keys<'a, T, ()>,
+    iter: map::Keys<'a, T, ()>,
 }
 
 impl<T: fmt::Debug> fmt::Debug for Iter<'_, T> {
@@ -1470,7 +1471,7 @@ impl<T, A: Tuning> Iterator for IntoIter<T, A> {
 /// [`into_iter`]: BTreeSet#method.into_iter
 #[derive(Debug)]
 pub struct IntoIter<T, A: Tuning = DefaultTuning> {
-    iter: super::btree_map::IntoIter<T, (), A>,
+    iter: map::IntoIter<T, (), A>,
 }
 
 impl<T, A: Tuning> DoubleEndedIterator for IntoIter<T, A> {
@@ -1517,7 +1518,7 @@ where
 /// A `Cursor` is created with the [`BTreeSet::lower_bound`] and [`BTreeSet::upper_bound`] methods.
 #[derive(Clone)]
 pub struct Cursor<'a, K: 'a, A: Tuning = DefaultTuning> {
-    inner: super::btree_map::Cursor<'a, K, (), A>,
+    inner: map::Cursor<'a, K, (), A>,
 }
 
 impl<K: Debug> Debug for Cursor<'_, K> {
@@ -1581,7 +1582,7 @@ impl<'a, K, A: Tuning> Cursor<'a, K, A> {
 /// * The newly inserted element should be unique in the tree.
 /// * All elements in the tree should remain in sorted order.
 pub struct CursorMutKey<'a, T: 'a, A: Tuning = DefaultTuning> {
-    inner: super::btree_map::CursorMutKey<'a, T, (), A>,
+    inner: map::CursorMutKey<'a, T, (), A>,
 }
 
 impl<K: Debug, A: Tuning> Debug for CursorMutKey<'_, K, A> {
@@ -1712,7 +1713,7 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
 /// A `CursorMut` is created with the [`BTreeSet::lower_bound_mut`] and [`BTreeSet::upper_bound_mut`]
 /// methods.
 pub struct CursorMut<'a, T: 'a, A: Tuning = DefaultTuning> {
-    inner: super::btree_map::CursorMut<'a, T, (), A>,
+    inner: map::CursorMut<'a, T, (), A>,
 }
 
 impl<K: Debug, A: Tuning> Debug for CursorMut<'_, K, A> {
@@ -1973,7 +1974,7 @@ impl<'a, T: Ord, A: Tuning> Iterator for Intersection<'a, T, A> {
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 #[derive(Debug)]
 pub struct Range<'a, T: 'a> {
-    iter: super::btree_map::Range<'a, T, ()>,
+    iter: map::Range<'a, T, ()>,
 }
 
 impl<T> Clone for Range<'_, T> {
