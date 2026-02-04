@@ -8,11 +8,12 @@ use std::cmp::{Ordering, max, min};
 use std::fmt::{self, Debug};
 use std::hash::{Hash, Hasher};
 use std::iter::{FusedIterator, Peekable};
-use std::ops::{BitAnd, BitOr, BitXor, Bound, RangeBounds};
+use std::ops::{BitAnd, BitOr, BitXor, Bound, RangeBounds, Sub};
 
 mod entry;
-pub use entry::{Entry,VacantEntry,OccupiedEntry};
 use crate::collections::btree_map as map;
+pub use crate::collections::btree_map::UnorderedKeyError;
+pub use entry::{Entry, OccupiedEntry, VacantEntry};
 
 const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 
@@ -412,8 +413,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         // Simple method
         // let nv = f(value);
         // self.get_or_insert(nv)
-        let mut cursor = self.lower_bound_mut(Bound::Included(&value));
-        if let Some(vr) = cursor.peek_next() && vr.borrow() == value {
+        let mut cursor = self.lower_bound_mut(Bound::Included(value));
+        if let Some(vr) = cursor.peek_next()
+            && vr.borrow() == value
+        {
         } else {
             let v = f(value);
             cursor.insert_after_unchecked(v);
@@ -1840,8 +1843,7 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
         }
     }
 
-    fn into(self) -> &'a T
-    {
+    fn into(self) -> &'a T {
         self.inner.into_mutk()
     }
 }
@@ -2302,6 +2304,27 @@ impl<T: Ord + Clone, A: Tuning> BitXor<&BTreeSet<T, A>> for &BTreeSet<T, A> {
     }
 }
 
+impl<T: Ord + Clone, A: Tuning> Sub<&BTreeSet<T, A>> for &BTreeSet<T, A> {
+    type Output = BTreeSet<T, A>;
+
+    /// Returns the difference of `self` and `rhs` as a new `BTreeSet<T>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::BTreeSet;
+    ///
+    /// let a = BTreeSet::from([1, 2, 3]);
+    /// let b = BTreeSet::from([3, 4, 5]);
+    ///
+    /// let result = &a - &b;
+    /// assert_eq!(result, BTreeSet::from([1, 2]));
+    /// ```
+    fn sub(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
+        BTreeSet::from_sorted_iter(self.difference(rhs).cloned(), self.map.get_tuning())
+    }
+}
+
 impl<T: Ord, A: Tuning> Extend<T> for BTreeSet<T, A> {
     #[inline]
     fn extend<Iter: IntoIterator<Item = T>>(&mut self, iter: Iter) {
@@ -2309,22 +2332,22 @@ impl<T: Ord, A: Tuning> Extend<T> for BTreeSet<T, A> {
             self.insert(elem);
         });
     }
-/*
-    #[inline]
-    fn extend_one(&mut self, elem: T) {
-        self.insert(elem);
-    }
-*/
+    /*
+        #[inline]
+        fn extend_one(&mut self, elem: T) {
+            self.insert(elem);
+        }
+    */
 }
 
 impl<'a, T: 'a + Ord + Copy, A: Tuning> Extend<&'a T> for BTreeSet<T, A> {
     fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
         self.extend(iter.into_iter().cloned());
     }
-/*
-    #[inline]
-    fn extend_one(&mut self, &elem: &'a T) {
-        self.insert(elem);
-    }
-*/
+    /*
+        #[inline]
+        fn extend_one(&mut self, &elem: &'a T) {
+            self.insert(elem);
+        }
+    */
 }

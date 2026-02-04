@@ -2,8 +2,8 @@ use core::fmt::{self, Debug};
 
 use Entry::*;
 
-use crate::collections::btree_map::{Tuning,DefaultTuning};
 use crate::collections::btree_map as map;
+use crate::collections::btree_map::{DefaultTuning, Tuning};
 
 /// A view into a single entry in a set, which may either be vacant or occupied.
 ///
@@ -37,11 +37,7 @@ use crate::collections::btree_map as map;
 /// println!("Our BTreeSet: {:?}", set);
 /// assert!(set.iter().eq(&["a", "b", "c", "d", "e"]));
 /// ```
-pub enum Entry<
-    'a,
-    T,
-    A: Tuning = DefaultTuning,
-> {
+pub enum Entry<'a, T, A: Tuning = DefaultTuning> {
     /// An occupied entry.
     ///
     /// # Examples
@@ -92,9 +88,7 @@ impl<T: Debug + Ord, A: Tuning> Debug for Entry<'_, T, A> {
 /// # Examples
 ///
 /// ```
-/// #![feature(btree_set_entry)]
-///
-/// use std::collections::btree_set::{Entry, BTreeSet};
+/// use pstd::collections::btree_set::{Entry, BTreeSet};
 ///
 /// let mut set = BTreeSet::new();
 /// set.extend(["a", "b", "c"]);
@@ -122,17 +116,15 @@ impl<T: Debug + Ord, A: Tuning> Debug for Entry<'_, T, A> {
 /// assert_eq!(set.get(&"c"), None);
 /// assert_eq!(set.len(), 2);
 /// ```
-pub struct OccupiedEntry<
-    'a,
-    T,
-    A: Tuning = DefaultTuning,
-> {
+pub struct OccupiedEntry<'a, T, A: Tuning = DefaultTuning> {
     pub(super) inner: map::OccupiedEntry<'a, T, (), A>,
 }
 
 impl<T: Debug + Ord, A: Tuning> Debug for OccupiedEntry<'_, T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("OccupiedEntry").field("value", self.get()).finish()
+        f.debug_struct("OccupiedEntry")
+            .field("value", self.get())
+            .finish()
     }
 }
 
@@ -142,9 +134,7 @@ impl<T: Debug + Ord, A: Tuning> Debug for OccupiedEntry<'_, T, A> {
 /// # Examples
 ///
 /// ```
-/// #![feature(btree_set_entry)]
-///
-/// use std::collections::btree_set::{Entry, BTreeSet};
+/// use pstd::collections::btree_set::{Entry, BTreeSet};
 ///
 /// let mut set = BTreeSet::<&str>::new();
 ///
@@ -162,11 +152,7 @@ impl<T: Debug + Ord, A: Tuning> Debug for OccupiedEntry<'_, T, A> {
 /// }
 /// assert!(set.contains("b") && set.len() == 2);
 /// ```
-pub struct VacantEntry<
-    'a,
-    T,
-    A: Tuning = DefaultTuning,
-> {
+pub struct VacantEntry<'a, T, A: Tuning = DefaultTuning> {
     pub(super) inner: map::VacantEntry<'a, T, (), A>,
 }
 
@@ -356,6 +342,8 @@ impl<'a, T: Ord, A: Tuning> VacantEntry<'a, T, A> {
 
     #[inline]
     fn insert_entry(self) -> OccupiedEntry<'a, T, A> {
-        OccupiedEntry { inner: self.inner.insert_entry(()) }
+        OccupiedEntry {
+            inner: self.inner.insert_entry(()),
+        }
     }
 }
