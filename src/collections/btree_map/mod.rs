@@ -1530,7 +1530,7 @@ where
     /// Insert value into map returning reference to inserted value.
     pub fn insert(mut self, value: V) -> &'a mut V {
         self.cursor.insert_after_unchecked(self.key, value);
-        self.cursor.into_mut()
+        unsafe{ self.cursor.into_mut() }
     }
 
     /// Sets the value of the entry with the `VacantEntry`'s key,
@@ -1568,7 +1568,7 @@ where
 
     /// Converts the entry into a reference to its key.
     pub(crate) fn into_key(self) -> &'a K {
-        self.cursor.into_mutk()
+        unsafe{ self.cursor.into_mut_key() }
     }
 
     /// Remove (key,value) from map, returning key and value.
@@ -1597,7 +1597,7 @@ where
     /// Get mutable reference to the value, consuming the entry.
     #[must_use]
     pub fn into_mut(self) -> &'a mut V {
-        self.cursor.into_mut()
+        unsafe{ self.cursor.into_mut() }
     }
 
     /// Update the value returns the old value.
@@ -2662,14 +2662,20 @@ impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
         self.0.as_cursor()
     }
 
+    /// Convert into reference to current (next) value.
     /// This is needed for the implementation of the [Entry] API.
-    fn into_mut(self) -> &'a mut V {
-        self.0.into_mut()
+    ///
+    /// Safety : the cursor must be on a record ( true if insert_after has just been called ).
+    unsafe fn into_mut(self) -> &'a mut V {
+        unsafe{ self.0.into_mut() }
     }
 
-    /// This is needed for the implementation of the [Entry] API.
-    pub(crate) fn into_mutk(self) -> &'a mut K {
-        self.0.into_mutk()
+    /// Convert into reference to current (next) key.
+    /// This is needed for the implementation of the [Entry] API and also [`super::btree_set::CursorMut::into`].
+    ///
+    /// Safety : the cursor must be on a record ( true if insert_after has just been called ).
+    pub(crate) unsafe fn into_mut_key(self) -> &'a mut K {
+        unsafe{ self.0.into_mut_key() }
     }
 }
 
@@ -3086,13 +3092,19 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
         }
     }
 
+    /// Convert cursor to reference to current (peek_next) value. 
     /// This is needed for the implementation of the [Entry] API.
-    fn into_mut(self) -> &'a mut V {
+    ///
+    /// Safety : the cursor must be on a record ( true if insert_after has just been called or peek_next returned Some ).
+    unsafe fn into_mut(self) -> &'a mut V {
         unsafe { (*self.leaf).0.ixmv(self.index) }
     }
 
-    /// This is needed for the implementation of the [Entry] API.
-    fn into_mutk(self) -> &'a mut K {
+    /// Convert cursor to reference to current (peek_next) key. 
+    /// This is needed for the implementation of the [Entry] API and [`super::btree_set::CursorMut::into`].
+    ///
+    /// Safety : the cursor must be on a record ( true if insert_after has just been called or peek_next returned Some ).
+    unsafe fn into_mut_key(self) -> &'a mut K {
         unsafe { (*self.leaf).0.ixmk(self.index) }
     }
 }
