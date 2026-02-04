@@ -422,7 +422,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
             let v = f(value);
             cursor.insert_after_unchecked(v);
         };
-        cursor.into()
+        unsafe{ cursor.into() }
     }
 
     /// Retains only the elements specified by the predicate.
@@ -1844,8 +1844,9 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
         }
     }
 
-    fn into(self) -> &'a T {
-        self.inner.into_mutk()
+    /// Convert into reference to current (next) key.
+    unsafe fn into(self) -> &'a T {
+        unsafe{ self.inner.into_mut_key() }
     }
 }
 
