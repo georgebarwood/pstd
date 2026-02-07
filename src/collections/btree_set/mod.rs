@@ -2353,3 +2353,7 @@ impl<'a, T: 'a + Ord + Copy, A: Tuning> Extend<&'a T> for BTreeSet<T, A> {
         }
     */
 }
+
+#[cfg(test)]
+mod tests;
+
