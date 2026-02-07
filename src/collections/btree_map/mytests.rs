@@ -297,9 +297,9 @@ fn exp_cursor_tuned_insert_only_test() {
     for _rep in 0..REP {
         let n = N;
 
-        let mut ct = DefaultTuning::new(1023, 2047);
-        ct.set_seq();
+        let ct = DefaultTuning::new(1023, 2047);
         let mut m = BTreeMap::with_tuning(ct);
+        m.set_seq(true);
 
         let mut c = m.lower_bound_mut(Bound::Unbounded);
         for i in 0..n {
@@ -495,9 +495,7 @@ fn basic_range_test() {
 fn exp_insert_seq_fwd() {
     for _rep in 0..REP {
         let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
-        let mut tuning = map.get_tuning();
-        tuning.set_seq();
-        map.set_tuning(tuning);
+        map.set_seq(true);
         let n = N;
         for i in 0..n {
             map.insert(i, i);
@@ -554,9 +552,7 @@ fn exp_insert_rev() {
 fn exp_insert_seq_rev() {
     for _rep in 0..REP {
         let mut map = /*std::collections::*/ BTreeMap::<usize, usize>::default();
-        let mut tuning = map.get_tuning();
-        tuning.set_seq();
-        map.set_tuning(tuning);
+        map.set_seq(true);
         let n = N;
         for i in (0..n).rev() {
             map.insert(i, i);
@@ -882,7 +878,7 @@ impl Tuning for ExTuning {
             None
         }
     }
-    fn set_seq(&mut self) {}
+    fn set_seq(&mut self, _x:bool)-> bool { false }
 }
 
 #[test]
