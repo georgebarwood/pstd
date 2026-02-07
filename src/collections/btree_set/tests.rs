@@ -1,4 +1,5 @@
-//use std::ops::Bound::{Excluded, Included};
+use std::ops::Bound::{Excluded, Included};
+//use std::cmp::Ordering;
 //use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use super::{BTreeSet,Range,Hash,Hasher,Debug,Iter,IntoIter};
@@ -613,12 +614,10 @@ fn assert_sync() {
     fn range<T: Sync + Ord>(v: &BTreeSet<T>) -> impl Sync + '_ {
         v.range(..)
     }
-
-    /* George
+    
     fn extract_if<T: Sync + Ord>(v: &mut BTreeSet<T>) -> impl Sync + '_ {
-        v.extract_if(.., |_| false)
+        v.extract_if(|_| false)
     }
-    */
 
     fn difference<T: Sync + Ord>(v: &BTreeSet<T>) -> impl Sync + '_ {
         v.difference(&v)
@@ -655,11 +654,9 @@ fn assert_send() {
         v.range(..)
     }
 
-    /* George
     fn extract_if<T: Send + Ord>(v: &mut BTreeSet<T>) -> impl Send + '_ {
-        v.extract_if(.., |_| false)
+        v.extract_if(|_| false)
     }
-    */
 
     fn difference<T: Send + Sync + Ord>(v: &BTreeSet<T>) -> impl Send + '_ {
         v.difference(&v)
@@ -793,14 +790,17 @@ fn test_first_last() {
     assert_eq!(a.pop_last(), None);
 }
 
-/*
-
 // Unlike the function with the same name in map/tests, returns no values.
 // Which also means it returns different predetermined pseudo-random keys,
 // and the test cases using this function explore slightly different trees.
+
+use rand::Rng;
+
+
 fn rand_data(len: usize) -> Vec<u32> {
-    let mut rng = DeterministicRng::new();
-    Vec::from_iter((0..len).map(|_| rng.next()))
+    // let mut rng = DeterministicRng::new();
+    let mut rng = rand::thread_rng();
+    Vec::from_iter((0..len).map(|_| rng.r#gen::<u32>())) // next
 }
 
 #[test]
@@ -849,7 +849,7 @@ fn from_array() {
     assert_eq!(set, unordered_duplicates);
 }
 
-#[should_panic(expected = "range start is greater than range end in BTreeSet")]
+#[should_panic(expected = "range start is greater than range end")]
 #[test]
 fn test_range_panic_1() {
     let mut set = BTreeSet::new();
@@ -860,7 +860,7 @@ fn test_range_panic_1() {
     let _invalid_range = set.range((Included(&8), Included(&3)));
 }
 
-#[should_panic(expected = "range start and end are equal and excluded in BTreeSet")]
+#[should_panic(expected = "range start and end are equal and excluded")]
 #[test]
 fn test_range_panic_2() {
     let mut set = BTreeSet::new();
@@ -870,5 +870,3 @@ fn test_range_panic_2() {
 
     let _invalid_range = set.range((Excluded(&5), Excluded(&5)));
 }
-
-*/
