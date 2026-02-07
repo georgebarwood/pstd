@@ -717,7 +717,7 @@ pub trait Tuning: Clone + Allocator {
 pub type DefaultTuning = CustomTuning<Global>;
 
 /// Implementation of [Tuning]. Default branch is 64, default allocation unit is 16.
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct CustomTuning<AL: Allocator + Clone = Global> {
     branch: u16,
     alloc_unit: u16,
@@ -2501,6 +2501,9 @@ impl<'a, K, V> Iterator for Keys<'a, K, V> {
     type Item = &'a K;
     fn next(&mut self) -> Option<Self::Item> {
         self.0.next().map(|(k, _)| k)
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.0.len(), Some(self.0.len()))
     }
 }
 impl<'a, K, V> DoubleEndedIterator for Keys<'a, K, V> {
