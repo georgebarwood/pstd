@@ -19,3 +19,8 @@ pub mod collections {
 
     mod merge_iter;
 }
+
+#[cfg(test)]
+mod testing {
+    pub mod crash_test;
+}
