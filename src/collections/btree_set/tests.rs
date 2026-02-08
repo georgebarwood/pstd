@@ -168,7 +168,7 @@ fn test_difference_size_hint() {
 
     assert_eq!(iter.size_hint(), (0, Some(3)));
     assert_eq!(iter.next(), None);
-/*
+
     let s12345 = BTreeSet::from_iter(1..=5);
     iter = s246.difference(&s12345);
 
@@ -224,7 +224,6 @@ fn test_difference_size_hint() {
     let s7 = BTreeSet::from_iter(7..=19);
     iter = s246.difference(&s7);
     assert_eq!(iter.size_hint(), (3, Some(3)));
-    */
 }
 
 #[test]
