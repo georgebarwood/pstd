@@ -937,8 +937,12 @@ pub struct Stack<T, const CAP: usize> {
 }
 
 impl<T, const CAP: usize> Stack<T, CAP> {
+    
     /// Create a new empty `Stack`.
     pub const fn new() -> Self {
+        // Check that T does not have a drop function.
+        const{ assert!(!std::mem::needs_drop::<T>(),"T has drop"); };
+        
         Stack {
             len: 0,
             v: [const { MaybeUninit::uninit() }; CAP],
@@ -969,24 +973,30 @@ impl<T, const CAP: usize> Stack<T, CAP> {
     }
 
     pub fn as_slice(&self) -> &[T] {
-        unsafe { slice::from_raw_parts(self.v[0].as_ptr(), self.len) }
+        unsafe { slice::from_raw_parts(self.as_ptr(), self.len) }
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { slice::from_raw_parts_mut(self.v[0].as_mut_ptr(), self.len) }
+        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len) }
+    }
+
+    fn as_ptr(&self) -> *const T {
+        self.v.as_ptr() as _
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut T {
+        self.v.as_mut_ptr() as _
     }
 }
 
 impl<T, const CAP: usize> Deref for Stack<T, CAP> {
     type Target = [T];
-    #[inline]
     fn deref(&self) -> &Self::Target {
         self.as_slice()
     }
 }
 
 impl<T, const CAP: usize> DerefMut for Stack<T, CAP> {
-    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_mut_slice()
     }

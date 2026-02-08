@@ -1239,7 +1239,8 @@ impl<K, V> NonLeafInner<K, V> {
             let v = mem::replace(vp, kv.1);
             ((k, v), i + 1)
         } else {
-            self.c.remove(i);
+            let mut t = self.c.remove(i);
+            t.dealloc(atune);
             let kv = self.v.remove(i);
             if let Some(na) = atune.space_action(self.v.state()) {
                 self.v.set_alloc(na, atune);
