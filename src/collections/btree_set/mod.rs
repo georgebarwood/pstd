@@ -1332,9 +1332,10 @@ impl<T: Clone, A: Tuning> Clone for BTreeSet<T, A> {
 
 impl<T: Debug, A: Tuning> Debug for BTreeSet<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_set().entries(self.map.iter()).finish()
+        f.debug_set().entries(self.iter()).finish()
     }
 }
+
 
 impl<T: Ord> FromIterator<T> for BTreeSet<T> {
     fn from_iter<X: IntoIterator<Item = T>>(iter: X) -> BTreeSet<T> {
@@ -2356,4 +2357,3 @@ impl<'a, T: 'a + Ord + Copy, A: Tuning> Extend<&'a T> for BTreeSet<T, A> {
 
 #[cfg(test)]
 mod tests;
-

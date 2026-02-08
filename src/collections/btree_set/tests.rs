@@ -383,18 +383,18 @@ fn test_retain() {
     assert!(set.contains(&6));
 }
 
-/*
-
 #[test]
 fn test_extract_if() {
     let mut x = BTreeSet::from([1]);
     let mut y = BTreeSet::from([1]);
 
-    x.extract_if(.., |_| true).for_each(drop);
-    y.extract_if(.., |_| false).for_each(drop);
+    x.extract_if(|_| true).for_each(drop);
+    y.extract_if(|_| false).for_each(drop);
     assert_eq!(x.len(), 0);
     assert_eq!(y.len(), 1);
 }
+
+/*
 
 #[test]
 #[cfg_attr(not(panic = "unwind"), ignore = "test requires unwinding support")]
@@ -504,7 +504,6 @@ fn test_from_iter() {
     }
 }
 
-/*
 #[test]
 fn test_show() {
     let mut set = BTreeSet::new();
@@ -518,7 +517,6 @@ fn test_show() {
     assert_eq!(set_str, "{1, 2}");
     assert_eq!(format!("{empty:?}"), "{}");
 }
-*/
 
 #[test]
 fn test_extend_ref() {
