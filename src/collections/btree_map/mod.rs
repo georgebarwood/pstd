@@ -717,7 +717,7 @@ pub trait Tuning: Clone + Allocator {
 pub type DefaultTuning = CustomTuning<Global>;
 
 /// Implementation of [Tuning]. Default branch is 64, default allocation unit is 16.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct CustomTuning<AL: Allocator + Clone = Global> {
     branch: u16,
     alloc_unit: u16,
@@ -815,7 +815,9 @@ unsafe impl<AL: Allocator + Clone> Allocator for CustomTuning<AL> {
 }
 
 /// StkVec is used for stacks of pointers, length is maximum tree depth.
-type StkVec<T> = arrayvec::ArrayVec<T, 15>;
+type StkVec<T> = vecs::Stack<T, 10>;
+
+//type StkVec<T> = arrayvec::ArrayVec<T, 15>;
 
 /// Result of splitting a node due to it being full.
 type Split<K, V> = ((K, V), Tree<K, V>);

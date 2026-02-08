@@ -878,7 +878,9 @@ impl Tuning for ExTuning {
             None
         }
     }
-    fn set_seq(&mut self, _x:bool)-> bool { false }
+    fn set_seq(&mut self, _x: bool) -> bool {
+        false
+    }
 }
 
 #[test]

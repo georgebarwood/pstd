@@ -9,6 +9,7 @@ use std::{
     ops::{Bound, Deref, DerefMut, RangeBounds},
     ptr,
     ptr::NonNull,
+    slice,
 };
 
 use crate::collections::btree_map::Tuning;
@@ -923,4 +924,125 @@ impl<K, V> IntoIterPairVec<K, V> {
             Some((kp.read(), vp.read()))
         }
     }
+}
+
+use std::mem::MaybeUninit;
+
+/// Fixed capacity stack with no drop.
+/// Elements pushed but not popped will never be dropped.
+#[derive(Debug)]
+pub struct Stack<T, const CAP: usize> {
+    len: usize,
+    v: [MaybeUninit<T>; CAP],
+}
+
+impl<T, const CAP: usize> Stack<T, CAP> {
+    /// Create a new empty `Stack`.
+    pub const fn new() -> Self {
+        Stack {
+            len: 0,
+            v: [const { MaybeUninit::uninit() }; CAP],
+        }
+    }
+
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn push(&mut self, elem: T) {
+        let len = self.len();
+        assert!(len < CAP);
+        unsafe {
+            ptr::write(self.v[len].as_mut_ptr(), elem);
+        }
+        self.len += 1;
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        let mut x = self.len;
+        if x == 0 {
+            return None;
+        }
+        x -= 1;
+        self.len = x;
+        Some(unsafe { ptr::read(self.v[x].as_ptr()) })
+    }
+
+    pub fn as_slice(&self) -> &[T] {
+        unsafe { slice::from_raw_parts(self.v[0].as_ptr(), self.len) }
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { slice::from_raw_parts_mut(self.v[0].as_mut_ptr(), self.len) }
+    }
+}
+
+impl<T, const CAP: usize> Deref for Stack<T, CAP> {
+    type Target = [T];
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl<T, const CAP: usize> DerefMut for Stack<T, CAP> {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut_slice()
+    }
+}
+
+impl<'a, T: 'a, const CAP: usize> IntoIterator for &'a Stack<T, CAP> {
+    type Item = &'a T;
+    type IntoIter = slice::Iter<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a, T: 'a, const CAP: usize> IntoIterator for &'a mut Stack<T, CAP> {
+    type Item = &'a mut T;
+    type IntoIter = slice::IterMut<'a, T>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+impl<T, const CAP: usize> Clone for Stack<T, CAP>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        let mut s = Self::new();
+        for x in self.iter() {
+            s.push(x.clone());
+        }
+        s
+    }
+}
+
+impl<T, const CAP: usize> Default for Stack<T, CAP> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[test]
+fn test_stack() {
+    let mut v = Stack::<_, 10>::new();
+    v.push(99);
+    v.push(314);
+    assert!(v[0] == 99);
+    assert!(v[1] == 314);
+    assert!(v.len() == 2);
+    v[1] = 316;
+    for x in &v {
+        println!("x={}", x);
+    }
+    for x in &mut v {
+        println!("x={}", x);
+    }
+    assert!(v.pop() == Some(316));
+    assert!(v.pop() == Some(99));
+    assert!(v.pop() == None);
 }
