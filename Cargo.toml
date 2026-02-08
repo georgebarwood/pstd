@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "1.0.18"
+version = "1.0.20"
 edition = "2024"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
@@ -9,7 +9,7 @@ repository = "https://github.com/georgebarwood/pstd"
 include = ["/src"]
 
 [dependencies]
-arrayvec = "0.7.4"
+# arrayvec = "0.7.4"
 serde = { version = "1.0.197", optional=true }
 
 [dev-dependencies]
