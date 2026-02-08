@@ -1,9 +1,9 @@
 use std::ops::Bound::{Excluded, Included};
-//use std::cmp::Ordering;
-//use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::cmp::Ordering;
+use std::panic::{AssertUnwindSafe,catch_unwind};
 
 use super::{BTreeSet, Debug, Hash, Hasher, IntoIter, Iter, Range};
-//use crate::testing::crash_test::{CrashTestDummy, Panic};
+use crate::testing::crash_test::{CrashTestDummy, Panic};
 //use crate::testing::rng::DeterministicRng;
 
 #[test]
@@ -394,8 +394,6 @@ fn test_extract_if() {
     assert_eq!(y.len(), 1);
 }
 
-/*
-
 #[test]
 #[cfg_attr(not(panic = "unwind"), ignore = "test requires unwinding support")]
 fn test_extract_if_drop_panic_leak() {
@@ -407,7 +405,7 @@ fn test_extract_if_drop_panic_leak() {
     set.insert(b.spawn(Panic::InDrop));
     set.insert(c.spawn(Panic::Never));
 
-    catch_unwind(move || set.extract_if(.., |dummy| dummy.query(true)).for_each(drop)).ok();
+    catch_unwind(move || set.extract_if(|dummy| dummy.query(true)).for_each(drop)).ok();
 
     assert_eq!(a.queried(), 1);
     assert_eq!(b.queried(), 1);
@@ -428,7 +426,7 @@ fn test_extract_if_pred_panic_leak() {
     set.insert(b.spawn(Panic::InQuery));
     set.insert(c.spawn(Panic::InQuery));
 
-    catch_unwind(AssertUnwindSafe(|| set.extract_if(.., |dummy| dummy.query(true)).for_each(drop)))
+    catch_unwind(AssertUnwindSafe(|| set.extract_if(|dummy| dummy.query(true)).for_each(drop)))
         .ok();
 
     assert_eq!(a.queried(), 1);
@@ -441,8 +439,6 @@ fn test_extract_if_pred_panic_leak() {
     assert_eq!(set.first().unwrap().id(), 1);
     assert_eq!(set.last().unwrap().id(), 2);
 }
-
-*/
 
 #[test]
 fn test_clear() {
@@ -546,7 +542,6 @@ fn test_extend_ref() {
     assert!(a.contains(&6));
 }
 
-/*
 #[test]
 fn test_recovery() {
     #[derive(Debug)]
@@ -593,7 +588,6 @@ fn test_recovery() {
 
     assert_eq!(s.iter().next(), None);
 }
-*/
 
 #[allow(dead_code)]
 fn assert_covariance() {
