@@ -144,14 +144,14 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
         }
     }
 
-    /// Set sequential allocation. Returns current setting.
-    pub fn set_seq(&mut self, x: bool) -> bool {
-        self.atune.set_seq(x)
+    /// Get ref to tuning.
+    pub fn tuning(&self) -> &A {
+        &self.atune
     }
 
-    /// Get a cloned copy of the tuning.
-    pub fn get_tuning(&self) -> A {
-        self.atune.clone()
+    /// Get amut ref to tuning.
+    pub fn tuning_mut(&mut self) -> &mut A {
+        &mut self.atune
     }
 
     /// Clear the map.
@@ -666,7 +666,7 @@ where
         M: MapAccess<'de>,
     {
         let mut map = BTreeMap::new();
-        let save = map.set_seq(true);
+        let save = map.tuning_mut().set_seq(true);
         {
             let mut c = map.lower_bound_mut(Bound::Unbounded);
             loop {
@@ -679,12 +679,12 @@ where
                     }
                     c.insert_before_unchecked(k, v);
                 } else {
-                    map.set_seq(save);
+                    map.tuning_mut().set_seq(save);
                     return Ok(map);
                 }
             }
         }
-        map.set_seq(save);
+        map.tuning_mut().set_seq(save);
         while let Some((k, v)) = access.next_entry()? {
             map.insert(k, v);
         }
