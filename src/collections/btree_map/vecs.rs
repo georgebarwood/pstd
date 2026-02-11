@@ -43,6 +43,7 @@ pub struct ShortVec<T> {
 }
 
 impl<T> Default for ShortVec<T> {
+    #[inline]
     fn default() -> Self {
         Self::new()
     }
@@ -50,6 +51,7 @@ impl<T> Default for ShortVec<T> {
 
 impl<T> ShortVec<T> {
     /// Construct a new empty ShortVec.
+    #[inline]
     pub const fn new() -> Self {
         Self {
             len: 0,
@@ -788,6 +790,7 @@ impl<K, V> Clone for IterPairVec<'_, K, V> {
     }
 }
 impl<'a, K, V> Default for IterPairVec<'a, K, V> {
+    #[inline]
     fn default() -> Self {
         Self {
             v: None,
@@ -933,19 +936,21 @@ use std::mem::MaybeUninit;
 #[derive(Debug)]
 pub struct Stack<T, const CAP: usize> {
     len: usize,
-    v: [MaybeUninit<T>; CAP],
+    v: MaybeUninit<[T; CAP]>,
 }
 
 impl<T, const CAP: usize> Stack<T, CAP> {
-    
     /// Create a new empty `Stack`.
-    pub const fn new() -> Self {
+    #[inline]
+    pub fn new() -> Self {
         // Check that T does not have a drop function.
-        const{ assert!(!std::mem::needs_drop::<T>(),"T has drop"); };
-        
+        {
+            assert!(!std::mem::needs_drop::<T>(), "T has drop");
+        };
+
         Stack {
             len: 0,
-            v: [const { MaybeUninit::uninit() }; CAP],
+            v: MaybeUninit::uninit(),
         }
     }
 
@@ -957,7 +962,7 @@ impl<T, const CAP: usize> Stack<T, CAP> {
         let len = self.len();
         assert!(len < CAP);
         unsafe {
-            ptr::write(self.v[len].as_mut_ptr(), elem);
+            ptr::write(self.mp().add(len), elem);
         }
         self.len += 1;
     }
@@ -969,22 +974,22 @@ impl<T, const CAP: usize> Stack<T, CAP> {
         }
         x -= 1;
         self.len = x;
-        Some(unsafe { ptr::read(self.v[x].as_ptr()) })
+        Some(unsafe { ptr::read(self.p().add(x)) })
     }
 
     pub fn as_slice(&self) -> &[T] {
-        unsafe { slice::from_raw_parts(self.as_ptr(), self.len) }
+        unsafe { slice::from_raw_parts(self.p(), self.len) }
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { slice::from_raw_parts_mut(self.as_mut_ptr(), self.len) }
+        unsafe { slice::from_raw_parts_mut(self.mp(), self.len) }
     }
 
-    fn as_ptr(&self) -> *const T {
+    fn p(&self) -> *const T {
         self.v.as_ptr() as _
     }
 
-    fn as_mut_ptr(&mut self) -> *mut T {
+    fn mp(&mut self) -> *mut T {
         self.v.as_mut_ptr() as _
     }
 }

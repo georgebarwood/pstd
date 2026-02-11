@@ -49,6 +49,13 @@ use crate::alloc::{AllocError, Allocator, Global};
 mod vecs;
 use vecs::{IntoIterPairVec, IntoIterShortVec, IterMutPairVec, IterPairVec, PairVec, ShortVec};
 
+/// StkVec is used for stacks of pointers.
+type StkVec<T> = Vec<T>;
+
+// Note : with the current compiler, vecs::Stack does not work well for small maps.
+// See https://users.rust-lang.org/t/large-enums-are-they-moved-around-during-construction/138168/13
+// type StkVec<T> = vecs::Stack<T, 8>; //type StkVec<T> = arrayvec::ArrayVec<T, 15>;
+
 /// `BTreeMap` similar to [`std::collections::BTreeMap`].
 ///
 /// General guide to implementation:
@@ -236,7 +243,6 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     ///
     /// If the map already had this key present, nothing is updated, and
     /// an error containing the occupied entry and the value is returned.
-    #[allow(clippy::result_large_err)]
     pub fn try_insert(&mut self, key: K, value: V) -> Result<&mut V, OccupiedError<'_, K, V, A>>
     where
         K: Ord,
@@ -392,11 +398,14 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
 
     /// Get iterator of references to key-value pairs.
     #[must_use]
+    #[inline]
     pub fn iter(&self) -> Iter<'_, K, V> {
-        Iter {
+        let mut x = Iter {
             len: self.len,
-            inner: self.tree.iter(),
-        }
+            inner: Range::default(),
+        };
+        x.inner.push_tree(&self.tree, true);
+        x
     }
 
     /// Get iterator of mutable references to key-value pairs.
@@ -431,6 +440,7 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
 
     /// Get iterator of references to keys.
     #[must_use]
+    #[inline]
     pub fn keys(&self) -> Keys<'_, K, V> {
         Keys(self.iter())
     }
@@ -535,6 +545,7 @@ impl<K, V, A: Tuning> IntoIterator for BTreeMap<K, V, A> {
 impl<'a, K, V, A: Tuning> IntoIterator for &'a BTreeMap<K, V, A> {
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
+    #[inline]
     fn into_iter(self) -> Iter<'a, K, V> {
         self.iter()
     }
@@ -741,6 +752,10 @@ impl<AL: Allocator + Clone> CustomTuning<AL> {
     }
 
     /// Construct with specified branch, allocation unit and allocator.
+    ///
+    /// The minimum branch is 6. A small branch is faster for insertion but slower for retrieval.
+    ///
+    /// A small alloc_unit is slower for insertion but uses less memory.
     pub const fn new_in(branch: u16, alloc_unit: u16, alloc: AL) -> Self {
         assert!(branch >= 6);
         assert!(alloc_unit > 0);
@@ -752,19 +767,15 @@ impl<AL: Allocator + Clone> CustomTuning<AL> {
         }
     }
 
-    /// Construct with specified allocator.
+    /// Construct with specified allocator and default branch and allocation unit (currently 64,16).
     pub const fn new_in_def(alloc: AL) -> Self {
         Self::new_in(64, 16, alloc)
     }
 }
 impl<AL: Allocator + Clone + Default> Default for CustomTuning<AL> {
+    /// Construct with default allocator and default branch and allocation unit (currently 64,16).
     fn default() -> Self {
-        Self {
-            branch: 64,
-            alloc_unit: 16,
-            seq: false,
-            allocator: AL::default(),
-        }
+        Self::new_in_def(AL::default())
     }
 }
 impl<AL: Allocator + Clone> Tuning for CustomTuning<AL> {
@@ -813,11 +824,6 @@ unsafe impl<AL: Allocator + Clone> Allocator for CustomTuning<AL> {
         }
     }
 }
-
-/// StkVec is used for stacks of pointers, length is maximum tree depth.
-type StkVec<T> = vecs::Stack<T, 10>;
-
-//type StkVec<T> = arrayvec::ArrayVec<T, 15>;
 
 /// Result of splitting a node due to it being full.
 type Split<K, V> = ((K, V), Tree<K, V>);
@@ -999,6 +1005,7 @@ impl<K, V> Tree<K, V> {
         x
     }
 
+    #[inline]
     fn iter(&self) -> Range<'_, K, V> {
         let mut x = Range::new();
         x.push_tree(self, true);
@@ -1677,6 +1684,7 @@ pub struct RangeMut<'a, K, V> {
     bck_stk: StkVec<StkMut<'a, K, V>>,
 }
 impl<'a, K, V> RangeMut<'a, K, V> {
+    #[inline]
     fn new() -> Self {
         Self {
             fwd_leaf: IterMutPairVec::default(),
@@ -2086,6 +2094,13 @@ pub struct Iter<'a, K, V> {
     len: usize,
     inner: Range<'a, K, V>,
 }
+impl<'a, K, V> Iter<'a, K, V> {
+    /// Initialise with BTreeMap.
+    pub fn init(&mut self, bt: &'a BTreeMap<K, V>) {
+        self.len = bt.len();
+        self.inner.push_tree(&bt.tree, true);
+    }
+}
 impl<K, V> Clone for Iter<'_, K, V> {
     fn clone(&self) -> Self {
         Self {
@@ -2157,6 +2172,7 @@ pub struct Range<'a, K, V> {
     bck_stk: StkVec<Stk<'a, K, V>>,
 }
 impl<'a, K, V> Range<'a, K, V> {
+    #[inline]
     fn new() -> Self {
         Self {
             fwd_leaf: IterPairVec::default(),
