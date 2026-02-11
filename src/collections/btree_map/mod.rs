@@ -2094,13 +2094,6 @@ pub struct Iter<'a, K, V> {
     len: usize,
     inner: Range<'a, K, V>,
 }
-impl<'a, K, V> Iter<'a, K, V> {
-    /// Initialise with BTreeMap.
-    pub fn init(&mut self, bt: &'a BTreeMap<K, V>) {
-        self.len = bt.len();
-        self.inner.push_tree(&bt.tree, true);
-    }
-}
 impl<K, V> Clone for Iter<'_, K, V> {
     fn clone(&self) -> Self {
         Self {
