@@ -1203,14 +1203,14 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         T: Ord,
     {
         let mut set = BTreeSet::with_tuning(tuning);
-        let save = set.map.set_seq(true);
+        let save = set.map.tuning_mut().set_seq(true);
         {
             let mut cursor = set.lower_bound_mut(Bound::Unbounded);
             for e in iter {
                 cursor.insert_before_unchecked(e)
             }
         }
-        set.map.set_seq(save);
+        set.map.tuning_mut().set_seq(save);
         set
     }
 
@@ -2256,7 +2256,7 @@ impl<T: Ord + Clone, A: Tuning> BitAnd<&BTreeSet<T, A>> for &BTreeSet<T, A> {
     /// assert_eq!(result, BTreeSet::from([2, 3]));
     /// ```
     fn bitand(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
-        BTreeSet::from_sorted_iter(self.intersection(rhs).cloned(), self.map.get_tuning())
+        BTreeSet::from_sorted_iter(self.intersection(rhs).cloned(), self.map.tuning().clone())
     }
 }
 
@@ -2277,7 +2277,7 @@ impl<T: Ord + Clone, A: Tuning> BitOr<&BTreeSet<T, A>> for &BTreeSet<T, A> {
     /// assert_eq!(result, BTreeSet::from([1, 2, 3, 4, 5]));
     /// ```
     fn bitor(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
-        BTreeSet::from_sorted_iter(self.union(rhs).cloned(), self.map.get_tuning())
+        BTreeSet::from_sorted_iter(self.union(rhs).cloned(), self.map.tuning().clone())
     }
 }
 
@@ -2300,7 +2300,7 @@ impl<T: Ord + Clone, A: Tuning> BitXor<&BTreeSet<T, A>> for &BTreeSet<T, A> {
     fn bitxor(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
         BTreeSet::from_sorted_iter(
             self.symmetric_difference(rhs).cloned(),
-            self.map.get_tuning(),
+            self.map.tuning().clone(),
         )
     }
 }
@@ -2322,7 +2322,7 @@ impl<T: Ord + Clone, A: Tuning> Sub<&BTreeSet<T, A>> for &BTreeSet<T, A> {
     /// assert_eq!(result, BTreeSet::from([1, 2]));
     /// ```
     fn sub(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
-        BTreeSet::from_sorted_iter(self.difference(rhs).cloned(), self.map.get_tuning())
+        BTreeSet::from_sorted_iter(self.difference(rhs).cloned(), self.map.tuning().clone())
     }
 }
 
@@ -2333,7 +2333,7 @@ impl<T: Ord, A: Tuning> Extend<T> for BTreeSet<T, A> {
             self.insert(elem);
         });
     }
-    /*
+    /* Unstable
         #[inline]
         fn extend_one(&mut self, elem: T) {
             self.insert(elem);
@@ -2345,7 +2345,7 @@ impl<'a, T: 'a + Ord + Copy, A: Tuning> Extend<&'a T> for BTreeSet<T, A> {
     fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
         self.extend(iter.into_iter().cloned());
     }
-    /*
+    /* Unstable
         #[inline]
         fn extend_one(&mut self, &elem: &'a T) {
             self.insert(elem);
