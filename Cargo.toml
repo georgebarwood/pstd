@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "1.0.20"
+version = "1.0.23"
 edition = "2024"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
@@ -9,7 +9,6 @@ repository = "https://github.com/georgebarwood/pstd"
 include = ["/src"]
 
 [dependencies]
-# arrayvec = "0.7.4"
 serde = { version = "1.0.197", optional=true }
 
 [dev-dependencies]
@@ -19,7 +18,7 @@ criterion = "0.5.1"
 bincode = "1.3.3"
 rand = "0.8.5"
 
-# Note: lib.cs needs to be edited and nightly must be used to for -F tests.
+# Note: lib.cs needs to be edited and nightly must be used for -F tests.
 [features]
 serde = ["dep:serde"]
 unsafe-optim = []
