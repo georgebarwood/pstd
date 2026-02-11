@@ -9,7 +9,6 @@ use std::{
     ops::{Bound, Deref, DerefMut, RangeBounds},
     ptr,
     ptr::NonNull,
-    slice,
 };
 
 use crate::collections::btree_map::Tuning;
@@ -929,7 +928,10 @@ impl<K, V> IntoIterPairVec<K, V> {
     }
 }
 
+/* Not currently used.
+
 use std::mem::MaybeUninit;
+use std::slice;
 
 /// Fixed capacity stack with no drop.
 /// Elements pushed but not popped will never be dropped.
@@ -1061,3 +1063,5 @@ fn test_stack() {
     assert!(v.pop() == Some(99));
     assert!(v.pop() == None);
 }
+
+*/
