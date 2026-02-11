@@ -1,6 +1,6 @@
-use std::ops::Bound::{Excluded, Included};
 use std::cmp::Ordering;
-use std::panic::{AssertUnwindSafe,catch_unwind};
+use std::ops::Bound::{Excluded, Included};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use super::{BTreeSet, Debug, Hash, Hasher, IntoIter, Iter, Range};
 use crate::testing::crash_test::{CrashTestDummy, Panic};
@@ -426,8 +426,10 @@ fn test_extract_if_pred_panic_leak() {
     set.insert(b.spawn(Panic::InQuery));
     set.insert(c.spawn(Panic::InQuery));
 
-    catch_unwind(AssertUnwindSafe(|| set.extract_if(|dummy| dummy.query(true)).for_each(drop)))
-        .ok();
+    catch_unwind(AssertUnwindSafe(|| {
+        set.extract_if(|dummy| dummy.query(true)).for_each(drop)
+    }))
+    .ok();
 
     assert_eq!(a.queried(), 1);
     assert_eq!(b.queried(), 1);

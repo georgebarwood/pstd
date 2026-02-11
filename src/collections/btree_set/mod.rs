@@ -675,6 +675,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// assert_eq!(set_iter.next(), Some(&3));
     /// assert_eq!(set_iter.next(), None);
     /// ```
+    #[inline]
     pub fn iter(&self) -> Iter<'_, T> {
         Iter {
             iter: self.map.keys(),
@@ -1336,7 +1337,6 @@ impl<T: Debug, A: Tuning> Debug for BTreeSet<T, A> {
     }
 }
 
-
 impl<T: Ord> FromIterator<T> for BTreeSet<T> {
     fn from_iter<X: IntoIterator<Item = T>>(iter: X) -> BTreeSet<T> {
         let mut result = BTreeSet::new();
@@ -1374,6 +1374,7 @@ impl<'a, T, A: Tuning> IntoIterator for &'a BTreeSet<T, A> {
     type Item = &'a T;
     type IntoIter = Iter<'a, T>;
 
+    #[inline]
     fn into_iter(self) -> Iter<'a, T> {
         self.iter()
     }
@@ -1902,14 +1903,12 @@ where
 /// See its documentation for more.
 ///
 /// [`intersection`]: BTreeSet::intersection
-#[allow(clippy::large_enum_variant)]
 #[must_use = "this returns the intersection as an iterator, \
               without modifying either input set"]
 pub struct Intersection<'a, T: 'a, A: Tuning = DefaultTuning> {
     inner: IntersectionInner<'a, T, A>,
 }
 
-#[allow(clippy::large_enum_variant)]
 enum IntersectionInner<'a, T: 'a, A: Tuning = DefaultTuning> {
     Stitch {
         // iterate similarly sized sets jointly, spotting matches along the way
@@ -2140,7 +2139,6 @@ pub struct Difference<'a, T: 'a, A: Tuning> {
     inner: DifferenceInner<'a, T, A>,
 }
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 enum DifferenceInner<'a, T: 'a, A: Tuning> {
     Stitch {
