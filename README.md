@@ -2,4 +2,4 @@ Crate with parts of Rust std library ( different implementations, features not y
 
 crates.io : https://crates.io/crates/pstd
 
-documentation: https://docs.rs/latest/pstd/
+documentation: https://docs.rs/pstd/latest/pstd/
