@@ -50,11 +50,9 @@ mod vecs;
 use vecs::{IntoIterPairVec, IntoIterShortVec, IterMutPairVec, IterPairVec, PairVec, ShortVec};
 
 /// StkVec is used for stacks of pointers.
-type StkVec<T> = Vec<T>;
-
+type StkVec<T> = Vec<T>; // type StkVec<T> = vecs::Stack<T, 8>;
 // Note : with the current compiler, vecs::Stack does not work well for small maps.
 // See https://users.rust-lang.org/t/large-enums-are-they-moved-around-during-construction/138168/13
-// type StkVec<T> = vecs::Stack<T, 8>; //type StkVec<T> = arrayvec::ArrayVec<T, 15>;
 
 /// `BTreeMap` similar to [`std::collections::BTreeMap`].
 ///
@@ -149,7 +147,7 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
         &self.atune
     }
 
-    /// Get amut ref to tuning.
+    /// Get mut ref to tuning.
     pub fn tuning_mut(&mut self) -> &mut A {
         &mut self.atune
     }
