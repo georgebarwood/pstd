@@ -142,12 +142,12 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
         }
     }
 
-    /// Get ref to tuning.
+    /// Get reference to tuning.
     pub fn tuning(&self) -> &A {
         &self.atune
     }
 
-    /// Get mut ref to tuning.
+    /// Get mut reference to tuning.
     pub fn tuning_mut(&mut self) -> &mut A {
         &mut self.atune
     }
@@ -669,11 +669,11 @@ where
             let mut c = map.lower_bound_mut(Bound::Unbounded);
             loop {
                 if let Some((k, v)) = access.next_entry()? {
-                    if let Some((pk, _)) = c.peek_prev() {
-                        if pk >= &k {
-                            map.insert(k, v);
-                            break;
-                        }
+                    if let Some((pk, _)) = c.peek_prev()
+                        && pk >= &k
+                    {
+                        map.insert(k, v);
+                        break;
                     }
                     c.insert_before_unchecked(k, v);
                 } else {
@@ -686,7 +686,7 @@ where
         while let Some((k, v)) = access.next_entry()? {
             map.insert(k, v);
         }
-        return Ok(map);
+        Ok(map)
     }
 }
 
