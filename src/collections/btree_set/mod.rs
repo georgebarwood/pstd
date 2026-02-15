@@ -25,7 +25,7 @@ const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 /// Set Creation: [`new`], [`new_in`], [`with_tuning`]
 ///
 /// Properties: [`len`], [`is_empty`], [`contains`],
-/// [`is_subset`], [`is_superset`], [`is_disjoint`]
+/// [`is_subset`], [`is_superset`], [`is_disjoint`], [`tuning`], [`tuning_mut`]
 ///
 /// Insertion: [`insert`], [`get_or_insert`], [`get_or_insert_with`], [`entry`]
 ///
@@ -75,6 +75,8 @@ const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 /// [`upper_bound`]: BTreeSet::upper_bound
 /// [`lower_bound_mut`]: BTreeSet::lower_bound_mut
 /// [`upper_bound_mut`]: BTreeSet::upper_bound_mut
+/// [`tuning`]: BTreeSet::tuning
+/// [`tuning_mut`]: BTreeSet::tuning_mut
 ///
 /// # Examples
 ///
@@ -175,6 +177,26 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         Self {
             map: map::BTreeMap::with_tuning(atune),
         }
+    }
+
+    /// Get reference to tuning.
+    pub fn tuning(&self) -> &A {
+        self.map.tuning()
+    }
+
+    /// Get mut reference to tuning.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::collections::{BTreeSet,btree_set::Tuning};
+    /// let mut v = BTreeSet::new();
+    /// v.tuning_mut().set_seq(true);
+    /// for x in 0..100 { v.insert(x); }
+    /// assert!(v.len() == 100);
+    /// ```
+    pub fn tuning_mut(&mut self) -> &mut A {
+        self.map.tuning_mut()
     }
 
     /// Returns number of elements in the set
