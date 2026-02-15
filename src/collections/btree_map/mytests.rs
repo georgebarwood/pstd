@@ -119,6 +119,7 @@ fn exp_get_test() {
     }
 }
 
+/*
 #[test]
 fn std_get_test() {
     let mut m = std::collections::BTreeMap::new();
@@ -137,6 +138,7 @@ fn std_get_test() {
         }
     }
 }
+*/
 
 #[test]
 fn exp_clone_test() {
@@ -156,7 +158,7 @@ fn exp_clone_test() {
     }
 }
 
-#[test]
+/*#[test]
 fn std_clone_test() {
     let mut m = std::collections::BTreeMap::<usize, usize>::new();
     let mut c = m.lower_bound_mut(Bound::Unbounded);
@@ -171,7 +173,7 @@ fn std_clone_test() {
         let cm = m.clone();
         assert!(cm.len() == n);
     }
-}
+}*/
 
 #[test]
 fn exp_split_off_test() {
@@ -189,7 +191,7 @@ fn exp_split_off_test() {
     }
 }
 
-#[test]
+/*#[test]
 fn std_split_off_test() {
     for _rep in 0..REP {
         let mut m = std::collections::BTreeMap::<usize, usize>::new();
@@ -203,7 +205,7 @@ fn std_split_off_test() {
         assert!(m2.len() == n / 2);
         assert!(m.len() + m2.len() == n);
     }
-}
+}*/
 
 #[test]
 fn exp_cursor_remove_rev_test() {
@@ -227,7 +229,7 @@ fn exp_cursor_remove_rev_test() {
     }
 }
 
-#[test]
+/*#[test]
 fn std_cursor_remove_rev_test() {
     for _rep in 0..REP {
         let n = N;
@@ -248,7 +250,7 @@ fn std_cursor_remove_rev_test() {
         }
         assert_eq!(i, 0);
     }
-}
+}*/
 
 #[test]
 fn exp_cursor_remove_fwd_test() {
@@ -271,7 +273,7 @@ fn exp_cursor_remove_fwd_test() {
     }
 }
 
-#[test]
+/*#[test]
 fn std_cursor_remove_fwd_test() {
     for _rep in 0..REP {
         let n = N;
@@ -290,7 +292,7 @@ fn std_cursor_remove_fwd_test() {
         }
         assert_eq!(i, n);
     }
-}
+}*/
 
 #[test]
 fn exp_cursor_tuned_insert_only_test() {
@@ -340,7 +342,7 @@ fn exp_cursor_insert_only_test() {
     }
 }
 
-#[test]
+/*#[test]
 fn std_cursor_insert_only_test() {
     for _rep in 0..REP {
         let n = N;
@@ -352,7 +354,7 @@ fn std_cursor_insert_only_test() {
             }
         }
     }
-}
+}*/
 
 #[test]
 fn exp_cursor_insert_test() {
@@ -376,6 +378,7 @@ fn exp_cursor_insert_test() {
     }
 }
 
+/*
 #[test]
 fn std_cursor_insert_test() {
     for _rep in 0..REP {
@@ -396,7 +399,7 @@ fn std_cursor_insert_test() {
             assert_eq!((*k, *v), (n - i - 1, n - i - 1));
         }
     }
-}
+}*/
 
 #[test]
 fn mut_cursor_test() {

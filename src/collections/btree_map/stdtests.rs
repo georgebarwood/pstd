@@ -11,7 +11,7 @@ use super::{
 };
 
 use std::{
-    assert_matches,
+    // assert_matches,
     fmt::Debug,
     ops::Bound::{Excluded, Included, Unbounded},
     rc::Rc,
@@ -1447,12 +1447,12 @@ fn cursor_peek_prev_agrees_with_cursor_mut() {
     assert!(cursor.peek_next().is_none());
 
     let prev = cursor.peek_prev();
-    assert_matches!(prev, Some((&3, _)));
+    assert!(matches!(prev, Some((&3, _))));
 
     // Shadow names so the two parts of this test match.
     let mut cursor = map.lower_bound_mut(Bound::Excluded(&3));
     assert!(cursor.peek_next().is_none());
 
     let prev = cursor.peek_prev();
-    assert_matches!(prev, Some((&3, _)));
+    assert!(matches!(prev, Some((&3, _))));
 }
