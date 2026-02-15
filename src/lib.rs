@@ -1,8 +1,14 @@
 #![deny(missing_docs)]
-// To run cargo test -F tests or cargo bench, use Nightly ( rustup default nightly ) and enable line below
+// To run cargo test -F tests use Nightly ( rustup default nightly ) and enable line below
 // #![cfg_attr(test, feature(btree_cursors, assert_matches))]
 
 //! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [`collections::BTreeMap`] and [`collections::BTreeSet`].
+
+//!# Features
+//!
+//! This crate supports the following cargo features:
+//! - `serde` : enables serialisation of [`collections::BTreeMap`] and [`collections::BTreeSet`] via serde crate.
+//! - `unsafe-optim` : Enable unsafe optimisations in release mode.
 
 /// Memory allocation.
 pub mod alloc;
