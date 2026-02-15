@@ -2432,11 +2432,11 @@ where
             let mut c = s.lower_bound_mut(Bound::Unbounded);
             loop {
                 if let Some(t) = access.next_element()? {
-                    if let Some(pt) = c.peek_prev() {
-                        if pt >= &t {
-                            s.insert(t);
-                            break;
-                        }
+                    if let Some(pt) = c.peek_prev()
+                        && pt >= &t
+                    {
+                        s.insert(t);
+                        break;
                     }
                     c.insert_before_unchecked(t);
                 } else {
@@ -2449,7 +2449,7 @@ where
         while let Some(t) = access.next_element()? {
             s.insert(t);
         }
-        return Ok(s);        
+        Ok(s)
     }
 }
 
