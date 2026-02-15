@@ -2375,5 +2375,96 @@ impl<'a, T: 'a + Ord + Copy, A: Tuning> Extend<&'a T> for BTreeSet<T, A> {
     */
 }
 
+#[cfg(feature = "serde")]
+use serde::{
+    Deserialize, Deserializer, Serialize, Serializer,
+    de::{SeqAccess, Visitor},
+    ser::SerializeSeq,
+};
+
+#[cfg(feature = "serde")]
+use std::marker::PhantomData;
+
+#[cfg(feature = "serde")]
+impl<T: Serialize, A: Tuning> Serialize for BTreeSet<T, A> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut s = serializer.serialize_seq(Some(self.len()))?;
+        for t in self {
+            s.serialize_element(t)?;
+        }
+        s.end()
+    }
+}
+
+/// For implementation of serde deserialisation.
+#[cfg(feature = "serde")]
+struct BTreeSetVisitor<T> {
+    marker: PhantomData<fn() -> BTreeSet<T>>,
+}
+
+#[cfg(feature = "serde")]
+impl<T> BTreeSetVisitor<T> {
+    fn new() -> Self {
+        BTreeSetVisitor {
+            marker: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T> Visitor<'de> for BTreeSetVisitor<T>
+where
+    T: Deserialize<'de> + Ord,
+{
+    type Value = BTreeSet<T>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("BTreeSet")
+    }
+
+    fn visit_seq<S>(self, mut access: S) -> Result<Self::Value, S::Error>
+    where
+        S: SeqAccess<'de>,
+    {
+        let mut s = BTreeSet::new();
+        let save = s.tuning_mut().set_seq(true);
+        {
+            let mut c = s.lower_bound_mut(Bound::Unbounded);
+            loop {
+                if let Some(t) = access.next_element()? {
+                    if let Some(pt) = c.peek_prev() {
+                        if pt >= &t {
+                            s.insert(t);
+                            break;
+                        }
+                    }
+                    c.insert_before_unchecked(t);
+                } else {
+                    s.tuning_mut().set_seq(save);
+                    return Ok(s);
+                }
+            }
+        }
+        s.tuning_mut().set_seq(save);
+        while let Some(t) = access.next_element()? {
+            s.insert(t);
+        }
+        return Ok(s);        
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T> Deserialize<'de> for BTreeSet<T>
+where
+    T: Deserialize<'de> + Ord,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(BTreeSetVisitor::new())
+    }
+}
+
 #[cfg(test)]
 mod tests;
