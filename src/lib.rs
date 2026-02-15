@@ -1,6 +1,4 @@
 #![deny(missing_docs)]
-// To run cargo test -F tests use Nightly ( rustup default nightly ) and enable line below
-// #![cfg_attr(test, feature(btree_cursors, assert_matches))]
 
 //! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [`collections::BTreeMap`] and [`collections::BTreeSet`].
 
