@@ -1806,7 +1806,7 @@ impl<'a, K, V> RangeMut<'a, K, V> {
             }
             for s in &mut self.bck_stk {
                 if s.v.len() > s.c.len() {
-                    return Some(s.v.next().unwrap());
+                    return s.v.next();
                 } else if let Some(ct) = s.c.next() {
                     self.push_tree(ct, false);
                     if let Some(x) = self.fwd_leaf.next() {
@@ -1836,7 +1836,7 @@ impl<'a, K, V> RangeMut<'a, K, V> {
 
             for s in &mut self.fwd_stk {
                 if s.v.len() > s.c.len() {
-                    return Some(s.v.next_back().unwrap());
+                    return s.v.next_back();
                 } else if let Some(ct) = s.c.next_back() {
                     self.push_tree_back(ct);
                     if let Some(x) = self.bck_leaf.next_back() {
@@ -2026,7 +2026,7 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
             }
             for s in &mut self.bck_stk {
                 if s.v.len() > s.c.len() {
-                    return Some(s.v.next(&self.alloc).unwrap());
+                    return s.v.next(&self.alloc);
                 } else if let Some(ct) = s.c.next(&self.alloc) {
                     self.push_tree(ct, false);
                     if let Some(x) = self.fwd_leaf.next(&self.alloc) {
@@ -2055,7 +2055,7 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
             }
             for s in &mut self.fwd_stk {
                 if s.v.len() > s.c.len() {
-                    return Some(s.v.next_back(&self.alloc).unwrap());
+                    return s.v.next_back(&self.alloc);
                 } else if let Some(ct) = s.c.next_back(&self.alloc) {
                     self.push_tree_back(ct);
                     if let Some(x) = self.bck_leaf.next_back(&self.alloc) {
@@ -2160,7 +2160,7 @@ pub struct Range<'a, K, V> {
     fwd_leaf: IterPairVec<'a, K, V>,
     bck_leaf: IterPairVec<'a, K, V>,
     fwd_stk: StkVec<Stk<'a, K, V>>,
-    bck_stk: StkVec<Stk<'a, K, V>>,
+    bck_stk: StkVec<Stk<'a, K, V>>
 }
 impl<'a, K, V> Range<'a, K, V> {
     #[inline]
@@ -2289,7 +2289,7 @@ impl<'a, K, V> Range<'a, K, V> {
             }
             for s in &mut self.bck_stk {
                 if s.v.len() > s.c.len() {
-                    return Some(s.v.next().unwrap());
+                    return s.v.next();
                 } else if let Some(ct) = s.c.next() {
                     self.push_tree(ct, false);
                     if let Some(x) = self.fwd_leaf.next() {
@@ -2318,7 +2318,7 @@ impl<'a, K, V> Range<'a, K, V> {
             }
             for s in &mut self.fwd_stk {
                 if s.v.len() > s.c.len() {
-                    return Some(s.v.next_back().unwrap());
+                    return s.v.next_back();
                 } else if let Some(ct) = s.c.next_back() {
                     self.push_tree_back(ct);
                     if let Some(x) = self.bck_leaf.next_back() {
