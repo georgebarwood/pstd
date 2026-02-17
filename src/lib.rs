@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 
-//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [`collections::BTreeMap`] and [`collections::BTreeSet`].
+//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [`collections::BTreeMap`], [`collections::BTreeSet`] and [`vec::Vec`].
 
 //!# Features
 //!
@@ -23,6 +23,9 @@ pub mod collections {
 
     mod merge_iter;
 }
+
+/// Vec similar to [`std::vec::Vec`], many methods not yet done.
+pub mod vec;
 
 #[cfg(test)]
 mod testing {
