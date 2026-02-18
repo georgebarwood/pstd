@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "1.0.26"
+version = "1.0.28"
 edition = "2024"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
@@ -24,7 +24,6 @@ serde = ["dep:serde"]
 unsafe-optim = []
 
 # Features for testing
-# Note: lib.cs needs to be edited and nightly must be used for -F tests.
 cap = [] # High performance allocator
 mytests = ["serde"]
 stdtests = []
