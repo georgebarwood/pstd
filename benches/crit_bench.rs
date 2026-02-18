@@ -1,5 +1,3 @@
-// #![feature(btree_cursors)]
-
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 criterion_group!(
@@ -10,7 +8,8 @@ criterion_group!(
     bench_clone,
     bench_ref_iter,
     bench_into_iter,
-    bench_split_off
+    bench_split_off,
+    bench_insert
 );
 criterion_main!(benches);
 
@@ -52,6 +51,31 @@ fn bench_clone(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::new("Exp", n), |b| b.iter(|| exp_map.clone()));
         group.bench_function(BenchmarkId::new("Std", n), |b| b.iter(|| std_map.clone()));
+    }
+    group.finish();
+}
+
+fn bench_insert(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Insert");
+    for n in [1000, 10000].iter() {
+        group.bench_function(BenchmarkId::new("Exp", n), |b| {
+            b.iter(|| {
+                let mut m = pstd::collections::BTreeMap::new();
+                for i in 0..*n {
+                    m.insert(i, i);
+                }
+                assert!(m.len() == *n);
+            })
+        });
+        group.bench_function(BenchmarkId::new("Std", n), |b| {
+            b.iter(|| {
+                let mut m = std::collections::BTreeMap::new();
+                for i in 0..*n {
+                    m.insert(i, i);
+                }
+                assert!(m.len() == *n);
+            })
+        });
     }
     group.finish();
 }
