@@ -10,14 +10,17 @@ use std::{
     iter::FusedIterator,
     //marker::PhantomData,
     mem,
-    // ops::{Bound, Deref, DerefMut, RangeBounds},
-    ops::{Deref, DerefMut},
+    mem::ManuallyDrop,
+    // ops::{Bound},
+    ops::{Bound, Deref, DerefMut, RangeBounds},
     ptr,
     ptr::NonNull,
     slice,
 };
 
 /// A vector that grows as elements are pushed onto it similar to similar to [`std::vec::Vec`].
+///
+/// Implementation sections: [Construct](#Construct-with-default0allocator) [Basic](#basic-methods) [Allocation](#allocation-methods) [Conversions](#conversion-methods).
 pub struct Vec<T, A: Allocator = Global> {
     len: usize,
     resvd: usize,
@@ -25,6 +28,7 @@ pub struct Vec<T, A: Allocator = Global> {
     alloc: A,
 }
 
+/// # Construct with default allocator
 impl<T> Vec<T> {
     /// Create a new Vec.
     ///
@@ -40,11 +44,11 @@ impl<T> Vec<T> {
     /// ```
     #[must_use]
     pub const fn new() -> Vec<T> {
-        Self::new_in(Global)
+        Vec::new_in(Global)
     }
 }
 
-/// # Basic methods.
+/// # Basic methods
 impl<T, A: Allocator> Vec<T, A> {
     /// Returns the number of elements.
     pub const fn len(&self) -> usize {
@@ -132,14 +136,13 @@ impl<T, A: Allocator> Vec<T, A> {
         unsafe {
             let result = self.get(index);
             self.len -= 1;
-            if index != self.len
-            {
+            if index != self.len {
                 let last = self.get(self.len);
                 self.set(index, last);
             }
             result
         }
-    }       
+    }
 
     /// Clears the vector, removing all values.
     ///
@@ -237,7 +240,7 @@ impl<T, A: Allocator> Vec<T, A> {
     where
         F: FnMut(&mut T, &mut T) -> bool,
     {
-        Gap::new(self).dedup_by( same_bucket );
+        Gap::new(self).dedup_by(same_bucket);
     }
 
     /// Removes all but the first of consecutive elements in the vector that resolve to the same
@@ -252,6 +255,75 @@ impl<T, A: Allocator> Vec<T, A> {
         self.dedup_by(|a, b| key(a) == key(b))
     }
 
+    /// Clones and appends all elements in a slice to the `Vec`.
+    pub fn extend_from_slice(&mut self, other: &[T])
+    where
+        T: Clone,
+    {
+        for e in other {
+            self.push(e.clone());
+        }
+    }
+
+    /// Given a range `src`, clones a slice of elements in that range and appends it to the end.
+    pub fn extend_from_within<R>(&mut self, src: R)
+    where
+        T: Clone,
+        R: RangeBounds<usize>,
+    {
+        let start = match src.start_bound() {
+            Bound::Included(x) => *x,
+            Bound::Excluded(x) => *x + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match src.start_bound() {
+            Bound::Included(x) => *x + 1,
+            Bound::Excluded(x) => *x,
+            Bound::Unbounded => self.len,
+        };
+
+        for i in start..end {
+            let e = self[i].clone();
+            self.push(e);
+        }
+    }
+
+    /// Moves all the elements of `other` into `self`, leaving `other` empty.
+    /// # Example
+    ///
+    /// ```
+    /// let mut v = Vec::from(&[1,2,3][..]);
+    /// let mut v2 = Vec::from(&[4,5,6][..]);
+    /// v.append(&mut v2);
+    /// assert_eq!(v, [1, 2, 3, 4, 5, 6]);
+    /// ```
+    pub fn append(&mut self, other: &mut Self) {
+        self.reserve(other.len);
+        unsafe {
+            ptr::copy_nonoverlapping(other.ixp(0), self.ixp(self.len), other.len);
+        }
+        self.len += other.len;
+        other.len = 0;
+    }
+
+    /// Splits the collection into two at the given index.
+    pub fn split_off(&mut self, at: usize) -> Self
+    where
+        A: Clone,
+    {
+        assert!(at <= self.len);
+
+        let other_len = self.len - at;
+        let mut other = Vec::with_capacity_in(other_len, self.alloc.clone());
+
+        unsafe {
+            self.len = at;
+            other.len = other_len;
+            ptr::copy_nonoverlapping(self.ixp(at), other.ixp(0), other_len);
+        }
+        other
+    }
+
     // ##########################################################################
     // Private methods ##########################################################
     // ##########################################################################
@@ -264,7 +336,7 @@ impl<T, A: Allocator> Vec<T, A> {
     unsafe fn ixp(&self, i: usize) -> *mut T {
         unsafe { self.p.as_ptr().add(i) }
     }
-    
+
     /// Get ith value.
     /// # Safety
     ///
@@ -367,7 +439,7 @@ impl<T, A: Allocator> Vec<T, A> {
 
     /// Constructs a new, empty `Vec<T, A>` with at least the specified capacity
     /// with the provided allocator.
-    pub fn with_capacity_in(capacity: usize, alloc: A) -> Self {
+    pub fn with_capacity_in(capacity: usize, alloc: A) -> Vec<T, A> {
         let mut v = Self::new_in(alloc);
         v.set_capacity(capacity);
         v
@@ -403,6 +475,146 @@ impl<T, A: Allocator> Vec<T, A> {
             self.set_capacity(cmp::max(self.len, capacity));
         }
     }
+}
+
+/// # Conversion methods.
+impl<T, A: Allocator> Vec<T, A> {
+    /// Extracts a slice containing the entire vector.
+    ///
+    /// Equivalent to `&s[..]`.
+    ///
+    pub const fn as_slice(&self) -> &[T] {
+        unsafe { std::slice::from_raw_parts(self.p.as_ptr(), self.len) }
+    }
+
+    /// Extracts a mut slice containing the entire vector.
+    ///
+    /// Equivalent to `&mut s[..]`.
+    ///
+    pub const fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { std::slice::from_raw_parts_mut(self.p.as_ptr(), self.len) }
+    }
+
+    /// Returns the `NonNull` pointer to the vector's buffer.
+    pub const fn as_non_null(&mut self) -> NonNull<T> {
+        self.p
+    }
+
+    /// Returns a raw pointer to the vector's buffer, or a dangling raw pointer
+    /// valid for zero sized reads if the vector didn't allocate.
+    pub const fn as_ptr(&self) -> *const T {
+        self.p.as_ptr()
+    }
+
+    /// Returns a raw mutable pointer to the vector's buffer, or a dangling
+    /// raw pointer valid for zero sized reads if the vector didn't allocate.
+    pub const fn as_mut_ptr(&mut self) -> *mut T {
+        unsafe { self.p.as_mut() }
+    }
+
+    /// Decomposes a `Vec<T>` into its components: `(NonNull pointer, length, capacity)`.
+    pub fn into_parts(self) -> (NonNull<T>, usize, usize) {
+        let (ptr, len, capacity) = self.into_raw_parts();
+        // SAFETY: A `Vec` always has a non-null pointer.
+        (unsafe { NonNull::new_unchecked(ptr) }, len, capacity)
+    }
+
+    /// Decomposes a `Vec<T>` into its components: `(NonNull pointer, length, capacity)`.
+    pub fn into_parts_with_alloc(self) -> (NonNull<T>, usize, usize, A) {
+        let (ptr, len, capacity, alloc) = self.into_raw_parts_with_alloc();
+        // SAFETY: A `Vec` always has a non-null pointer.
+        (unsafe { NonNull::new_unchecked(ptr) }, len, capacity, alloc)
+    }
+
+    /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity)`.
+    pub fn into_raw_parts(self) -> (*mut T, usize, usize) {
+        let mut me = ManuallyDrop::new(self);
+        (me.as_mut_ptr(), me.len, me.resvd)
+    }
+
+    /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity, allocator)`.
+    pub fn into_raw_parts_with_alloc(self) -> (*mut T, usize, usize, A) {
+        let mut me = ManuallyDrop::new(self);
+        let alloc = unsafe { ptr::read(&me.alloc) };
+        (me.as_mut_ptr(), me.len, me.resvd, alloc)
+    }
+
+    /// Creates a `Vec<T, A>` directly from a `NonNull` pointer, a length, a capacity,
+    /// and an allocator.
+    ///
+    /// # Safety
+    ///
+    /// Parameters must all be correct, ptr must have been allocated from alloc.
+    pub unsafe fn from_parts_in(ptr: NonNull<T>, length: usize, capacity: usize, alloc: A) -> Self {
+        assert!(capacity >= length);
+        Self {
+            p: ptr,
+            resvd: capacity,
+            alloc,
+            len: length,
+        }
+    }
+
+    /// Creates a `Vec<T, A>` directly from a pointer, a length, a capacity,
+    /// and an allocator.
+    ///
+    /// # Safety
+    ///
+    /// Parameters must all be correct, ptr must have been allocated from alloc.
+    pub unsafe fn from_raw_parts_in(ptr: *mut T, length: usize, capacity: usize, alloc: A) -> Self {
+        assert!(capacity >= length);
+        let p = unsafe { NonNull::new_unchecked(ptr) };
+        Self {
+            p,
+            resvd: capacity,
+            alloc,
+            len: length,
+        }
+    }
+
+    /// Creates a `Vec<T>` directly from a `NonNull` pointer, a length, and a capacity.
+    ///
+    /// # Safety
+    ///
+    /// Parameters must all be correct, ptr must have been allocated from Global allocator.
+    pub unsafe fn from_parts(ptr: NonNull<T>, length: usize, capacity: usize) -> Vec<T> {
+        let mut v = Vec::new();
+        v.len = length;
+        v.resvd = capacity;
+        v.p = ptr;
+        v
+    }
+
+    /// Creates a `Vec<T>` directly from a pointer, a length, and a capacity.
+    ///
+    /// # Safety
+    ///
+    /// Parameters must all be correct, ptr must have been allocated from Global allocator.
+    pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize) -> Vec<T> {
+        let mut v = Vec::new();
+        v.len = length;
+        v.resvd = capacity;
+        v.p = unsafe { NonNull::new_unchecked(ptr) };
+        v
+    }
+
+    /* Would need to implement Box first to make this possible under Stable.
+        /// Converts the vector into [`Box<[T]>`][owned slice].
+        ///
+        /// Before doing the conversion, this method discards excess capacity like [`shrink_to_fit`].
+        ///
+        /// [owned slice]: Box
+        /// [`shrink_to_fit`]: Vec::shrink_to_fit
+        pub fn into_boxed_slice(mut self) -> Box<[T], A> {
+            unsafe {
+                self.shrink_to_fit();
+                let me = ManuallyDrop::new(self);
+                let alloc = unsafe { ptr::read(&me.alloc) };
+                let slice = me.as_mut_slice();
+                Box::from_raw_in(slice, alloc)
+            }
+        }
+    */
 }
 
 unsafe impl<T: Send> Send for Vec<T> {}
@@ -445,6 +657,16 @@ impl<T, A: Allocator> IntoIterator for Vec<T, A> {
     }
 }
 
+impl<T: Clone, A: Allocator + Clone> Clone for Vec<T, A> {
+    fn clone(&self) -> Self {
+        let mut v = Vec::with_capacity_in(self.len, self.alloc.clone());
+        for e in self.iter() {
+            v.push(e.clone());
+        }
+        v
+    }
+}
+
 impl<T, A: Allocator> Drop for Vec<T, A> {
     fn drop(&mut self) {
         while self.len != 0 {
@@ -460,10 +682,7 @@ impl<T> Default for Vec<T> {
     }
 }
 
-impl<T, A: Allocator> fmt::Debug for Vec<T, A>
-where
-    T: fmt::Debug,
-{
+impl<T: Debug, A: Allocator> Debug for Vec<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // panic!();
         // f.debug_list().entries((*self).iter().finish()
@@ -520,12 +739,13 @@ impl<T, A: Allocator> Drop for IntoIter<T, A> {
     }
 }
 
-
 impl<T: Clone> From<&[T]> for Vec<T> {
     /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
     fn from(s: &[T]) -> Vec<T> {
         let mut v = Vec::new();
-        for e in s { v.push(e.clone()); }
+        for e in s {
+            v.push(e.clone());
+        }
         v
     }
 }
@@ -533,8 +753,8 @@ impl<T: Clone> From<&[T]> for Vec<T> {
 /// For removing multiple elements from a Vec.
 /// When dropped, it closes up any gap.
 struct Gap<'a, T, A: Allocator> {
-    r: usize,  // Read index
-    w: usize,  // Write index
+    r: usize, // Read index
+    w: usize, // Write index
     v: &'a mut Vec<T, A>,
 }
 
@@ -615,7 +835,7 @@ fn test() {
     //assert!(v.pop() == Some(99));
     //assert!(v.pop() == None);
 
-    let mut v = Vec::from( &[199,200,200,201,201][..] );
+    let mut v = Vec::from(&[199, 200, 200, 201, 201][..]);
     println!("v={:?}", &v);
     v.dedup();
     println!("v={:?}", &v);
