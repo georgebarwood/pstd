@@ -15,7 +15,7 @@ use std::{
 
 /// A vector that grows as elements are pushed onto it similar to similar to [`std::vec::Vec`].
 ///
-/// Implementation sections: [Construct](#Construct-with-default-allocator) [Basic](#basic-methods) [Allocation](#allocation-methods) [Conversions](#conversion-methods).
+/// Implementation sections: [Construct](#construct-with-default-allocator) [Basic](#basic-methods) [Allocation](#allocation-methods) [Conversions](#conversion-methods).
 pub struct Vec<T, A: Allocator = Global> {
     len: usize,
     cap: usize,
@@ -215,7 +215,7 @@ impl<T, A: Allocator> Vec<T, A> {
     where
         F: FnMut(&T) -> bool,
     {
-        Gap::new(self).retain(f);
+        Gap::new(self,0).retain(f);
     }
 
     /// Retains only the elements specified by the predicate, passing a mutable reference to it.
@@ -223,7 +223,7 @@ impl<T, A: Allocator> Vec<T, A> {
     where
         F: FnMut(&mut T) -> bool,
     {
-        Gap::new(self).retain_mut(f);
+        Gap::new(self,0).retain_mut(f);
     }
 
     /// Creates an iterator which removes a range.
@@ -268,7 +268,7 @@ impl<T, A: Allocator> Vec<T, A> {
     where
         F: FnMut(&mut T, &mut T) -> bool,
     {
-        Gap::new(self).dedup_by(same_bucket);
+        Gap::new(self,1).dedup_by(same_bucket);
     }
 
     /// Removes all but the first of consecutive elements in the vector that resolve to the same
@@ -447,6 +447,7 @@ impl<T, A: Allocator> Vec<T, A> {
             Bound::Unbounded => self.len,
         };
         assert!(end <= self.len);
+        assert!(start <= end);
         (start, end)
     }
 }
@@ -821,16 +822,19 @@ impl<T> FromIterator<T> for Vec<T> {
 }
 
 /// For removing multiple elements from a Vec.
-/// When dropped, it closes up any gap.
+/// When dropped, it closes up any gap. The gap size is r-w.
 struct Gap<'a, T, A: Allocator> {
     r: usize, // Read index
     w: usize, // Write index
+    len: usize, // Copy of v len
     v: &'a mut Vec<T, A>,
 }
 
 impl<'a, T, A: Allocator> Gap<'a, T, A> {
-    fn new(v: &'a mut Vec<T, A>) -> Self {
-        Self { w: 0, r: 0, v }
+    fn new(v: &'a mut Vec<T, A>, b: usize) -> Self {
+        let len = v.len;
+        v.len = b; // Could use 0, will be restored when Gap drops.
+        Self { w: b, r: b, v, len }
     }
 
     fn retain<F>(&mut self, mut f: F)
@@ -838,7 +842,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
         F: FnMut(&T) -> bool,
     {
         unsafe {
-            while self.r < self.v.len {
+            while self.r < self.len {
                 let nxt = self.v.ixp(self.r);
                 if f(&mut *nxt) {
                     // Retain element
@@ -862,7 +866,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
         F: FnMut(&mut T) -> bool,
     {
         unsafe {
-            while self.r < self.v.len {
+            while self.r < self.len {
                 let nxt = self.v.ixp(self.r);
                 if f(&mut *nxt) {
                     // Retain element
@@ -885,12 +889,10 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
     where
         F: FnMut(&mut T, &mut T) -> bool,
     {
-        if self.v.len > 0 {
+        if self.len > 0 {
             unsafe {
                 let mut cur = self.v.ixp(0);
-                self.r = 1;
-                self.w = 1;
-                while self.r < self.v.len {
+                while self.r < self.len {
                     let nxt = self.v.ixp(self.r);
                     if same_bucket(&mut *nxt, &mut *cur) {
                         // Discard duplicate
@@ -907,17 +909,6 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
                     }
                 }
             }
-        }
-    }
-
-    fn drain(&mut self, end: usize) -> Option<T> {
-        unsafe {
-            if self.r < end {
-                let nxt = self.v.ixp(self.r);
-                self.r += 1;
-                return Some(ptr::read(nxt));
-            }
-            None
         }
     }
 
@@ -947,17 +938,16 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
 impl<'a, T, A: Allocator> Drop for Gap<'a, T, A> {
     // Close up any gap.
     fn drop(&mut self) {
-        let n = self.v.len - self.r;
-        if n > 0 && self.w != self.r {
+        let n = self.len - self.r;
+        let g = self.r - self.w;
+        if n > 0 && g != 0 {
             unsafe {
                 let dst = self.v.ixp(self.w);
                 let src = self.v.ixp(self.r);
                 ptr::copy(src, dst, n);
-                self.v.len = self.w + n;
             }
-        } else {
-            self.v.len = self.w;
         }
+        self.v.len = self.len - g; 
     }
 }
 
@@ -968,22 +958,53 @@ impl<'a, T, A: Allocator> Drop for Gap<'a, T, A> {
 pub struct Drain<'a, T, A: Allocator = Global> {
     gap: Gap<'a, T, A>,
     end: usize,
+    br:  usize,
 }
 
 impl<'a, T, A: Allocator> Drain<'a, T, A> {
-    pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, range: R) -> Self {
+    fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, range: R) -> Self {
         let (b, end) = vec.get_range(range);
-        let gap = Gap { v: vec, r: b, w: b };
-        Self { gap, end }
+        let gap = Gap::new( vec, b );
+        Self { gap, end, br: end }
     }
 }
 
 impl<T, A: Allocator> Iterator for Drain<'_, T, A> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
-        self.gap.drain(self.end)
+        if self.gap.r == self.br { return None; }
+        let x = self.gap.r;
+        self.gap.r += 1;
+        Some( unsafe{ self.gap.v.get( x ) } )
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = self.br - self.gap.r;
+        (n, Some(n))
     }
 }
+
+impl<T, A: Allocator> DoubleEndedIterator for Drain<'_, T, A> {
+    fn next_back(&mut self) -> Option<T> {
+        if self.gap.r == self.br { return None; }
+        self.br -= 1;
+        let x = self.br;
+        Some( unsafe{ self.gap.v.get( x ) } )
+    }
+}
+
+impl<T, A: Allocator> Drop for Drain<'_, T, A> {
+    fn drop(&mut self)
+    {
+        while self.next().is_some() {}
+        self.gap.r = self.end;
+    }
+}
+
+impl<T, A: Allocator> ExactSizeIterator for Drain<'_, T, A> {
+}
+
+impl<T, A: Allocator> FusedIterator for Drain<'_, T, A> {}
 
 /// An iterator which uses a closure to determine if an element should be removed.
 ///
@@ -998,7 +1019,7 @@ pub struct ExtractIf<'a, T, F, A: Allocator = Global> {
 impl<'a, T, F, A: Allocator> ExtractIf<'a, T, F, A> {
     pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, pred: F, range: R) -> Self {
         let (b, end) = vec.get_range(range);
-        let gap = Gap { v: vec, r: b, w: b };
+        let gap = Gap::new(vec, b);
         Self { gap, pred, end }
     }
 }
@@ -1047,4 +1068,12 @@ fn test() {
     let extr: Vec<_> = numbers.extract_if(3..9, |x| *x % 2 == 0).collect();
 
     println!("numbers={:?} extr={:?}", &numbers, &extr);
+
+    let mut v = Vec::from(&[199, 201, 202, 203, 204][..]);
+    {
+        let mut d = v.drain(1..4);
+        assert!( d.next() == Some(201) );
+        assert!( d.next_back() == Some(203) );
+    }
+    println!("v={:?}", &v);
 }
