@@ -2,16 +2,12 @@ use crate::alloc::{Allocator, Global};
 
 use std::{
     alloc::Layout,
-    //borrow::Borrow,
     cmp,
-    //cmp::Ordering,
     fmt,
     fmt::Debug,
     iter::FusedIterator,
-    //marker::PhantomData,
     mem,
     mem::ManuallyDrop,
-    // ops::{Bound},
     ops::{Bound, Deref, DerefMut, RangeBounds},
     ptr,
     ptr::NonNull,
@@ -23,8 +19,8 @@ use std::{
 /// Implementation sections: [Construct](#Construct-with-default-allocator) [Basic](#basic-methods) [Allocation](#allocation-methods) [Conversions](#conversion-methods).
 pub struct Vec<T, A: Allocator = Global> {
     len: usize,
-    resvd: usize,
-    p: NonNull<T>,
+    cap: usize,
+    nn: NonNull<T>,
     alloc: A,
 }
 
@@ -73,8 +69,8 @@ impl<T, A: Allocator> Vec<T, A> {
 
     /// Push a value onto the end of the vec.
     pub fn push(&mut self, value: T) {
-        if self.resvd == self.len {
-            let nc = if self.resvd == 0 { 4 } else { self.resvd * 2 };
+        if self.cap == self.len {
+            let nc = if self.cap == 0 { 4 } else { self.cap * 2 };
             self.set_capacity(nc);
         }
         unsafe {
@@ -100,8 +96,8 @@ impl<T, A: Allocator> Vec<T, A> {
     ///
     pub fn insert(&mut self, index: usize, value: T) {
         assert!(index <= self.len);
-        if self.resvd == self.len {
-            let na = if self.resvd == 0 { 4 } else { self.resvd * 2 };
+        if self.cap == self.len {
+            let na = if self.cap == 0 { 4 } else { self.cap * 2 };
             self.set_capacity(na);
         }
         unsafe {
@@ -367,13 +363,13 @@ impl<T, A: Allocator> Vec<T, A> {
     /// ix must be <= alloc.
     #[inline]
     unsafe fn ixp(&self, i: usize) -> *mut T {
-        unsafe { self.p.as_ptr().add(i) }
+        unsafe { self.nn.as_ptr().add(i) }
     }
 
     /// Get ith value.
     /// # Safety
     ///
-    /// i must be < alloc, and the element must have been set (Written).
+    /// i must be < cap, and the element must have been set (Written).
     #[inline]
     unsafe fn get(&mut self, i: usize) -> T {
         unsafe { ptr::read(self.ixp(i)) }
@@ -382,7 +378,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// Set ith value.
     /// # Safety
     ///
-    /// i must be < alloc, and the element must be unset.
+    /// i must be < cap, and the element must be unset.
     #[inline]
     unsafe fn set(&mut self, i: usize, elem: T) {
         unsafe {
@@ -393,13 +389,13 @@ impl<T, A: Allocator> Vec<T, A> {
     /// Set the allocation. This must be at least the current length.
     fn set_capacity(&mut self, na: usize) {
         assert!(na >= self.len);
-        if na == self.resvd {
+        if na == self.cap {
             return;
         }
         unsafe {
-            self.basic_set_capacity(self.resvd, na);
+            self.basic_set_capacity(self.cap, na);
         }
-        self.resvd = na;
+        self.cap = na;
     }
 
     /// Set capacity ( allocate or reallocate memory ).
@@ -413,10 +409,10 @@ impl<T, A: Allocator> Vec<T, A> {
             }
             if na == 0 {
                 self.alloc.deallocate(
-                    NonNull::new(self.p.as_ptr().cast::<u8>()).unwrap(),
+                    NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap(),
                     Layout::array::<T>(oa).unwrap(),
                 );
-                self.p = NonNull::dangling();
+                self.nn = NonNull::dangling();
                 return;
             }
             let new_layout = Layout::array::<T>(na).unwrap();
@@ -424,7 +420,7 @@ impl<T, A: Allocator> Vec<T, A> {
                 self.alloc.allocate(new_layout)
             } else {
                 let old_layout = Layout::array::<T>(oa).unwrap();
-                let old_ptr = self.p.as_ptr().cast::<u8>();
+                let old_ptr = self.nn.as_ptr().cast::<u8>();
                 let old_ptr = NonNull::new(old_ptr).unwrap();
                 if new_layout.size() > old_layout.size() {
                     self.alloc.grow(old_ptr, old_layout, new_layout)
@@ -433,8 +429,24 @@ impl<T, A: Allocator> Vec<T, A> {
                 }
             }
             .unwrap();
-            self.p = NonNull::new(new_ptr.as_ptr().cast::<T>()).unwrap();
+            self.nn = NonNull::new(new_ptr.as_ptr().cast::<T>()).unwrap();
         }
+    }
+
+    fn get_range<R>(&self, range: R) -> (usize,usize) where R:RangeBounds<usize>
+    {
+        let start = match range.start_bound() {
+            Bound::Included(x) => *x,
+            Bound::Excluded(x) => *x + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            Bound::Included(x) => *x + 1,
+            Bound::Excluded(x) => *x,
+            Bound::Unbounded => self.len,
+        };
+        assert!(end <= self.len);
+        (start, end)
     }
 }
 
@@ -446,9 +458,9 @@ impl<T, A: Allocator> Vec<T, A> {
     pub const fn new_in(alloc: A) -> Vec<T, A> {
         Self {
             len: 0,
-            resvd: 0,
+            cap: 0,
             alloc,
-            p: NonNull::dangling(),
+            nn: NonNull::dangling(),
         }
     }
 
@@ -467,7 +479,7 @@ impl<T, A: Allocator> Vec<T, A> {
 
     /// Returns the current capacity.
     pub const fn capacity(&self) -> usize {
-        self.resvd
+        self.cap
     }
 
     /// Constructs a new, empty `Vec<T, A>` with at least the specified capacity
@@ -483,7 +495,7 @@ impl<T, A: Allocator> Vec<T, A> {
     pub fn reserve(&mut self, additional: usize) {
         let capacity = self.len + additional;
         // Could round up to power of 2 here.
-        if capacity > self.resvd {
+        if capacity > self.cap {
             self.set_capacity(capacity);
         }
     }
@@ -492,7 +504,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// in the given `Vec<T>`.
     pub fn reserve_exact(&mut self, additional: usize) {
         let capacity = self.len + additional;
-        if capacity > self.resvd {
+        if capacity > self.cap {
             self.set_capacity(capacity);
         }
     }
@@ -504,7 +516,7 @@ impl<T, A: Allocator> Vec<T, A> {
 
     /// Trim excess capacity to specified value.
     pub fn shrink_to(&mut self, capacity: usize) {
-        if self.resvd > capacity {
+        if self.cap > capacity {
             self.set_capacity(cmp::max(self.len, capacity));
         }
     }
@@ -517,7 +529,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// Equivalent to `&s[..]`.
     ///
     pub const fn as_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.p.as_ptr(), self.len) }
+        unsafe { std::slice::from_raw_parts(self.nn.as_ptr(), self.len) }
     }
 
     /// Extracts a mut slice containing the entire vector.
@@ -525,24 +537,24 @@ impl<T, A: Allocator> Vec<T, A> {
     /// Equivalent to `&mut s[..]`.
     ///
     pub const fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.p.as_ptr(), self.len) }
+        unsafe { std::slice::from_raw_parts_mut(self.nn.as_ptr(), self.len) }
     }
 
     /// Returns the `NonNull` pointer to the vector's buffer.
     pub const fn as_non_null(&mut self) -> NonNull<T> {
-        self.p
+        self.nn
     }
 
     /// Returns a raw pointer to the vector's buffer, or a dangling raw pointer
     /// valid for zero sized reads if the vector didn't allocate.
     pub const fn as_ptr(&self) -> *const T {
-        self.p.as_ptr()
+        self.nn.as_ptr()
     }
 
     /// Returns a raw mutable pointer to the vector's buffer, or a dangling
     /// raw pointer valid for zero sized reads if the vector didn't allocate.
     pub const fn as_mut_ptr(&mut self) -> *mut T {
-        unsafe { self.p.as_mut() }
+        unsafe { self.nn.as_mut() }
     }
 
     /// Decomposes a `Vec<T>` into its components: `(NonNull pointer, length, capacity)`.
@@ -562,14 +574,14 @@ impl<T, A: Allocator> Vec<T, A> {
     /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity)`.
     pub fn into_raw_parts(self) -> (*mut T, usize, usize) {
         let mut me = ManuallyDrop::new(self);
-        (me.as_mut_ptr(), me.len, me.resvd)
+        (me.as_mut_ptr(), me.len, me.cap)
     }
 
     /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity, allocator)`.
     pub fn into_raw_parts_with_alloc(self) -> (*mut T, usize, usize, A) {
         let mut me = ManuallyDrop::new(self);
         let alloc = unsafe { ptr::read(&me.alloc) };
-        (me.as_mut_ptr(), me.len, me.resvd, alloc)
+        (me.as_mut_ptr(), me.len, me.cap, alloc)
     }
 
     /// Creates a `Vec<T, A>` directly from a `NonNull` pointer, a length, a capacity,
@@ -581,8 +593,8 @@ impl<T, A: Allocator> Vec<T, A> {
     pub unsafe fn from_parts_in(ptr: NonNull<T>, length: usize, capacity: usize, alloc: A) -> Self {
         assert!(capacity >= length);
         Self {
-            p: ptr,
-            resvd: capacity,
+            nn: ptr,
+            cap: capacity,
             alloc,
             len: length,
         }
@@ -596,10 +608,10 @@ impl<T, A: Allocator> Vec<T, A> {
     /// Parameters must all be correct, ptr must have been allocated from alloc.
     pub unsafe fn from_raw_parts_in(ptr: *mut T, length: usize, capacity: usize, alloc: A) -> Self {
         assert!(capacity >= length);
-        let p = unsafe { NonNull::new_unchecked(ptr) };
+        let nn = unsafe { NonNull::new_unchecked(ptr) };
         Self {
-            p,
-            resvd: capacity,
+            nn,
+            cap: capacity,
             alloc,
             len: length,
         }
@@ -613,8 +625,8 @@ impl<T, A: Allocator> Vec<T, A> {
     pub unsafe fn from_parts(ptr: NonNull<T>, length: usize, capacity: usize) -> Vec<T> {
         let mut v = Vec::new();
         v.len = length;
-        v.resvd = capacity;
-        v.p = ptr;
+        v.cap = capacity;
+        v.nn = ptr;
         v
     }
 
@@ -626,8 +638,8 @@ impl<T, A: Allocator> Vec<T, A> {
     pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize) -> Vec<T> {
         let mut v = Vec::new();
         v.len = length;
-        v.resvd = capacity;
-        v.p = unsafe { NonNull::new_unchecked(ptr) };
+        v.cap = capacity;
+        v.nn = unsafe { NonNull::new_unchecked(ptr) };
         v
     }
 
@@ -670,13 +682,13 @@ unsafe impl<T: Sync> Sync for Vec<T> {}
 impl<T, A: Allocator> Deref for Vec<T, A> {
     type Target = [T];
     fn deref(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.p.as_ptr(), self.len) }
+        unsafe { std::slice::from_raw_parts(self.nn.as_ptr(), self.len) }
     }
 }
 
 impl<T, A: Allocator> DerefMut for Vec<T, A> {
     fn deref_mut(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.p.as_ptr(), self.len) }
+        unsafe { std::slice::from_raw_parts_mut(self.nn.as_ptr(), self.len) }
     }
 }
 
@@ -959,31 +971,14 @@ pub struct Drain<'a, T, A: Allocator = Global> {
 
 impl<'a, T, A: Allocator> Drain<'a, T, A> {
     pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, range: R) -> Self {
-        let start = match range.start_bound() {
-            Bound::Included(x) => *x,
-            Bound::Excluded(x) => *x + 1,
-            Bound::Unbounded => 0,
-        };
-        let end = match range.end_bound() {
-            Bound::Included(x) => *x + 1,
-            Bound::Excluded(x) => *x,
-            Bound::Unbounded => vec.len,
-        };
-
-        Self {
-            gap: Gap {
-                v: vec,
-                r: start,
-                w: start,
-            },
-            end,
-        }
+        let (b,end) = vec.get_range(range);
+        let gap = Gap {v: vec, r: b, w: b};
+        Self { gap, end }
     }
 }
 
 impl<T, A: Allocator> Iterator for Drain<'_, T, A> {
     type Item = T;
-
     fn next(&mut self) -> Option<T> {
         self.gap.drain(self.end)
     }
@@ -1001,26 +996,9 @@ pub struct ExtractIf<'a, T, F, A: Allocator = Global> {
 
 impl<'a, T, F, A: Allocator> ExtractIf<'a, T, F, A> {
     pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, pred: F, range: R) -> Self {
-        let start = match range.start_bound() {
-            Bound::Included(x) => *x,
-            Bound::Excluded(x) => *x + 1,
-            Bound::Unbounded => 0,
-        };
-        let end = match range.end_bound() {
-            Bound::Included(x) => *x + 1,
-            Bound::Excluded(x) => *x,
-            Bound::Unbounded => vec.len,
-        };
-
-        Self {
-            gap: Gap {
-                v: vec,
-                r: start,
-                w: start,
-            },
-            pred,
-            end,
-        }
+        let (b,end) = vec.get_range(range);
+        let gap = Gap{ v: vec, r: b, w: b};
+        Self { gap, pred, end }
     }
 }
 
@@ -1029,7 +1007,6 @@ where
     F: FnMut(&mut T) -> bool,
 {
     type Item = T;
-
     fn next(&mut self) -> Option<T> {
         self.gap.extract_if(&mut self.pred, self.end)
     }
