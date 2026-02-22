@@ -20,7 +20,7 @@ use std::{
 
 /// A vector that grows as elements are pushed onto it similar to similar to [`std::vec::Vec`].
 ///
-/// Implementation sections: [Construct](#Construct-with-default0allocator) [Basic](#basic-methods) [Allocation](#allocation-methods) [Conversions](#conversion-methods).
+/// Implementation sections: [Construct](#Construct-with-default-allocator) [Basic](#basic-methods) [Allocation](#allocation-methods) [Conversions](#conversion-methods).
 pub struct Vec<T, A: Allocator = Global> {
     len: usize,
     resvd: usize,
@@ -215,6 +215,39 @@ impl<T, A: Allocator> Vec<T, A> {
         }
     }
 
+    /// Retains only the elements specified by the predicate.
+    pub fn retain<F>(&mut self, f: F)
+    where
+        F: FnMut(&T) -> bool,
+    {
+        Gap::new(self).retain(f);
+    }
+
+    /// Retains only the elements specified by the predicate, passing a mutable reference to it.
+    pub fn retain_mut<F>(&mut self, f: F)
+    where
+        F: FnMut(&mut T) -> bool,
+    {
+        Gap::new(self).retain_mut(f);
+    }
+
+    /// Creates an iterator which removes a range.
+    pub fn drain<R>(&mut self, range: R) -> Drain<'_, T, A>
+    where
+        R: RangeBounds<usize>,
+    {
+        Drain::new(self, range)
+    }
+
+    /// Creates an iterator which uses a closure to determine if an element in the range should be removed.
+    pub fn extract_if<F, R>(&mut self, range: R, filter: F) -> ExtractIf<'_, T, F, A>
+    where
+        F: FnMut(&mut T) -> bool,
+        R: RangeBounds<usize>,
+    {
+        ExtractIf::new(self, filter, range)
+    }
+
     /// Removes consecutive repeated elements in the vector according to the
     /// [`PartialEq`] trait implementation.
     ///
@@ -276,7 +309,7 @@ impl<T, A: Allocator> Vec<T, A> {
             Bound::Excluded(x) => *x + 1,
             Bound::Unbounded => 0,
         };
-        let end = match src.start_bound() {
+        let end = match src.end_bound() {
             Bound::Included(x) => *x + 1,
             Bound::Excluded(x) => *x,
             Bound::Unbounded => self.len,
@@ -519,7 +552,7 @@ impl<T, A: Allocator> Vec<T, A> {
         (unsafe { NonNull::new_unchecked(ptr) }, len, capacity)
     }
 
-    /// Decomposes a `Vec<T>` into its components: `(NonNull pointer, length, capacity)`.
+    /// Decomposes a `Vec<T>` into its components: `(NonNull pointer, length, capacity, allocator)`.
     pub fn into_parts_with_alloc(self) -> (NonNull<T>, usize, usize, A) {
         let (ptr, len, capacity, alloc) = self.into_raw_parts_with_alloc();
         // SAFETY: A `Vec` always has a non-null pointer.
@@ -615,6 +648,20 @@ impl<T, A: Allocator> Vec<T, A> {
             }
         }
     */
+
+    /// Creates a `Vec<T>` where each element is produced by calling `f` with
+    /// that element's index while walking forward through the `Vec<T>`.
+    pub fn from_fn<F>(length: usize, f: F) -> Vec<T>
+    where
+        F: FnMut(usize) -> T,
+    {
+        let mut f = f;
+        let mut m = Vec::new();
+        for i in 0..length {
+            m.push(f(i));
+        }
+        m
+    }
 }
 
 unsafe impl<T: Send> Send for Vec<T> {}
@@ -750,6 +797,16 @@ impl<T: Clone> From<&[T]> for Vec<T> {
     }
 }
 
+impl<T> FromIterator<T> for Vec<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Vec<T> {
+        let mut v = Vec::new();
+        for e in iter {
+            v.push(e);
+        }
+        v
+    }
+}
+
 /// For removing multiple elements from a Vec.
 /// When dropped, it closes up any gap.
 struct Gap<'a, T, A: Allocator> {
@@ -761,6 +818,54 @@ struct Gap<'a, T, A: Allocator> {
 impl<'a, T, A: Allocator> Gap<'a, T, A> {
     fn new(v: &'a mut Vec<T, A>) -> Self {
         Self { w: 0, r: 0, v }
+    }
+
+    fn retain<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&T) -> bool,
+    {
+        unsafe {
+            while self.r < self.v.len {
+                let nxt = self.v.ixp(self.r);
+                if f(&mut *nxt) {
+                    // Retain element
+                    if self.r != self.w {
+                        let to = self.v.ixp(self.w);
+                        *to = ptr::read(nxt);
+                    }
+                    self.r += 1;
+                    self.w += 1;
+                } else {
+                    // Discard
+                    self.r += 1;
+                    let _v = ptr::read(nxt); // Could panic on drop.
+                }
+            }
+        }
+    }
+
+    fn retain_mut<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&mut T) -> bool,
+    {
+        unsafe {
+            while self.r < self.v.len {
+                let nxt = self.v.ixp(self.r);
+                if f(&mut *nxt) {
+                    // Retain element
+                    if self.r != self.w {
+                        let to = self.v.ixp(self.w);
+                        *to = ptr::read(nxt);
+                    }
+                    self.r += 1;
+                    self.w += 1;
+                } else {
+                    // Discard
+                    self.r += 1;
+                    let _v = ptr::read(nxt); // Could panic on drop.
+                }
+            }
+        }
     }
 
     fn dedup_by<F>(&mut self, mut same_bucket: F)
@@ -791,6 +896,39 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
             }
         }
     }
+
+    fn drain(&mut self, end: usize) -> Option<T> {
+        unsafe {
+            if self.r < end {
+                let nxt = self.v.ixp(self.r);
+                self.r += 1;
+                return Some(ptr::read(nxt));
+            }
+            None
+        }
+    }
+
+    fn extract_if<F>(&mut self, f: &mut F, end: usize) -> Option<T>
+    where
+        F: FnMut(&mut T) -> bool,
+    {
+        unsafe {
+            while self.r < end {
+                let nxt = self.v.ixp(self.r);
+                if f(&mut *nxt) {
+                    self.r += 1;
+                    return Some(ptr::read(nxt));
+                }
+                if self.r != self.w {
+                    let to = self.v.ixp(self.w);
+                    *to = ptr::read(nxt);
+                }
+                self.r += 1;
+                self.w += 1;
+            }
+            None
+        }
+    }
 }
 
 impl<'a, T, A: Allocator> Drop for Gap<'a, T, A> {
@@ -807,6 +945,93 @@ impl<'a, T, A: Allocator> Drop for Gap<'a, T, A> {
         } else {
             self.v.len = self.w;
         }
+    }
+}
+
+/// An iterator to remove a range.
+///
+/// This struct is created by [`Vec::drain`].
+/// See its documentation for more.
+pub struct Drain<'a, T, A: Allocator = Global> {
+    gap: Gap<'a, T, A>,
+    end: usize,
+}
+
+impl<'a, T, A: Allocator> Drain<'a, T, A> {
+    pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, range: R) -> Self {
+        let start = match range.start_bound() {
+            Bound::Included(x) => *x,
+            Bound::Excluded(x) => *x + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            Bound::Included(x) => *x + 1,
+            Bound::Excluded(x) => *x,
+            Bound::Unbounded => vec.len,
+        };
+
+        Self {
+            gap: Gap {
+                v: vec,
+                r: start,
+                w: start,
+            },
+            end,
+        }
+    }
+}
+
+impl<T, A: Allocator> Iterator for Drain<'_, T, A> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        self.gap.drain(self.end)
+    }
+}
+
+/// An iterator which uses a closure to determine if an element should be removed.
+///
+/// This struct is created by [`Vec::extract_if`].
+/// See its documentation for more.
+pub struct ExtractIf<'a, T, F, A: Allocator = Global> {
+    gap: Gap<'a, T, A>,
+    end: usize,
+    pred: F,
+}
+
+impl<'a, T, F, A: Allocator> ExtractIf<'a, T, F, A> {
+    pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, pred: F, range: R) -> Self {
+        let start = match range.start_bound() {
+            Bound::Included(x) => *x,
+            Bound::Excluded(x) => *x + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match range.end_bound() {
+            Bound::Included(x) => *x + 1,
+            Bound::Excluded(x) => *x,
+            Bound::Unbounded => vec.len,
+        };
+
+        Self {
+            gap: Gap {
+                v: vec,
+                r: start,
+                w: start,
+            },
+            pred,
+            end,
+        }
+    }
+}
+
+impl<T, F, A: Allocator> Iterator for ExtractIf<'_, T, F, A>
+where
+    F: FnMut(&mut T) -> bool,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        self.gap.extract_if(&mut self.pred, self.end)
     }
 }
 
@@ -839,4 +1064,9 @@ fn test() {
     println!("v={:?}", &v);
     v.dedup();
     println!("v={:?}", &v);
+
+    let mut numbers = Vec::from(&[1, 2, 3, 4, 5, 6, 8, 9, 11, 13, 14, 15][..]);
+    let extr: Vec<_> = numbers.extract_if(3..9, |x| *x % 2 == 0).collect();
+
+    println!("numbers={:?} extr={:?}", &numbers, &extr);
 }
