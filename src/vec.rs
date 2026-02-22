@@ -2,8 +2,7 @@ use crate::alloc::{Allocator, Global};
 
 use std::{
     alloc::Layout,
-    cmp,
-    fmt,
+    cmp, fmt,
     fmt::Debug,
     iter::FusedIterator,
     mem,
@@ -433,7 +432,9 @@ impl<T, A: Allocator> Vec<T, A> {
         }
     }
 
-    fn get_range<R>(&self, range: R) -> (usize,usize) where R:RangeBounds<usize>
+    fn get_range<R>(&self, range: R) -> (usize, usize)
+    where
+        R: RangeBounds<usize>,
     {
         let start = match range.start_bound() {
             Bound::Included(x) => *x,
@@ -971,8 +972,8 @@ pub struct Drain<'a, T, A: Allocator = Global> {
 
 impl<'a, T, A: Allocator> Drain<'a, T, A> {
     pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, range: R) -> Self {
-        let (b,end) = vec.get_range(range);
-        let gap = Gap {v: vec, r: b, w: b};
+        let (b, end) = vec.get_range(range);
+        let gap = Gap { v: vec, r: b, w: b };
         Self { gap, end }
     }
 }
@@ -996,8 +997,8 @@ pub struct ExtractIf<'a, T, F, A: Allocator = Global> {
 
 impl<'a, T, F, A: Allocator> ExtractIf<'a, T, F, A> {
     pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, pred: F, range: R) -> Self {
-        let (b,end) = vec.get_range(range);
-        let gap = Gap{ v: vec, r: b, w: b};
+        let (b, end) = vec.get_range(range);
+        let gap = Gap { v: vec, r: b, w: b };
         Self { gap, pred, end }
     }
 }
