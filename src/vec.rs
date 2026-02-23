@@ -60,6 +60,7 @@ impl<T> Vec<T> {
 ///
 /// Properties / methods that operate on one element at a time.
 impl<T, A: Allocator> Vec<T, A> {
+    
     /// Returns the number of elements.
     pub const fn len(&self) -> usize {
         self.len
@@ -521,14 +522,6 @@ impl<T, A: Allocator> Vec<T, A> {
         &self.alloc
     }
 
-    /// Constructs a new, empty `Vec<T>` with at least the specified capacity.
-    #[must_use]
-    pub fn with_capacity(capacity: usize) -> Vec<T> {
-        let mut v = Vec::<T>::new();
-        v.set_capacity(capacity).unwrap();
-        v
-    }
-
     /// Returns the current capacity.
     pub const fn capacity(&self) -> usize {
         self.cap
@@ -571,6 +564,27 @@ impl<T, A: Allocator> Vec<T, A> {
         if self.cap > capacity {
             let _ = self.set_capacity(cmp::max(self.len, capacity));
         }
+    }
+}
+
+impl<T> Vec<T> {
+    /// Constructs a new, empty `Vec<T>` with at least the specified capacity..
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::vec::Vec;
+    /// let mut v = Vec::with_capacity(10);
+    /// v.push("England");
+    /// v.push("France");
+    /// assert!( v.len() == 2 );
+    /// for s in &v { println!("s={}",s); }
+    /// ```
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> Vec<T> {
+        let mut v = Vec::<T>::new();
+        v.set_capacity(capacity).unwrap();
+        v
     }
 }
 
@@ -671,32 +685,6 @@ impl<T, A: Allocator> Vec<T, A> {
         }
     }
 
-    /// Creates a `Vec<T>` directly from a `NonNull` pointer, a length, and a capacity.
-    ///
-    /// # Safety
-    ///
-    /// Parameters must all be correct, ptr must have been allocated from Global allocator.
-    pub unsafe fn from_parts(ptr: NonNull<T>, length: usize, capacity: usize) -> Vec<T> {
-        let mut v = Vec::new();
-        v.len = length;
-        v.cap = capacity;
-        v.nn = ptr;
-        v
-    }
-
-    /// Creates a `Vec<T>` directly from a pointer, a length, and a capacity.
-    ///
-    /// # Safety
-    ///
-    /// Parameters must all be correct, ptr must have been allocated from Global allocator.
-    pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize) -> Vec<T> {
-        let mut v = Vec::new();
-        v.len = length;
-        v.cap = capacity;
-        v.nn = unsafe { NonNull::new_unchecked(ptr) };
-        v
-    }
-
     /* Would need to implement Box first to make this possible under Stable.
         /// Converts the vector into [`Box<[T]>`][owned slice].
         ///
@@ -714,20 +702,6 @@ impl<T, A: Allocator> Vec<T, A> {
             }
         }
     */
-
-    /// Creates a `Vec<T>` where each element is produced by calling `f` with
-    /// that element's index while walking forward through the `Vec<T>`.
-    pub fn from_fn<F>(length: usize, f: F) -> Vec<T>
-    where
-        F: FnMut(usize) -> T,
-    {
-        let mut f = f;
-        let mut m = Vec::new();
-        for i in 0..length {
-            m.push(f(i));
-        }
-        m
-    }
 
     /// Consumes and leaks the `Vec`, returning a mutable reference to the contents.
     pub fn leak<'a>(self) -> &'a mut [T]
@@ -753,6 +727,72 @@ impl<T, A: Allocator> Vec<T, A> {
         unsafe { slice::from_raw_parts(me.as_ptr(), me.len) }
     }
     */
+}
+
+impl<T> Vec<T> {
+    /// Creates a `Vec<T>` where each element is produced by calling `f` with
+    /// that element's index while walking forward through the `Vec<T>`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::vec::Vec;
+    /// let v = Vec::from_fn(10, |i| i * 2);
+    /// ```
+    pub fn from_fn<F>(length: usize, f: F) -> Vec<T>
+    where
+        F: FnMut(usize) -> T,
+    {
+        let mut f = f;
+        let mut m = Vec::with_capacity(length);
+        for i in 0..length {
+            m.push(f(i));
+        }
+        m
+    }
+
+    /// Creates a `Vec<T>` directly from a `NonNull` pointer, a length, and a capacity.
+    ///
+    /// # Safety
+    ///
+    /// Parameters must all be correct, ptr must have been allocated from Global allocator.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::vec::Vec;
+    /// let mut v = Vec::new();
+    /// v.push("Hello"); 
+    ///
+    /// // Deconstruct the vector into parts.
+    /// let (p, len, cap) = v.into_parts();
+    ///
+    /// unsafe {
+    ///     // Put everything back together into a Vec
+    ///     let rebuilt = Vec::from_parts(p, len, cap);
+    /// }
+    /// ```
+
+    pub unsafe fn from_parts(ptr: NonNull<T>, length: usize, capacity: usize) -> Vec<T> {
+        let mut v = Vec::new();
+        v.len = length;
+        v.cap = capacity;
+        v.nn = ptr;
+        v
+    }
+
+    /// Creates a `Vec<T>` directly from a pointer, a length, and a capacity.
+    ///
+    /// # Safety
+    ///
+    /// Parameters must all be correct, ptr must have been allocated from Global allocator.
+    pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize) -> Vec<T> {
+        let mut v = Vec::new();
+        v.len = length;
+        v.cap = capacity;
+        v.nn = unsafe { NonNull::new_unchecked(ptr) };
+        v
+    }
 }
 
 /// # Non-panic methods.
