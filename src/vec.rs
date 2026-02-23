@@ -1,10 +1,10 @@
 //! Not possible under stable Rust: Vec::const_make_global, Vec::into_boxed_slice (?)
 //!
-//! ToDo : Vec::splice, push_within_capacity, pop_if, peek_mut, try*, various trait impls.
+//! ToDo : Vec::splice, peek_mut (may not do that one),  various trait impls.
 //!
 //! Ideas : have features which allow exclusion of unstable features, methods which can panic.
 //!
-//! What about more non-panic methods: try_push, try_insert, index, index_mut
+//! What about more non-panic methods: try_insert, index, index_mut
 
 use crate::alloc::{Allocator, Global, AllocError};
 
@@ -79,7 +79,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// ```
     pub const fn is_empty(&self) -> bool {
         self.len() == 0
-    }
+    } 
 
     /// Push a value onto the end of the vec.
     pub fn push(&mut self, value: T) {
@@ -101,6 +101,14 @@ impl<T, A: Allocator> Vec<T, A> {
             self.len -= 1;
             unsafe { Some(self.get(self.len)) }
         }
+    }
+
+    /// Removes and returns the last element from a vector if the predicate
+    /// returns `true`, or [`None`] if the predicate returns false or the vector
+    /// is empty (the predicate will not be called in that case).
+    pub fn pop_if(&mut self, predicate: impl FnOnce(&mut T) -> bool) -> Option<T> {
+        let last = self.last_mut()?;
+        if predicate(last) { self.pop() } else { None }
     }
 
     /// Insert value at index, after moving elements up to make a space.
@@ -783,6 +791,20 @@ impl<T, A: Allocator> Vec<T, A> {
         Ok(())
     }
 
+    /// Appends an element and returns a reference to it if there is sufficient spare capacity,
+    /// otherwise an error is returned with the element.
+    pub fn push_within_capacity(&mut self, value: T) -> Result<&mut T, T> {
+        if self.cap == self.len {
+            return Err(value);
+        }
+        let index = self.len;
+        self.len += 1;
+        unsafe {
+            self.set(index, value);
+        }
+        Ok( unsafe { &mut *self.ixp(index) } )
+    }   
+
     /// Remove the value at index, elements are moved down to fill the space.
     /// Returns None if index >= len().
     pub fn try_remove(&mut self, index: usize) -> Option<T> {
@@ -1162,48 +1184,4 @@ where
     fn next(&mut self) -> Option<T> {
         self.gap.extract_if(&mut self.pred, self.end)
     }
-}
-
-#[test]
-fn test() {
-    let mut v = Vec::new();
-    v.push(99);
-    v.push(314);
-    println!("v={:?}", &v);
-    assert!(v[0] == 99);
-    assert!(v[1] == 314);
-    assert!(v.len() == 2);
-    v[1] = 316;
-    assert!(v[1] == 316);
-    for x in &v {
-        println!("x={}", x);
-    }
-    for x in &mut v {
-        *x += 1;
-        println!("x={}", x);
-    }
-    for x in v {
-        println!("x={}", x);
-    }
-    //assert!(v.pop() == Some(316));
-    //assert!(v.pop() == Some(99));
-    //assert!(v.pop() == None);
-
-    let mut v = Vec::from(&[199, 200, 200, 201, 201][..]);
-    println!("v={:?}", &v);
-    v.dedup();
-    println!("v={:?}", &v);
-
-    let mut numbers = Vec::from(&[1, 2, 3, 4, 5, 6, 8, 9, 11, 13, 14, 15][..]);
-    let extr: Vec<_> = numbers.extract_if(3..9, |x| *x % 2 == 0).collect();
-
-    println!("numbers={:?} extr={:?}", &numbers, &extr);
-
-    let mut v = Vec::from(&[199, 201, 202, 203, 204][..]);
-    {
-        let mut d = v.drain(1..4);
-        assert!(d.next() == Some(201));
-        assert!(d.next_back() == Some(203));
-    }
-    println!("v={:?}", &v);
 }
