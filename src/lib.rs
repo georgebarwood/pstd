@@ -12,19 +12,9 @@
 pub mod alloc;
 
 /// Containers.
-pub mod collections {
-    pub mod btree_map;
+pub mod collections;
 
-    pub use btree_map::BTreeMap;
-
-    pub mod btree_set;
-
-    pub use btree_set::BTreeSet;
-
-    mod merge_iter;
-}
-
-/// Vec similar to [`std::vec::Vec`], many methods not yet done.
+/// [`vec::Vec`] similar to [`std::vec::Vec`], not yet well tested.
 pub mod vec;
 
 #[cfg(test)]
