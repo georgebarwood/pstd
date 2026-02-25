@@ -10,9 +10,9 @@
 //use std::fmt::Debug;
 //use std::iter::InPlaceIterable;
 //use std::mem::swap;
-//use std::ops::Bound::*;
-//use std::panic::{AssertUnwindSafe, catch_unwind};
-//use std::rc::Rc;
+use std::ops::Bound::*;
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::rc::Rc;
 //use std::sync::atomic::{AtomicU32, Ordering};
 //use crate::vec::{Drain, IntoIter, PeekMut};
 //use crate::vec;
@@ -20,9 +20,7 @@ use crate::vec::Vec;
 
 //use std::{assert_matches, hint};
 
-/*
-
-use crate::testing::macros::struct_with_counted_drop;
+//use crate::testing::macros::struct_with_counted_drop;
 
 struct DropCounter<'a> {
     count: &'a mut u32,
@@ -90,7 +88,6 @@ fn test_reserve() {
 fn test_zst_capacity() {
     assert_eq!(Vec::<()>::new().capacity(), usize::MAX);
 }
-*/
     
 #[test]
 fn test_indexing() {
@@ -118,6 +115,7 @@ fn test_debug_fmt() {
     let slice: &[isize] = &[4, 5];
     assert_eq!("[4, 5]", format!("{slice:?}"));
 }
+*/
 
 #[test]
 fn test_push() {
@@ -129,6 +127,8 @@ fn test_push() {
     v.push(3);
     assert_eq!(v, [1, 2, 3]);
 }
+
+/*
 
 #[test]
 fn test_extend() {
@@ -174,6 +174,7 @@ fn test_extend() {
     }
     assert_eq!(count_x, 1);
 }
+*/
 
 #[test]
 fn test_extend_from_slice() {
@@ -186,6 +187,8 @@ fn test_extend_from_slice() {
 
     assert_eq!(v, [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]);
 }
+
+/*
 
 #[test]
 fn test_extend_ref() {
@@ -201,6 +204,9 @@ fn test_extend_ref() {
     assert_eq!(v.len(), 7);
     assert_eq!(v, [1, 2, 3, 4, 5, 6, 7]);
 }
+
+*/
+
 
 #[test]
 fn test_slice_from_ref() {
@@ -339,6 +345,8 @@ fn test_retain_pred_panic_with_hole() {
     assert!(v.iter().all(|r| Rc::strong_count(r) == 1));
 }
 
+/*
+
 #[test]
 #[cfg_attr(not(panic = "unwind"), ignore = "test requires unwinding support")]
 fn test_retain_pred_panic_no_hole() {
@@ -414,6 +422,8 @@ fn test_retain_maybeuninits() {
     assert_eq!(vec, [2, 4]);
 }
 
+*/
+
 #[test]
 fn test_dedup() {
     fn case(a: Vec<i32>, b: Vec<i32>) {
@@ -478,6 +488,7 @@ fn test_dedup_unique() {
     // and/or rt should raise errors.
 }
 
+/*
 #[test]
 fn zero_sized_values() {
     let mut v = Vec::new();
@@ -530,6 +541,8 @@ fn test_zip_unzip() {
     assert_eq!((3, 6), (left[2], right[2]));
 }
 
+*/
+
 #[test]
 fn test_cmp() {
     let x: &[isize] = &[1, 2, 3, 4, 5];
@@ -553,6 +566,7 @@ fn test_cmp() {
     assert_eq!(&x[1..4], cmp);
 }
 
+/*
 #[test]
 fn test_vec_truncate_drop() {
     struct_with_counted_drop!(Elem(i32), DROPS);
@@ -582,6 +596,7 @@ fn test_vec_truncate_fail() {
     let mut v = vec![BadElem(1), BadElem(2), BadElem(0xbadbeef), BadElem(4)];
     v.truncate(0);
 }
+*/
 
 #[test]
 fn test_index() {
@@ -776,6 +791,8 @@ fn test_drain_inclusive_range() {
     assert_eq!(v, &["1".to_string()]);
 }
 
+/*
+
 #[test]
 fn test_drain_max_vec_size() {
     let mut v = Vec::<()>::with_capacity(usize::MAX);
@@ -802,6 +819,7 @@ fn test_drain_index_overflow() {
     }
     v.drain(0..=usize::MAX);
 }
+*/
 
 #[test]
 #[should_panic]
@@ -824,6 +842,7 @@ fn test_drain_end_overflow() {
     v.drain((Included(0), Included(usize::MAX)));
 }
 
+/*
 #[test]
 #[cfg_attr(not(panic = "unwind"), ignore = "test requires unwinding support")]
 fn test_drain_leak() {
@@ -877,6 +896,8 @@ fn test_drain_keep_rest_none() {
     drain.keep_rest();
     assert_eq!(v, &[0, 6]);
 }
+
+*/
 
 #[test]
 fn test_splice() {
@@ -933,6 +954,7 @@ fn test_splice_unbounded() {
     assert_eq!(t, &[1, 2, 3, 4, 5]);
 }
 
+/*
 #[test]
 fn test_splice_forget() {
     let mut v = vec![1, 2, 3, 4, 5];
@@ -940,13 +962,16 @@ fn test_splice_forget() {
     std::mem::forget(v.splice(2..4, a));
     assert_eq!(v, &[1, 2]);
 }
+*/
 
+/*
 #[test]
 fn test_into_boxed_slice() {
     let xs = vec![1, 2, 3];
     let ys = xs.into_boxed_slice();
     assert_eq!(&*ys, [1, 2, 3]);
 }
+*/
 
 #[test]
 fn test_append() {
@@ -969,6 +994,8 @@ fn test_split_off() {
     assert_eq!(vec.capacity(), orig_capacity);
     assert_eq!(vec.as_ptr(), orig_ptr);
 }
+
+/*
 
 #[test]
 fn test_split_off_take_all() {
@@ -1022,10 +1049,14 @@ fn test_into_iter_debug() {
     assert_eq!(debug, "IntoIter(['a', 'b', 'c'])");
 }
 
+*/
+
 #[test]
 fn test_into_iter_count() {
     assert_eq!([1, 2, 3].into_iter().count(), 3);
 }
+
+/*
 
 #[test]
 fn test_into_iter_next_chunk() {
@@ -1036,6 +1067,8 @@ fn test_into_iter_next_chunk() {
     assert_eq!(iter.next_chunk::<4>().unwrap_err().as_slice(), &[]); // N is explicitly 4
 }
 
+*/
+    
 #[test]
 fn test_into_iter_clone() {
     fn iter_equal<I: Iterator<Item = i32>>(it: I, slice: &[i32]) {
@@ -1053,6 +1086,8 @@ fn test_into_iter_clone() {
     iter_equal(it.clone(), &[]);
     assert_eq!(it.next(), None);
 }
+
+/*
 
 #[test]
 #[cfg_attr(not(panic = "unwind"), ignore = "test requires unwinding support")]
@@ -2267,6 +2302,8 @@ fn test_vec_cycle_wrapped() {
     c3.refs.v[1].set(Some(&c2));
 }
 
+*/
+
 #[test]
 fn test_zero_sized_capacity() {
     for len in [0, 1, 2, 4, 8, 16, 32, 64, 128, 256] {
@@ -2306,6 +2343,8 @@ fn test_vec_macro_repeat() {
     assert_eq!(vec![el; n], vec![Box::new(1), Box::new(1), Box::new(1)]);
 }
 
+/*
+
 #[test]
 fn test_vec_swap() {
     let mut a: Vec<isize> = vec![0, 1, 2, 3, 4, 5, 6];
@@ -2317,6 +2356,8 @@ fn test_vec_swap() {
     assert_eq!(a[0], 42);
     assert_eq!(n, 0);
 }
+
+*/
 
 #[test]
 fn test_extend_from_within_clone() {
@@ -2410,6 +2451,7 @@ fn test_vec_dedup_multiple_ident() {
     assert_eq!(vec, [12, 11]);
 }
 
+/*
 #[test]
 fn test_vec_dedup_partialeq() {
     #[derive(Debug)]
@@ -2627,6 +2669,8 @@ fn test_vec_from_array_mut_ref() {
     assert_eq!(Vec::from(&mut [1, 2, 3]), vec![1, 2, 3]);
 }
 
+*/
+
 #[test]
 fn test_pop_if() {
     let mut v = vec![1, 2, 3, 4];
@@ -2656,6 +2700,8 @@ fn test_pop_if_mutates() {
     assert_eq!(v.pop_if(pred), None);
     assert_eq!(v, [2]);
 }
+
+/*
 
 #[test]
 fn test_peek_mut() {
@@ -2687,6 +2733,8 @@ fn max_dont_panic() {
     v.shrink_to(usize::MAX);
     v.truncate(usize::MAX);
 }
+
+*/
 
 #[test]
 #[should_panic]
@@ -2758,6 +2806,7 @@ fn zst_collections_iter_nth_back_regression() {
     let _ = list.into_iter().nth_back(1);
 }
 
+/*
 #[test]
 fn const_heap() {
     const X: &'static [u32] = {
@@ -2774,3 +2823,4 @@ fn const_heap() {
     assert_eq!([1, 2, 4, 8, 16, 32], X);
 }
 */
+
