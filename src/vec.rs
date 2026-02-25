@@ -1,6 +1,6 @@
 //! Not possible under stable Rust: Vec::const_make_global, Vec::into_boxed_slice (?)
 //!
-//! ToDo : Vec::splice, peek_mut (may not do that one),  various trait impls.
+//! ToDo : peek_mut (may not do that one),  various trait impls.
 //!
 //! Ideas : have features which allow exclusion of unstable features, methods which can panic.
 //!
@@ -238,6 +238,34 @@ impl<T, A: Allocator> Vec<T, A> {
             let e = self[i].clone();
             self.push(e);
         }
+    }
+
+    /// Creates a splicing iterator that replaces the specified range in the vector
+    /// with the given `replace_with` iterator and yields the removed items.
+    /// `replace_with` does not need to be the same length as `range`.
+    ///
+    /// `range` is removed even if the `Splice` iterator is not consumed before it is dropped.
+    ///
+    /// It is unspecified how many elements are removed from the vector
+    /// if the `Splice` value is leaked.
+    ///
+    /// The input iterator `replace_with` is only consumed when the `Splice` value is dropped.
+    ///
+    /// If the iterator yields more values than the size of the removed range
+    /// a temporary vector is allocated to hold any elements after the removed range.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the range has `start_bound > end_bound`, or, if the range is
+    /// bounded on either end and past the length of the vector.
+    ///
+    pub fn splice<R, I>(&mut self, range: R, replace_with: I) -> Splice<'_, I::IntoIter, A>
+    where
+        R: RangeBounds<usize>,
+        I: IntoIterator<Item = T>,
+        A: Clone,
+    {
+        Splice { drain: self.drain(range), replace_with: replace_with.into_iter() }
     }
 
     /// Clears the vector, removing all values.
@@ -772,7 +800,6 @@ impl<T> Vec<T> {
     ///     let rebuilt = Vec::from_parts(p, len, cap);
     /// }
     /// ```
-
     pub unsafe fn from_parts(ptr: NonNull<T>, length: usize, capacity: usize) -> Vec<T> {
         let mut v = Vec::new();
         v.len = length;
@@ -1027,6 +1054,54 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
         Self { w: b, r: b, v, len }
     }
 
+    fn close_gap(&mut self) // Called from drop
+    {
+        let n = self.len - self.r;
+        let g = self.r - self.w;
+        if n > 0 && g != 0 {
+            unsafe {
+                let dst = self.v.ixp(self.w);
+                let src = self.v.ixp(self.r);
+                ptr::copy(src, dst, n);
+            }
+        }
+        self.v.len = self.len - g;
+    }
+
+    /// For splice ( size must be > 0 )
+    unsafe fn fill(&mut self, e: T)
+    {
+        unsafe {
+            let to = self.v.ixp(self.w);
+            *to = e;
+            self.w += 1;
+        }
+    }
+
+    // For splice
+    fn append<I: Iterator<Item = T>>(&mut self, src: &mut I) where A: Clone
+    {
+        while self.w < self.r
+        {
+            if let Some(e) = src.next()
+            {
+                unsafe{ self.fill(e); }
+            }
+            else
+            {
+                return;
+            }
+        }
+        self.v.len = self.len; // Restore len ( no gap ).
+        let mut tail = self.v.split_off(self.w);
+        while let Some(e) = src.next()
+        {
+            self.v.push(e);
+        }
+        self.v.append(&mut tail);
+        self.len = self.v.len; // So drop doesn't truncate back to original len
+    }
+
     fn retain<F>(&mut self, mut f: F)
     where
         F: FnMut(&T) -> bool,
@@ -1128,16 +1203,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
 impl<'a, T, A: Allocator> Drop for Gap<'a, T, A> {
     // Close up any gap.
     fn drop(&mut self) {
-        let n = self.len - self.r;
-        let g = self.r - self.w;
-        if n > 0 && g != 0 {
-            unsafe {
-                let dst = self.v.ixp(self.w);
-                let src = self.v.ixp(self.r);
-                ptr::copy(src, dst, n);
-            }
-        }
-        self.v.len = self.len - g;
+        self.close_gap();
     }
 }
 
@@ -1225,3 +1291,82 @@ where
         self.gap.extract_if(&mut self.pred, self.end)
     }
 }
+
+/// A splicing iterator for `Vec`.
+///
+/// This struct is created by [`Vec::splice()`].
+/// See its documentation for more.
+///
+pub struct Splice<'a, I: Iterator + 'a, A: Allocator + Clone + 'a = Global> {
+    drain: Drain<'a, I::Item, A>,
+    replace_with: I,
+}
+
+impl<I: Iterator, A: Allocator + Clone> Drop for Splice<'_, I, A> {
+    fn drop(&mut self) {
+        self.drain.by_ref().for_each(drop);
+        self.drain.gap.append(&mut self.replace_with);      
+    }
+}
+
+impl<I: Iterator, A: Allocator + Clone> Iterator for Splice<'_, I, A> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.drain.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.drain.size_hint()
+    }
+}
+
+impl<I: Iterator, A: Allocator + Clone> DoubleEndedIterator for Splice<'_, I, A> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.drain.next_back()
+    }
+}
+
+#[test]
+fn test() {
+    let mut v = Vec::new();
+    v.push(99);
+    v.push(314);
+    println!("v={:?}", &v);
+    assert!(v[0] == 99);
+    assert!(v[1] == 314);
+    assert!(v.len() == 2);
+    v[1] = 316;
+    assert!(v[1] == 316);
+    for x in &v {
+        println!("x={}", x);
+    }
+    for x in &mut v {
+        *x += 1;
+        println!("x={}", x);
+    }
+    for x in v {
+        println!("x={}", x);
+    }
+    //assert!(v.pop() == Some(316));
+    //assert!(v.pop() == Some(99));
+    //assert!(v.pop() == None);
+
+    let mut v = Vec::from(&[199, 200, 200, 201, 201][..]);
+    println!("v={:?}", &v);
+    v.dedup();
+    println!("v={:?}", &v);
+
+    let mut numbers = Vec::from(&[1, 2, 3, 4, 5, 6, 8, 9, 11, 13, 14, 15][..]);
+    let extr: Vec<_> = numbers.extract_if(3..9, |x| *x % 2 == 0).collect();
+
+    println!("numbers={:?} extr={:?}", &numbers, &extr);
+
+    let mut a = Vec::from(&[1, 2, 0, 5][..]);
+    let b = Vec::from(&[3, 4][..]);
+    a.splice(2..3, b);
+    println!("a={:?}", &a);
+    
+}
+
+
