@@ -1,4 +1,3 @@
-
 //use crate::alloc::{Allocator, Layout};
 //use core::num::NonZero;
 //use core::ptr::NonNull;
@@ -46,9 +45,16 @@ fn test_double_drop() {
 
     let (mut count_x, mut count_y) = (0, 0);
     {
-        let mut tv = TwoVec { x: Vec::new(), y: Vec::new() };
-        tv.x.push(DropCounter { count: &mut count_x });
-        tv.y.push(DropCounter { count: &mut count_y });
+        let mut tv = TwoVec {
+            x: Vec::new(),
+            y: Vec::new(),
+        };
+        tv.x.push(DropCounter {
+            count: &mut count_x,
+        });
+        tv.y.push(DropCounter {
+            count: &mut count_y,
+        });
 
         // If Vec had a drop flag, here is where it would be zeroed.
         // Instead, it should rely on its internal state to prevent
@@ -88,7 +94,7 @@ fn test_reserve() {
 fn test_zst_capacity() {
     assert_eq!(Vec::<()>::new().capacity(), usize::MAX);
 }
-    
+
 #[test]
 fn test_indexing() {
     let v: Vec<isize> = vec![10, 20];
@@ -124,8 +130,6 @@ fn test_push() {
     v.push(3);
     assert_eq!(v, [1, 2, 3]);
 }
-
-/*
 
 #[test]
 fn test_extend() {
@@ -166,12 +170,13 @@ fn test_extend() {
     let mut count_x = 0;
     {
         let mut x = Vec::new();
-        let y = vec![DropCounter { count: &mut count_x }];
+        let y = vec![DropCounter {
+            count: &mut count_x,
+        }];
         x.extend(y);
     }
     assert_eq!(count_x, 1);
 }
-*/
 
 #[test]
 fn test_extend_from_slice() {
@@ -184,8 +189,6 @@ fn test_extend_from_slice() {
 
     assert_eq!(v, [1, 2, 3, 4, 5, 6, 7, 8, 9, 0]);
 }
-
-/*
 
 #[test]
 fn test_extend_ref() {
@@ -201,9 +204,6 @@ fn test_extend_ref() {
     assert_eq!(v.len(), 7);
     assert_eq!(v, [1, 2, 3, 4, 5, 6, 7]);
 }
-
-*/
-
 
 #[test]
 fn test_slice_from_ref() {
@@ -1065,7 +1065,7 @@ fn test_into_iter_next_chunk() {
 }
 
 */
-    
+
 #[test]
 fn test_into_iter_clone() {
     fn iter_equal<I: Iterator<Item = i32>>(it: I, slice: &[i32]) {
@@ -1403,7 +1403,7 @@ fn overaligned_allocations() {
         assert!(v.as_ptr() as usize & 0xff == 0);
     }
 }
-    
+
 #[test]
 fn extract_if_empty() {
     let mut vec: Vec<i32> = vec![];
@@ -2359,7 +2359,11 @@ fn test_vec_swap() {
 
 #[test]
 fn test_extend_from_within_clone() {
-    let mut v = vec![String::from("sssss"), String::from("12334567890"), String::from("c")];
+    let mut v = vec![
+        String::from("sssss"),
+        String::from("12334567890"),
+        String::from("c"),
+    ];
     v.extend_from_within(1..);
 
     assert_eq!(v, ["sssss", "12334567890", "c", "12334567890", "c"]);
@@ -2822,4 +2826,3 @@ fn const_heap() {
     assert_eq!([1, 2, 4, 8, 16, 32], X);
 }
 */
-
