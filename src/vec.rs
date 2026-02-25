@@ -6,11 +6,11 @@
 //!
 //! What about more non-panic methods: try_insert, index, index_mut
 
-use crate::alloc::{Allocator, Global, AllocError};
+use crate::alloc::{AllocError, Allocator, Global};
 
 use std::{
     alloc::Layout,
-    cmp, 
+    cmp,
     // cmp::Ordering,
     fmt,
     fmt::Debug,
@@ -62,7 +62,6 @@ impl<T> Vec<T> {
 ///
 /// Properties / methods that operate on one element at a time.
 impl<T, A: Allocator> Vec<T, A> {
-    
     /// Returns the number of elements.
     pub const fn len(&self) -> usize {
         self.len
@@ -82,7 +81,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// ```
     pub const fn is_empty(&self) -> bool {
         self.len() == 0
-    } 
+    }
 
     /// Push a value onto the end of the vec.
     pub fn push(&mut self, value: T) {
@@ -271,7 +270,10 @@ impl<T, A: Allocator> Vec<T, A> {
         I: IntoIterator<Item = T>,
         A: Clone,
     {
-        Splice { drain: self.drain(range), replace_with: replace_with.into_iter() }
+        Splice {
+            drain: self.drain(range),
+            replace_with: replace_with.into_iter(),
+        }
     }
 
     /// Clears the vector, removing all values.
@@ -470,14 +472,12 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     /// Set the allocation. This must be at least the current length.
-    fn set_capacity(&mut self, na: usize) -> Result<(),AllocError> {
+    fn set_capacity(&mut self, na: usize) -> Result<(), AllocError> {
         assert!(na >= self.len);
         if na == self.cap {
-            return Ok(())
+            return Ok(());
         }
-        let result = unsafe {
-            self.basic_set_capacity(self.cap, na)
-        };
+        let result = unsafe { self.basic_set_capacity(self.cap, na) };
         self.cap = na;
         result
     }
@@ -486,7 +486,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// # Safety
     ///
     /// `oa` must be the previous alloc set (0 if no alloc has yet been set).
-    unsafe fn basic_set_capacity(&mut self, oa: usize, na: usize) -> Result<(),AllocError> {
+    unsafe fn basic_set_capacity(&mut self, oa: usize, na: usize) -> Result<(), AllocError> {
         unsafe {
             if mem::size_of::<T>() == 0 {
                 return Ok(());
@@ -558,7 +558,11 @@ impl<T, A: Allocator> Vec<T, A> {
 
     /// Returns the current capacity.
     pub const fn capacity(&self) -> usize {
-        if size_of::<T>() == 0 { usize::MAX } else { self.cap }
+        if size_of::<T>() == 0 {
+            usize::MAX
+        } else {
+            self.cap
+        }
     }
 
     /// Constructs a new, empty `Vec<T, A>` with at least the specified capacity
@@ -796,7 +800,7 @@ impl<T> Vec<T> {
     /// ```
     /// use pstd::vec::Vec;
     /// let mut v = Vec::new();
-    /// v.push("Hello"); 
+    /// v.push("Hello");
     ///
     /// // Deconstruct the vector into parts.
     /// let (p, len, cap) = v.into_parts();
@@ -850,7 +854,7 @@ impl<T, A: Allocator> Vec<T, A> {
         let capacity = self.len + additional;
         // Could round up to power of 2 here.
         if capacity > self.cap {
-            return self.set_capacity(capacity)
+            return self.set_capacity(capacity);
         }
         Ok(())
     }
@@ -859,7 +863,7 @@ impl<T, A: Allocator> Vec<T, A> {
     pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), AllocError> {
         let capacity = self.len + additional;
         if capacity > self.cap {
-            return self.set_capacity(capacity)
+            return self.set_capacity(capacity);
         }
         Ok(())
     }
@@ -875,8 +879,8 @@ impl<T, A: Allocator> Vec<T, A> {
         unsafe {
             self.set(index, value);
         }
-        Ok( unsafe { &mut *self.ixp(index) } )
-    }   
+        Ok(unsafe { &mut *self.ixp(index) })
+    }
 
     /// Remove the value at index, elements are moved down to fill the space.
     /// Returns None if index >= len().
@@ -902,30 +906,26 @@ unsafe impl<T: Sync> Sync for Vec<T> {}
 
 impl<T: Eq, A: Allocator> Eq for Vec<T, A> {}
 
-impl<T: Eq, A: Allocator> PartialEq for Vec<T, A> 
-{
-    fn eq(&self, other: &Vec<T, A>) -> bool 
-    { 
-        self[..] == other[..] 
+impl<T: Eq, A: Allocator> PartialEq for Vec<T, A> {
+    fn eq(&self, other: &Vec<T, A>) -> bool {
+        self[..] == other[..]
     }
 }
 
 impl<T, U, A: Allocator, const N: usize> PartialEq<[U; N]> for Vec<T, A>
 where
-    T: PartialEq<U>
+    T: PartialEq<U>,
 {
-    fn eq(&self, other: &[U; N]) -> bool 
-    {
+    fn eq(&self, other: &[U; N]) -> bool {
         self[..] == other[..]
     }
 }
 
 impl<T, U, A: Allocator, const N: usize> PartialEq<&[U; N]> for Vec<T, A>
 where
-    T: PartialEq<U>
+    T: PartialEq<U>,
 {
-    fn eq(&self, other: &&[U; N]) -> bool 
-    {
+    fn eq(&self, other: &&[U; N]) -> bool {
         self[..] == other[..]
     }
 }
@@ -969,7 +969,17 @@ impl<T, A: Allocator> IntoIterator for Vec<T, A> {
 
 impl<T, A: Allocator> Extend<T> for Vec<T, A> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-        for e in iter { self.push(e); }
+        for e in iter {
+            self.push(e);
+        }
+    }
+}
+
+impl<'a, T: Copy + 'a, A: Allocator> Extend<&'a T> for Vec<T, A> {
+    fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
+        for e in iter {
+            self.push(*e);
+        }
     }
 }
 
@@ -1080,17 +1090,6 @@ impl<T> FromIterator<T> for Vec<T> {
     }
 }
 
-/*
-impl<T, const N: usize> From<[T; N]> for Vec<T> {
-    /// ToDo
-    fn from(s: [T; N]) -> Vec<T> {
-        let mut v = Vec::new();
-        for e in s { v.push(e); }
-        v
-    }
-}
-*/
-
 /// For removing multiple elements from a Vec.
 /// When dropped, it closes up any gap. The gap size is r-w.
 struct Gap<'a, T, A: Allocator> {
@@ -1122,33 +1121,32 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
     }
 
     /// For splice ( size must be > 0 )
-    unsafe fn fill(&mut self, e: T)
-    {
+    unsafe fn fill(&mut self, e: T) {
         unsafe {
             let to = self.v.ixp(self.w);
-            ptr::write( to, e );
+            ptr::write(to, e);
             self.w += 1;
         }
     }
 
     // For splice
-    fn append<I: Iterator<Item = T>>(&mut self, src: &mut I) where A: Clone
+    fn append<I: Iterator<Item = T>>(&mut self, src: &mut I)
+    where
+        A: Clone,
     {
-        while self.w < self.r
-        {
-            if let Some(e) = src.next()
-            {
-                unsafe{ self.fill(e); }
-            }
-            else
-            {
+        // Fill the gap
+        while self.w < self.r {
+            if let Some(e) = src.next() {
+                unsafe {
+                    self.fill(e);
+                }
+            } else {
                 return;
             }
         }
         self.v.len = self.len; // Restore len ( no gap ).
         let mut tail = self.v.split_off(self.w);
-        while let Some(e) = src.next()
-        {
+        for e in src {
             self.v.push(e);
         }
         self.v.append(&mut tail);
@@ -1166,7 +1164,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
                     // Retain element
                     if self.r != self.w {
                         let to = self.v.ixp(self.w);
-                        ptr::write(to, ptr::read(nxt) );
+                        ptr::write(to, ptr::read(nxt));
                     }
                     self.r += 1;
                     self.w += 1;
@@ -1223,7 +1221,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
                         cur = self.w;
                         if self.r != self.w {
                             let to = self.v.ixp(self.w);
-                            ptr::write( to, ptr::read(nxt) );
+                            ptr::write(to, ptr::read(nxt));
                         }
                         self.r += 1;
                         self.w += 1;
@@ -1246,7 +1244,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
                 }
                 if self.r != self.w {
                     let to = self.v.ixp(self.w);
-                    ptr::write( to, ptr::read(nxt) );
+                    ptr::write(to, ptr::read(nxt));
                 }
                 self.r += 1;
                 self.w += 1;
@@ -1361,7 +1359,7 @@ pub struct Splice<'a, I: Iterator + 'a, A: Allocator + Clone + 'a = Global> {
 impl<I: Iterator, A: Allocator + Clone> Drop for Splice<'_, I, A> {
     fn drop(&mut self) {
         self.drain.by_ref().for_each(drop);
-        self.drain.gap.append(&mut self.replace_with);      
+        self.drain.gap.append(&mut self.replace_with);
     }
 }
 
@@ -1400,7 +1398,9 @@ macro_rules! vec {
 #[doc(hidden)]
 pub fn from_elem<T: Clone>(elem: T, n: usize) -> Vec<T> {
     let mut v = Vec::with_capacity(n);
-    for _i in 0..n { v.push(elem.clone()); }
+    for _i in 0..n {
+        v.push(elem.clone());
+    }
     v
 }
 
@@ -1439,15 +1439,14 @@ fn test() {
 
     println!("numbers={:?} extr={:?}", &numbers, &extr);
 
-    let mut a = vec![1,2,0,5]; // Vec::from(&[1, 2, 0, 5][..]);
+    let mut a = vec![1, 2, 0, 5]; // Vec::from(&[1, 2, 0, 5][..]);
     let b = vec![3, 4];
     a.splice(2..3, b);
     println!("a={:?}", &a);
-    assert_eq!( a, [1,2,3,4,5] );
+    assert_eq!(a, [1, 2, 3, 4, 5]);
 
-    let v = vec![99;5];
+    let v = vec![99; 5];
     println!("v={:?}", &v);
-    
 }
 
 #[cfg(test)]
