@@ -193,8 +193,9 @@ impl<T, A: Allocator> Vec<T, A> {
     /// # Example
     ///
     /// ```
-    /// let mut v = Vec::from(&[1,2,3][..]);
-    /// let mut v2 = Vec::from(&[4,5,6][..]);
+    /// use pstd::vec;
+    /// let mut v = vec![1,2,3];
+    /// let mut v2 = vec![4,5,6];
     /// v.append(&mut v2);
     /// assert_eq!(v, [1, 2, 3, 4, 5, 6]);
     /// ```
@@ -1327,6 +1328,27 @@ impl<I: Iterator, A: Allocator + Clone> DoubleEndedIterator for Splice<'_, I, A>
     }
 }
 
+/// Creates a [`Vec`] containing the arguments.
+#[macro_export]
+macro_rules! vec {
+    () => (
+        $crate::vec::Vec::new()
+    );
+    ($elem:expr; $n:expr) => (
+        $crate::vec::from_elem($elem, $n)
+    );
+    ($($x:expr),+ $(,)?) => (
+        Vec::from(& [$($x),+][..])
+    );
+}
+
+#[doc(hidden)]
+pub fn from_elem<T: Clone>(elem: T, n: usize) -> Vec<T> {
+    let mut v = Vec::with_capacity(n);
+    for _i in 0..n { v.push(elem.clone()); }
+    v
+}
+
 #[test]
 fn test() {
     let mut v = Vec::new();
@@ -1352,21 +1374,25 @@ fn test() {
     //assert!(v.pop() == Some(99));
     //assert!(v.pop() == None);
 
-    let mut v = Vec::from(&[199, 200, 200, 201, 201][..]);
+    let mut v = vec![199, 200, 200, 201, 201];
     println!("v={:?}", &v);
     v.dedup();
     println!("v={:?}", &v);
 
-    let mut numbers = Vec::from(&[1, 2, 3, 4, 5, 6, 8, 9, 11, 13, 14, 15][..]);
+    let mut numbers = vec![1, 2, 3, 4, 5, 6, 8, 9, 11, 13, 14, 15];
     let extr: Vec<_> = numbers.extract_if(3..9, |x| *x % 2 == 0).collect();
 
     println!("numbers={:?} extr={:?}", &numbers, &extr);
 
-    let mut a = Vec::from(&[1, 2, 0, 5][..]);
-    let b = Vec::from(&[3, 4][..]);
+    let mut a = vec![1,2,0,5]; // Vec::from(&[1, 2, 0, 5][..]);
+    let b = vec![3, 4];
     a.splice(2..3, b);
     println!("a={:?}", &a);
+
+    let v = vec![99;5];
+    println!("v={:?}", &v);
     
 }
 
-
+#[cfg(test)]
+mod test;
