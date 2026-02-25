@@ -10,7 +10,9 @@ use crate::alloc::{Allocator, Global, AllocError};
 
 use std::{
     alloc::Layout,
-    cmp, fmt,
+    cmp, 
+    // cmp::Ordering,
+    fmt,
     fmt::Debug,
     iter::FusedIterator,
     mem,
@@ -224,6 +226,7 @@ impl<T, A: Allocator> Vec<T, A> {
         T: Clone,
         R: RangeBounds<usize>,
     {
+        /*
         let start = match src.start_bound() {
             Bound::Included(x) => *x,
             Bound::Excluded(x) => *x + 1,
@@ -234,6 +237,8 @@ impl<T, A: Allocator> Vec<T, A> {
             Bound::Excluded(x) => *x,
             Bound::Unbounded => self.len,
         };
+        */
+        let (start, end) = self.get_range(src);
 
         for i in start..end {
             let e = self[i].clone();
@@ -416,7 +421,7 @@ impl<T, A: Allocator> Vec<T, A> {
     where
         F: FnMut(&mut T, &mut T) -> bool,
     {
-        Gap::new(self, 1).dedup_by(same_bucket);
+        Gap::new(self, 0).dedup_by(same_bucket);
     }
 
     /// Removes all but the first of consecutive elements in the vector that resolve to the same
@@ -553,7 +558,7 @@ impl<T, A: Allocator> Vec<T, A> {
 
     /// Returns the current capacity.
     pub const fn capacity(&self) -> usize {
-        self.cap
+        if size_of::<T>() == 0 { usize::MAX } else { self.cap }
     }
 
     /// Constructs a new, empty `Vec<T, A>` with at least the specified capacity
@@ -895,6 +900,36 @@ impl<T, A: Allocator> Vec<T, A> {
 unsafe impl<T: Send> Send for Vec<T> {}
 unsafe impl<T: Sync> Sync for Vec<T> {}
 
+impl<T: Eq, A: Allocator> Eq for Vec<T, A> {}
+
+impl<T: Eq, A: Allocator> PartialEq for Vec<T, A> 
+{
+    fn eq(&self, other: &Vec<T, A>) -> bool 
+    { 
+        self[..] == other[..] 
+    }
+}
+
+impl<T, U, A: Allocator, const N: usize> PartialEq<[U; N]> for Vec<T, A>
+where
+    T: PartialEq<U>
+{
+    fn eq(&self, other: &[U; N]) -> bool 
+    {
+        self[..] == other[..]
+    }
+}
+
+impl<T, U, A: Allocator, const N: usize> PartialEq<&[U; N]> for Vec<T, A>
+where
+    T: PartialEq<U>
+{
+    fn eq(&self, other: &&[U; N]) -> bool 
+    {
+        self[..] == other[..]
+    }
+}
+
 impl<T, A: Allocator> Deref for Vec<T, A> {
     type Target = [T];
     fn deref(&self) -> &[T] {
@@ -1074,7 +1109,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
     {
         unsafe {
             let to = self.v.ixp(self.w);
-            *to = e;
+            ptr::write( to, e );
             self.w += 1;
         }
     }
@@ -1114,7 +1149,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
                     // Retain element
                     if self.r != self.w {
                         let to = self.v.ixp(self.w);
-                        *to = ptr::read(nxt);
+                        ptr::write(to, ptr::read(nxt) );
                     }
                     self.r += 1;
                     self.w += 1;
@@ -1138,7 +1173,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
                     // Retain element
                     if self.r != self.w {
                         let to = self.v.ixp(self.w);
-                        *to = ptr::read(nxt);
+                        ptr::write(to, ptr::read(nxt));
                     }
                     self.r += 1;
                     self.w += 1;
@@ -1157,18 +1192,21 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
     {
         if self.len > 0 {
             unsafe {
-                let mut cur = self.v.ixp(0);
+                let mut cur = 0;
+                self.r = 1;
+                self.w = 1;
                 while self.r < self.len {
+                    let cp = self.v.ixp(cur);
                     let nxt = self.v.ixp(self.r);
-                    if same_bucket(&mut *nxt, &mut *cur) {
+                    if same_bucket(&mut *nxt, &mut *cp) {
                         // Discard duplicate
                         self.r += 1;
                         let _v = ptr::read(nxt); // Could panic on drop.
                     } else {
-                        cur = nxt;
+                        cur = self.w;
                         if self.r != self.w {
                             let to = self.v.ixp(self.w);
-                            *to = ptr::read(nxt);
+                            ptr::write( to, ptr::read(nxt) );
                         }
                         self.r += 1;
                         self.w += 1;
@@ -1191,7 +1229,7 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
                 }
                 if self.r != self.w {
                     let to = self.v.ixp(self.w);
-                    *to = ptr::read(nxt);
+                    ptr::write( to, ptr::read(nxt) );
                 }
                 self.r += 1;
                 self.w += 1;
@@ -1388,6 +1426,7 @@ fn test() {
     let b = vec![3, 4];
     a.splice(2..3, b);
     println!("a={:?}", &a);
+    assert_eq!( a, [1,2,3,4,5] );
 
     let v = vec![99;5];
     println!("v={:?}", &v);
