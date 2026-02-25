@@ -403,7 +403,7 @@ impl<T, A: Allocator> Vec<T, A> {
     ///
     pub fn dedup(&mut self)
     where
-        T: Ord,
+        T: PartialEq,
     {
         self.dedup_by(|a, b| a == b);
     }
@@ -967,6 +967,12 @@ impl<T, A: Allocator> IntoIterator for Vec<T, A> {
     }
 }
 
+impl<T, A: Allocator> Extend<T> for Vec<T, A> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        for e in iter { self.push(e); }
+    }
+}
+
 impl<T: Clone, A: Allocator + Clone> Clone for Vec<T, A> {
     fn clone(&self) -> Self {
         let mut v = Vec::with_capacity_in(self.len, self.alloc.clone());
@@ -1073,6 +1079,17 @@ impl<T> FromIterator<T> for Vec<T> {
         v
     }
 }
+
+/*
+impl<T, const N: usize> From<[T; N]> for Vec<T> {
+    /// ToDo
+    fn from(s: [T; N]) -> Vec<T> {
+        let mut v = Vec::new();
+        for e in s { v.push(e); }
+        v
+    }
+}
+*/
 
 /// For removing multiple elements from a Vec.
 /// When dropped, it closes up any gap. The gap size is r-w.
@@ -1376,7 +1393,7 @@ macro_rules! vec {
         $crate::vec::from_elem($elem, $n)
     );
     ($($x:expr),+ $(,)?) => (
-        Vec::from(& [$($x),+][..])
+        Vec::from_iter([$($x),+].into_iter())
     );
 }
 
