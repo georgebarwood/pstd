@@ -660,7 +660,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// Returns a raw mutable pointer to the vector's buffer, or a dangling
     /// raw pointer valid for zero sized reads if the vector didn't allocate.
     pub const fn as_mut_ptr(&mut self) -> *mut T {
-        unsafe { self.nn.as_mut() }
+        self.nn.as_ptr()
     }
 
     /// Decomposes a `Vec<T>` into its components: `(NonNull pointer, length, capacity)`.
@@ -678,7 +678,14 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity)`.
-    pub fn into_raw_parts(self) -> (*mut T, usize, usize) {
+    pub fn into_raw_parts(self) -> (*mut T, usize, usize)
+    {
+        /* let len = self.len;
+        let cap = self.cap;
+        let ptr = unsafe{ self.nn.as_mut() };
+        mem::forget(self);
+        (ptr, len, cap)
+        */
         let mut me = ManuallyDrop::new(self);
         (me.as_mut_ptr(), me.len, me.cap)
     }
@@ -1447,6 +1454,22 @@ fn test() {
 
     let v = vec![99; 5];
     println!("v={:?}", &v);
+}
+
+#[test]
+fn raw_parts_test()
+{
+    let mut v = Vec::new();
+    v.push("Hello");
+
+    // Deconstruct the vector into parts.
+    let (p, len, cap) = v.into_parts();
+    println!("len={} cap={}", len, cap);
+    
+    unsafe {
+       // Put everything back together into a Vec 
+       let _rebuilt = Vec::from_parts(p, len, cap);
+    }
 }
 
 #[cfg(test)]
