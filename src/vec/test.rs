@@ -102,8 +102,6 @@ fn test_indexing() {
     assert_eq!(v[x - 1], 10);
 }
 
-/*
-
 #[test]
 fn test_debug_fmt() {
     let vec1: Vec<isize> = vec![];
@@ -115,7 +113,6 @@ fn test_debug_fmt() {
     let slice: &[isize] = &[4, 5];
     assert_eq!("[4, 5]", format!("{slice:?}"));
 }
-*/
 
 #[test]
 fn test_push() {
@@ -995,8 +992,6 @@ fn test_split_off() {
     assert_eq!(vec.as_ptr(), orig_ptr);
 }
 
-/*
-
 #[test]
 fn test_split_off_take_all() {
     // Allocate enough capacity that we can tell whether the split-off vector's
@@ -1017,6 +1012,8 @@ fn test_split_off_take_all() {
     assert!(split_off.capacity() < orig_capacity);
     assert_ne!(split_off.as_ptr(), orig_ptr);
 }
+
+/*
 
 #[test]
 fn test_into_iter_as_slice() {
@@ -1406,7 +1403,7 @@ fn overaligned_allocations() {
         assert!(v.as_ptr() as usize & 0xff == 0);
     }
 }
-
+    
 #[test]
 fn extract_if_empty() {
     let mut vec: Vec<i32> = vec![];
@@ -1422,6 +1419,7 @@ fn extract_if_empty() {
     assert_eq!(vec.len(), 0);
     assert_eq!(vec, vec![]);
 }
+
 
 #[test]
 fn extract_if_zst() {
@@ -2451,7 +2449,6 @@ fn test_vec_dedup_multiple_ident() {
     assert_eq!(vec, [12, 11]);
 }
 
-/*
 #[test]
 fn test_vec_dedup_partialeq() {
     #[derive(Debug)]
@@ -2468,6 +2465,8 @@ fn test_vec_dedup_partialeq() {
     vec.dedup();
     assert_eq!(vec, [Foo(0, 1), Foo(1, 7)]);
 }
+
+/*
 
 #[test]
 fn test_vec_dedup() {
