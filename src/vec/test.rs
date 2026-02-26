@@ -342,8 +342,6 @@ fn test_retain_pred_panic_with_hole() {
     assert!(v.iter().all(|r| Rc::strong_count(r) == 1));
 }
 
-/*
-
 #[test]
 #[cfg_attr(not(panic = "unwind"), ignore = "test requires unwinding support")]
 fn test_retain_pred_panic_no_hole() {
@@ -390,6 +388,7 @@ fn test_retain_drop_panic() {
     assert!(v.iter().all(|r| Rc::strong_count(r) == 1));
 }
 
+/*
 #[test]
 fn test_retain_maybeuninits() {
     // This test aimed to be run under miri.
@@ -485,7 +484,6 @@ fn test_dedup_unique() {
     // and/or rt should raise errors.
 }
 
-/*
 #[test]
 fn zero_sized_values() {
     let mut v = Vec::new();
@@ -518,6 +516,8 @@ fn zero_sized_values() {
     }
     assert_eq!(v.iter_mut().count(), 0);
 }
+
+/*
 
 #[test]
 fn test_partition() {
