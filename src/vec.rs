@@ -500,7 +500,7 @@ impl<T, A: Allocator> Vec<T, A> {
                 self.nn = NonNull::dangling();
                 return Ok(());
             }
-            let new_layout = Layout::array::<T>(na).unwrap();
+            let new_layout = Layout::array::<T>(na).unwrap(); // Need to handle error here.
             let new_ptr = if oa == 0 {
                 self.alloc.allocate(new_layout)
             } else {
@@ -524,11 +524,11 @@ impl<T, A: Allocator> Vec<T, A> {
     {
         let start = match range.start_bound() {
             Bound::Included(x) => *x,
-            Bound::Excluded(x) => *x + 1,
+            Bound::Excluded(x) => { assert!(*x < usize::MAX); *x + 1 },
             Bound::Unbounded => 0,
         };
         let end = match range.end_bound() {
-            Bound::Included(x) => *x + 1,
+            Bound::Included(x) => { assert!(*x < usize::MAX); *x + 1 },
             Bound::Excluded(x) => *x,
             Bound::Unbounded => self.len,
         };
@@ -897,13 +897,6 @@ impl<T> Vec<T> {
 /// # Non-panic methods.
 /// These are panic-free alternatives for programs that must not panic.
 impl<T, A: Allocator> Vec<T, A> {
-    /// Constructs a new, empty `Vec<T>` with at least the specified capacity.
-    pub fn try_with_capacity(capacity: usize) -> Result<Vec<T>, AllocError> {
-        let mut v = Vec::<T>::new();
-        v.set_capacity(capacity)?;
-        Ok(v)
-    }
-
     /// Constructs a new, empty Vec<T, A> with at least the specified capacity with the provided allocator.
     pub fn try_with_capacity_in(capacity: usize, alloc: A) -> Result<Self, AllocError> {
         let mut v = Self::new_in(alloc);
@@ -959,6 +952,15 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 }
 
+impl<T> Vec<T> {
+    /// Constructs a new, empty `Vec<T>` with at least the specified capacity.
+    pub fn try_with_capacity(capacity: usize) -> Result<Vec<T>, AllocError> {
+        let mut v = Vec::<T>::new();
+        v.set_capacity(capacity)?;
+        Ok(v)
+    }
+}
+
 // ##########################################################################
 // Impls ####################################################################
 // ##########################################################################
@@ -968,7 +970,7 @@ unsafe impl<T: Sync> Sync for Vec<T> {}
 
 impl<T: Eq, A: Allocator> Eq for Vec<T, A> {}
 
-impl<T: Eq, A: Allocator> PartialEq for Vec<T, A> {
+impl<T: PartialEq, A: Allocator> PartialEq for Vec<T, A> {
     fn eq(&self, other: &Vec<T, A>) -> bool {
         self[..] == other[..]
     }
@@ -1087,6 +1089,18 @@ impl<T: Debug, A: Allocator> Debug for Vec<T, A> {
 pub struct IntoIter<T, A: Allocator = Global> {
     start: usize,
     v: Vec<T, A>,
+}
+
+impl<T, A: Allocator> IntoIter<T, A> {
+    /// Returns the remaining items of this iterator as a slice.
+    pub fn as_slice(&self) -> &[T] {
+        unsafe { slice::from_raw_parts(self.v.ixp(self.start), self.len()) }
+    }
+
+    /// Returns the remaining items of this iterator as a mutable slice.
+    pub fn as_mut_slice(&mut self) -> &mut [T] {
+        unsafe { slice::from_raw_parts_mut(self.v.ixp(self.start), self.len()) }
+    }
 }
 
 impl<T, A: Allocator> Iterator for IntoIter<T, A> {
@@ -1371,6 +1385,7 @@ impl<T, A: Allocator> DoubleEndedIterator for Drain<'_, T, A> {
 
 impl<T, A: Allocator> Drop for Drain<'_, T, A> {
     fn drop(&mut self) {
+        println!("self.gap.r={} self.br={}", self.gap.r, self.br);
         while self.next().is_some() {}
         self.gap.r = self.end;
     }
@@ -1405,6 +1420,10 @@ where
     type Item = T;
     fn next(&mut self) -> Option<T> {
         self.gap.extract_if(&mut self.pred, self.end)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, Some(self.end - self.gap.r))
     }
 }
 

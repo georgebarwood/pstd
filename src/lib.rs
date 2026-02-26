@@ -20,4 +20,5 @@ pub mod vec;
 #[cfg(test)]
 mod testing {
     pub mod crash_test;
+    pub mod macros;
 }
