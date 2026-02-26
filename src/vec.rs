@@ -17,6 +17,7 @@ use std::{
     iter::FusedIterator,
     mem,
     mem::ManuallyDrop,
+    mem::MaybeUninit,
     ops::{Bound, Deref, DerefMut, RangeBounds},
     ptr,
     ptr::NonNull,
@@ -678,8 +679,7 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity)`.
-    pub fn into_raw_parts(self) -> (*mut T, usize, usize)
-    {
+    pub fn into_raw_parts(self) -> (*mut T, usize, usize) {
         /* let len = self.len;
         let cap = self.cap;
         let ptr = unsafe{ self.nn.as_mut() };
@@ -836,6 +836,61 @@ impl<T> Vec<T> {
         v.cap = capacity;
         v.nn = unsafe { NonNull::new_unchecked(ptr) };
         v
+    }
+
+    /// Returns the remaining spare capacity of the vector as a slice of
+    /// `MaybeUninit<T>`.
+    ///
+    /// The returned slice can be used to fill the vector with data (e.g. by
+    /// reading from a file) before marking the data as initialized using the
+    /// [`set_len`] method.
+    ///
+    /// [`set_len`]: Vec::set_len
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Allocate vector big enough for 10 elements.
+    /// let mut v = Vec::with_capacity(10);
+    ///
+    /// // Fill in the first 3 elements.
+    /// let uninit = v.spare_capacity_mut();
+    /// uninit[0].write(0);
+    /// uninit[1].write(1);
+    /// uninit[2].write(2);
+    ///
+    /// // Mark the first 3 elements of the vector as being initialized.
+    /// unsafe {
+    ///     v.set_len(3);
+    /// }
+    ///
+    /// assert_eq!(&v, &[0, 1, 2]);
+    ///
+    pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
+        unsafe {
+            slice::from_raw_parts_mut(
+                self.as_mut_ptr().add(self.len) as *mut MaybeUninit<T>,
+                self.cap - self.len,
+            )
+        }
+    }
+
+    /// Forces the length of the vector to `new_len`.
+    ///
+    /// This is a low-level operation that maintains none of the normal
+    /// invariants of the type. Normally changing the length of a vector
+    /// is done using one of the a safe operation.
+    ///
+    /// # Safety
+    ///
+    /// - `new_len` must be less than or equal to [`capacity()`].
+    /// - The elements at `old_len..new_len` must be initialized.
+    ///
+    /// [`capacity()`]: Vec::capacity
+    ///
+    pub unsafe fn set_len(&mut self, new_len: usize) {
+        assert!(new_len <= self.cap);
+        self.len = new_len;
     }
 }
 
@@ -1457,18 +1512,17 @@ fn test() {
 }
 
 #[test]
-fn raw_parts_test()
-{
+fn raw_parts_test() {
     let mut v = Vec::new();
     v.push("Hello");
 
     // Deconstruct the vector into parts.
     let (p, len, cap) = v.into_parts();
     println!("len={} cap={}", len, cap);
-    
+
     unsafe {
-       // Put everything back together into a Vec 
-       let _rebuilt = Vec::from_parts(p, len, cap);
+        // Put everything back together into a Vec
+        let _rebuilt = Vec::from_parts(p, len, cap);
     }
 }
 
