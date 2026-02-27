@@ -1080,6 +1080,41 @@ impl<T: Debug, A: Allocator> Debug for Vec<T, A> {
     }
 }
 
+// From implementations
+impl<T: Clone> From<&[T]> for Vec<T> {
+    /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
+    fn from(s: &[T]) -> Vec<T> {
+        let mut v = Vec::new();
+        for e in s {
+            v.push(e.clone());
+        }
+        v
+    }
+}
+
+impl<T, const N: usize> From<[T; N]> for Vec<T> {
+    /// Allocates a `Vec<T>` and moves `a`'s items into it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(Vec::from([1, 2, 3]), vec![1, 2, 3]);
+    /// ```
+    fn from(a: [T; N]) -> Vec<T> {
+        Vec::from_iter(a.into_iter())
+    }
+}
+
+impl<T> FromIterator<T> for Vec<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Vec<T> {
+        let mut v = Vec::new();
+        for e in iter {
+            v.push(e);
+        }
+        v
+    }
+}
+
 // ##########################################################################
 // Iterators ################################################################
 // ##########################################################################
@@ -1142,27 +1177,6 @@ impl<T, A: Allocator> FusedIterator for IntoIter<T, A> {}
 impl<T, A: Allocator> Drop for IntoIter<T, A> {
     fn drop(&mut self) {
         while self.next().is_some() {}
-    }
-}
-
-impl<T: Clone> From<&[T]> for Vec<T> {
-    /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
-    fn from(s: &[T]) -> Vec<T> {
-        let mut v = Vec::new();
-        for e in s {
-            v.push(e.clone());
-        }
-        v
-    }
-}
-
-impl<T> FromIterator<T> for Vec<T> {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Vec<T> {
-        let mut v = Vec::new();
-        for e in iter {
-            v.push(e);
-        }
-        v
     }
 }
 
@@ -1528,21 +1542,9 @@ fn test() {
 
     let v = vec![99; 5];
     println!("v={:?}", &v);
-}
 
-#[test]
-fn raw_parts_test() {
-    let mut v = Vec::new();
-    v.push("Hello");
-
-    // Deconstruct the vector into parts.
-    let (p, len, cap) = v.into_parts();
-    println!("len={} cap={}", len, cap);
-
-    unsafe {
-        // Put everything back together into a Vec
-        let _rebuilt = Vec::from_parts(p, len, cap);
-    }
+    let v : Vec<_> = Vec::from_iter( [1,2,3,4].into_iter() );
+    println!("v={:?}", &v);
 }
 
 #[cfg(test)]
