@@ -5,7 +5,7 @@
 //use core::{assert_eq, assert_ne};
 //use std::alloc::System;
 //use std::borrow::Cow;
-//use std::cell::Cell;
+use std::cell::Cell;
 //use std::collections::TryReserveErrorKind::*;
 //use std::fmt::Debug;
 //use std::iter::InPlaceIterable;
@@ -15,6 +15,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 //use std::sync::atomic::{AtomicU32, Ordering};
 //use crate::vec::{Drain, IntoIter, PeekMut};
+use crate::vec::*;
 //use crate::vec;
 use crate::vec::Vec;
 
@@ -389,7 +390,6 @@ fn test_retain_drop_panic() {
     assert!(v.iter().all(|r| Rc::strong_count(r) == 1));
 }
 
-/*
 #[test]
 fn test_retain_maybeuninits() {
     // This test aimed to be run under miri.
@@ -418,8 +418,6 @@ fn test_retain_maybeuninits() {
         .collect();
     assert_eq!(vec, [2, 4]);
 }
-
-*/
 
 #[test]
 fn test_dedup() {
@@ -560,7 +558,7 @@ fn test_cmp() {
     assert_eq!(&x[1..4], cmp);
 }
 
-/*
+
 #[test]
 fn test_vec_truncate_drop() {
     struct_with_counted_drop!(Elem(i32), DROPS);
@@ -573,7 +571,7 @@ fn test_vec_truncate_drop() {
     v.truncate(0);
     assert_eq!(DROPS.get(), 5);
 }
-*/
+
 
 #[test]
 #[should_panic]
@@ -1365,7 +1363,7 @@ fn test_from_cow() {
     assert_eq!(Vec::from(Cow::Borrowed(borrowed)), vec!["borrowed", "(slice)"]);
     assert_eq!(Vec::from(Cow::Owned(owned)), vec!["owned", "(vec)"]);
 }
-
+    
 #[allow(dead_code)]
 fn assert_covariance() {
     fn drain<'new>(d: Drain<'static, &'static str>) -> Drain<'new, &'new str> {
@@ -1376,6 +1374,7 @@ fn assert_covariance() {
     }
 }
 
+// Note sure what this test is doing, seems dodgy!
 #[test]
 fn from_into_inner() {
     let vec = vec![1, 2, 3];
@@ -2476,7 +2475,7 @@ fn test_vec_dedup_partialeq() {
     assert_eq!(vec, [Foo(0, 1), Foo(1, 7)]);
 }
 
-/*
+/* partition_dedup is not stable
 
 #[test]
 fn test_vec_dedup() {
@@ -2497,6 +2496,7 @@ fn test_vec_dedup() {
         assert_eq!(vec, dedup);
     }
 }
+*/
 
 #[test]
 #[cfg_attr(not(panic = "unwind"), ignore = "test requires unwinding support")]
@@ -2553,6 +2553,8 @@ fn test_vec_dedup_panicking() {
         panic!("expected: {expected:?}\ngot: {vec:?}\n");
     }
 }
+
+/*
 
 // Regression test for issue #82533
 #[test]
