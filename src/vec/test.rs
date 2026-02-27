@@ -1,4 +1,3 @@
-
 //use crate::alloc::{Allocator, Layout};
 //use core::num::NonZero;
 //use core::ptr::NonNull;
@@ -519,9 +518,18 @@ fn zero_sized_values() {
 #[test]
 fn test_partition() {
     assert_eq!([].into_iter().partition(|x: &i32| *x < 3), (vec![], vec![]));
-    assert_eq!([1, 2, 3].into_iter().partition(|x| *x < 4), (vec![1, 2, 3], vec![]));
-    assert_eq!([1, 2, 3].into_iter().partition(|x| *x < 2), (vec![1], vec![2, 3]));
-    assert_eq!([1, 2, 3].into_iter().partition(|x| *x < 0), (vec![], vec![1, 2, 3]));
+    assert_eq!(
+        [1, 2, 3].into_iter().partition(|x| *x < 4),
+        (vec![1, 2, 3], vec![])
+    );
+    assert_eq!(
+        [1, 2, 3].into_iter().partition(|x| *x < 2),
+        (vec![1], vec![2, 3])
+    );
+    assert_eq!(
+        [1, 2, 3].into_iter().partition(|x| *x < 0),
+        (vec![], vec![1, 2, 3])
+    );
 }
 
 #[test]
@@ -558,7 +566,6 @@ fn test_cmp() {
     assert_eq!(&x[1..4], cmp);
 }
 
-
 #[test]
 fn test_vec_truncate_drop() {
     struct_with_counted_drop!(Elem(i32), DROPS);
@@ -571,7 +578,6 @@ fn test_vec_truncate_drop() {
     v.truncate(0);
     assert_eq!(DROPS.get(), 5);
 }
-
 
 #[test]
 #[should_panic]
@@ -589,7 +595,6 @@ fn test_vec_truncate_fail() {
     let mut v = vec![BadElem(1), BadElem(2), BadElem(0xbadbeef), BadElem(4)];
     v.truncate(0);
 }
-
 
 #[test]
 fn test_index() {
@@ -1084,7 +1089,7 @@ fn test_into_iter_clone() {
 #[test]
 #[cfg_attr(not(panic = "unwind"), ignore = "test requires unwinding support")]
 fn test_into_iter_leak() {
-    struct_with_counted_drop!(D(bool), DROPS => |this: &D| { 
+    struct_with_counted_drop!(D(bool), DROPS => |this: &D| {
         println!("dropping {}", this.0);
         if this.0 { panic!("panic in `drop`"); }
     });
@@ -1334,7 +1339,7 @@ fn test_collect_after_iterator_clone() {
 }
 
 // Test requires IntoIter::Clone ( which seems tricky )
-    
+
 // regression test for #135103, similar to the one above Flatten/FlatMap had an unsound InPlaceIterable
 // implementation.
 #[test]
@@ -1365,7 +1370,7 @@ fn test_from_cow() {
     assert_eq!(Vec::from(Cow::Borrowed(borrowed)), vec!["borrowed", "(slice)"]);
     assert_eq!(Vec::from(Cow::Owned(owned)), vec!["owned", "(vec)"]);
 }
-    
+
 #[allow(dead_code)]
 fn assert_covariance() {
     fn drain<'new>(d: Drain<'static, &'static str>) -> Drain<'new, &'new str> {
@@ -1532,7 +1537,10 @@ fn extract_if_complex() {
         assert_eq!(removed, vec![2, 4, 6, 18, 20, 22, 24, 26, 34, 36]);
 
         assert_eq!(vec.len(), 14);
-        assert_eq!(vec, vec![1, 7, 9, 11, 13, 15, 17, 27, 29, 31, 33, 35, 37, 39]);
+        assert_eq!(
+            vec,
+            vec![1, 7, 9, 11, 13, 15, 17, 27, 29, 31, 33, 35, 37, 39]
+        );
     }
 
     {
@@ -1551,8 +1559,9 @@ fn extract_if_complex() {
 
     {
         //                [xxx++++++xxxxx++++x+x]
-        let mut vec =
-            vec![2, 4, 6, 7, 9, 11, 13, 15, 17, 18, 20, 22, 24, 26, 27, 29, 31, 33, 34, 35, 36];
+        let mut vec = vec![
+            2, 4, 6, 7, 9, 11, 13, 15, 17, 18, 20, 22, 24, 26, 27, 29, 31, 33, 34, 35, 36,
+        ];
 
         let removed = vec.extract_if(.., |x| *x % 2 == 0).collect::<Vec<_>>();
         assert_eq!(removed.len(), 10);
@@ -1564,7 +1573,9 @@ fn extract_if_complex() {
 
     {
         //                [xxxxxxxxxx+++++++++++]
-        let mut vec = vec![2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19];
+        let mut vec = vec![
+            2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19,
+        ];
 
         let removed = vec.extract_if(.., |x| *x % 2 == 0).collect::<Vec<_>>();
         assert_eq!(removed.len(), 10);
@@ -1576,7 +1587,9 @@ fn extract_if_complex() {
 
     {
         //                [+++++++++++xxxxxxxxxx]
-        let mut vec = vec![1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
+        let mut vec = vec![
+            1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
+        ];
 
         let removed = vec.extract_if(.., |x| *x % 2 == 0).collect::<Vec<_>>();
         assert_eq!(removed.len(), 10);
@@ -1608,7 +1621,10 @@ fn extract_if_consumed_panic() {
     let check_count = 10;
     let drop_counts = Rc::new(Mutex::new(vec![0_usize; check_count]));
     let mut data: Vec<Check> = (0..check_count)
-        .map(|index| Check { index, drop_counts: Rc::clone(&drop_counts) })
+        .map(|index| Check {
+            index,
+            drop_counts: Rc::clone(&drop_counts),
+        })
         .collect();
 
     let _ = std::panic::catch_unwind(move || {
@@ -1634,7 +1650,11 @@ fn extract_if_consumed_panic() {
     assert_eq!(check_count, drop_counts.len());
 
     for (index, count) in drop_counts.iter().cloned().enumerate() {
-        assert_eq!(1, count, "unexpected drop count at index: {} (count: {})", index, count);
+        assert_eq!(
+            1, count,
+            "unexpected drop count at index: {} (count: {})",
+            index, count
+        );
     }
 }
 
@@ -1659,7 +1679,10 @@ fn extract_if_unconsumed_panic() {
     let check_count = 10;
     let drop_counts = Rc::new(Mutex::new(vec![0_usize; check_count]));
     let mut data: Vec<Check> = (0..check_count)
-        .map(|index| Check { index, drop_counts: Rc::clone(&drop_counts) })
+        .map(|index| Check {
+            index,
+            drop_counts: Rc::clone(&drop_counts),
+        })
         .collect();
 
     let _ = std::panic::catch_unwind(move || {
@@ -1684,7 +1707,11 @@ fn extract_if_unconsumed_panic() {
     assert_eq!(check_count, drop_counts.len());
 
     for (index, count) in drop_counts.iter().cloned().enumerate() {
-        assert_eq!(1, count, "unexpected drop count at index: {} (count: {})", index, count);
+        assert_eq!(
+            1, count,
+            "unexpected drop count at index: {} (count: {})",
+            index, count
+        );
     }
 }
 
@@ -1735,8 +1762,6 @@ fn test_reserve_exact() {
     assert!(v.capacity() >= 33)
 }
 
-/* Error handling not yet properly done for try_with_capacity.
-
 #[test]
 #[cfg_attr(miri, ignore)] // Miri does not support signalling OOM
 fn test_try_with_capacity() {
@@ -1747,6 +1772,8 @@ fn test_try_with_capacity() {
 
     assert!(Vec::<u16>::try_with_capacity(isize::MAX as usize + 1).is_err());
 }
+
+/* assert_matches not stable. 
 
 #[test]
 #[cfg_attr(miri, ignore)] // Miri does not support signalling OOM
@@ -2231,7 +2258,7 @@ fn partialeq_vec_full() {
     assert_partial_eq_valid!(vec2,vec3; arrayref2,arrayref3);
     assert_partial_eq_valid!(vec2,vec3; arrayref2[..],arrayref3[..]);
 }
-    
+
 #[test]
 fn test_vec_cycle() {
     #[derive(Debug)]
@@ -2527,29 +2554,80 @@ fn test_vec_dedup_panicking() {
 
     let drop_counter = &Cell::new(0);
     let expected = [
-        Panic { drop_counter, value: false, index: 0 },
-        Panic { drop_counter, value: false, index: 5 },
-        Panic { drop_counter, value: true, index: 6 },
-        Panic { drop_counter, value: true, index: 7 },
+        Panic {
+            drop_counter,
+            value: false,
+            index: 0,
+        },
+        Panic {
+            drop_counter,
+            value: false,
+            index: 5,
+        },
+        Panic {
+            drop_counter,
+            value: true,
+            index: 6,
+        },
+        Panic {
+            drop_counter,
+            value: true,
+            index: 7,
+        },
     ];
     let mut vec = vec![
-        Panic { drop_counter, value: false, index: 0 },
+        Panic {
+            drop_counter,
+            value: false,
+            index: 0,
+        },
         // these elements get deduplicated
-        Panic { drop_counter, value: false, index: 1 },
-        Panic { drop_counter, value: false, index: 2 },
-        Panic { drop_counter, value: false, index: 3 },
-        Panic { drop_counter, value: false, index: 4 },
+        Panic {
+            drop_counter,
+            value: false,
+            index: 1,
+        },
+        Panic {
+            drop_counter,
+            value: false,
+            index: 2,
+        },
+        Panic {
+            drop_counter,
+            value: false,
+            index: 3,
+        },
+        Panic {
+            drop_counter,
+            value: false,
+            index: 4,
+        },
         // here it panics while dropping the item with index==4
-        Panic { drop_counter, value: false, index: 5 },
-        Panic { drop_counter, value: true, index: 6 },
-        Panic { drop_counter, value: true, index: 7 },
+        Panic {
+            drop_counter,
+            value: false,
+            index: 5,
+        },
+        Panic {
+            drop_counter,
+            value: true,
+            index: 6,
+        },
+        Panic {
+            drop_counter,
+            value: true,
+            index: 7,
+        },
     ];
 
     let _ = catch_unwind(AssertUnwindSafe(|| vec.dedup())).unwrap_err();
 
     assert_eq!(drop_counter.get(), 4);
 
-    let ok = vec.iter().zip(expected.iter()).all(|(x, y)| x.index == y.index);
+    let ok = vec
+        .iter()
+        .zip(expected.iter())
+        .all(|(x, y)| x.index == y.index);
 
     if !ok {
         panic!("expected: {expected:?}\ngot: {vec:?}\n");
