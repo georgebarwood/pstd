@@ -524,11 +524,17 @@ impl<T, A: Allocator> Vec<T, A> {
     {
         let start = match range.start_bound() {
             Bound::Included(x) => *x,
-            Bound::Excluded(x) => { assert!(*x < usize::MAX); *x + 1 },
+            Bound::Excluded(x) => {
+                assert!(*x < usize::MAX);
+                *x + 1
+            }
             Bound::Unbounded => 0,
         };
         let end = match range.end_bound() {
-            Bound::Included(x) => { assert!(*x < usize::MAX); *x + 1 },
+            Bound::Included(x) => {
+                assert!(*x < usize::MAX);
+                *x + 1
+            }
             Bound::Excluded(x) => *x,
             Bound::Unbounded => self.len,
         };
@@ -1101,7 +1107,7 @@ impl<T, const N: usize> From<[T; N]> for Vec<T> {
     /// assert_eq!(Vec::from([1, 2, 3]), vec![1, 2, 3]);
     /// ```
     fn from(a: [T; N]) -> Vec<T> {
-        Vec::from_iter(a.into_iter())
+        Vec::from_iter(a)
     }
 }
 
@@ -1128,13 +1134,12 @@ pub struct IntoIter<T, A: Allocator = Global> {
 }
 
 impl<T, A: Allocator> IntoIter<T, A> {
-    fn new(mut v: Vec<T,A>) -> Self
-    {
+    fn new(mut v: Vec<T, A>) -> Self {
         let end = v.len;
         v.len = 0;
-        Self{ start:0, end, v }
+        Self { start: 0, end, v }
     }
-    
+
     /// Returns the remaining items of this iterator as a slice.
     pub fn as_slice(&self) -> &[T] {
         unsafe { slice::from_raw_parts(self.v.ixp(self.start), self.len()) }
@@ -1214,10 +1219,10 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
         self.v.len = self.len - g;
     }
 
-    fn keep(&mut self, upto: usize)
-    {
+    fn keep(&mut self, upto: usize) {
         unsafe {
-            while self.r < upto { // Could use ptr::copy
+            while self.r < upto {
+                // Could use ptr::copy
                 let nxt = self.v.ixp(self.r);
                 // Retain element
                 if self.r != self.w {
@@ -1567,7 +1572,7 @@ fn test() {
     let v = vec![99; 5];
     println!("v={:?}", &v);
 
-    let v : Vec<_> = Vec::from_iter( [1,2,3,4].into_iter() );
+    let v: Vec<_> = Vec::from_iter([1, 2, 3, 4].into_iter());
     println!("v={:?}", &v);
 }
 
