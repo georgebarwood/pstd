@@ -7,7 +7,7 @@
 //! What about more non-panic methods: try_insert, index, index_mut
 
 use crate::alloc::{Allocator, Global};
-use crate::collections::{TryReserveError,TryReserveErrorKind};
+use crate::collections::{TryReserveError, TryReserveErrorKind};
 
 use std::{
     alloc::Layout,
@@ -103,7 +103,7 @@ impl<T, A: Allocator> Vec<T, A> {
             None
         } else {
             self.len -= 1;
-            unsafe { Some(self.get(self.len)) }
+            unsafe { Some(self.getx(self.len)) }
         }
     }
 
@@ -164,7 +164,7 @@ impl<T, A: Allocator> Vec<T, A> {
     pub fn remove(&mut self, index: usize) -> T {
         assert!(index < self.len);
         unsafe {
-            let result = self.get(index);
+            let result = self.getx(index);
             ptr::copy(self.ixp(index + 1), self.ixp(index), self.len() - index - 1);
             self.len -= 1;
             result
@@ -177,10 +177,10 @@ impl<T, A: Allocator> Vec<T, A> {
     pub fn swap_remove(&mut self, index: usize) -> T {
         assert!(index < self.len);
         unsafe {
-            let result = self.get(index);
+            let result = self.getx(index);
             self.len -= 1;
             if index != self.len {
-                let last = self.get(self.len);
+                let last = self.getx(self.len);
                 self.set(index, last);
             }
             result
@@ -458,7 +458,7 @@ impl<T, A: Allocator> Vec<T, A> {
     ///
     /// i must be < cap, and the element must have been set (Written).
     #[inline]
-    unsafe fn get(&mut self, i: usize) -> T {
+    unsafe fn getx(&mut self, i: usize) -> T {
         unsafe { ptr::read(self.ixp(i)) }
     }
 
@@ -480,7 +480,9 @@ impl<T, A: Allocator> Vec<T, A> {
             return Ok(());
         }
         let result = unsafe { self.basic_set_capacity(self.cap, na) };
-        if result.is_ok(){ self.cap = na; }
+        if result.is_ok() {
+            self.cap = na;
+        }
         result
     }
 
@@ -505,7 +507,7 @@ impl<T, A: Allocator> Vec<T, A> {
                 Ok(x) => x,
                 Err(_e) => {
                     let kind = TryReserveErrorKind::CapacityOverflow;
-                    return Err(TryReserveError{ kind });
+                    return Err(TryReserveError { kind });
                 }
             };
             let new_ptr = if oa == 0 {
@@ -520,13 +522,11 @@ impl<T, A: Allocator> Vec<T, A> {
                     self.alloc.shrink(old_ptr, old_layout, new_layout)
                 }
             };
-            match new_ptr
-            {
+            match new_ptr {
                 Ok(p) => self.nn = NonNull::new(p.as_ptr().cast::<T>()).unwrap(),
-                Err(_e) => 
-                {
-                    let kind = TryReserveErrorKind::AllocError {layout: new_layout};
-                    return Err(TryReserveError{ kind });
+                Err(_e) => {
+                    let kind = TryReserveErrorKind::AllocError { layout: new_layout };
+                    return Err(TryReserveError { kind });
                 }
             }
         }
@@ -965,7 +965,7 @@ impl<T, A: Allocator> Vec<T, A> {
             return None;
         }
         unsafe {
-            let result = self.get(index);
+            let result = self.getx(index);
             ptr::copy(self.ixp(index + 1), self.ixp(index), self.len() - index - 1);
             self.len -= 1;
             Some(result)
@@ -983,7 +983,7 @@ impl<T> Vec<T> {
 }
 
 // ##########################################################################
-// Impls ####################################################################
+// Trait Impls ##############################################################
 // ##########################################################################
 
 unsafe impl<T: Send> Send for Vec<T> {}
@@ -1104,7 +1104,30 @@ impl<T: Debug, A: Allocator> Debug for Vec<T, A> {
 // From implementations
 impl<T: Clone> From<&[T]> for Vec<T> {
     /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(Vec::from(&[1, 2, 3][..]), vec![1, 2, 3]);
+    /// ``
     fn from(s: &[T]) -> Vec<T> {
+        let mut v = Vec::new();
+        for e in s {
+            v.push(e.clone());
+        }
+        v
+    }
+}
+
+impl<T: Clone> From<&mut [T]> for Vec<T> {
+    /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(Vec::from(&[1, 2, 3][..]), vec![1, 2, 3]);
+    /// ``
+    fn from(s: &mut [T]) -> Vec<T> {
         let mut v = Vec::new();
         for e in s {
             v.push(e.clone());
@@ -1133,6 +1156,32 @@ impl<T> FromIterator<T> for Vec<T> {
             v.push(e);
         }
         v
+    }
+}
+
+impl<T: Clone, const N: usize> From<&[T; N]> for Vec<T> {
+    /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(Vec::from(&[1, 2, 3]), vec![1, 2, 3]);
+    /// ```
+    fn from(s: &[T; N]) -> Vec<T> {
+        Self::from(s.as_slice())
+    }
+}
+
+impl<T: Clone, const N: usize> From<&mut [T; N]> for Vec<T> {
+    /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(Vec::from(&mut [1, 2, 3]), vec![1, 2, 3]);
+    /// ```
+    fn from(s: &mut [T; N]) -> Vec<T> {
+        Self::from(s.as_mut_slice())
     }
 }
 
@@ -1174,7 +1223,7 @@ impl<T, A: Allocator> Iterator for IntoIter<T, A> {
         } else {
             let ix = self.start;
             self.start += 1;
-            Some(unsafe { self.v.get(ix) })
+            Some(unsafe { self.v.getx(ix) })
         }
     }
 }
@@ -1191,7 +1240,7 @@ impl<T, A: Allocator> DoubleEndedIterator for IntoIter<T, A> {
             None
         } else {
             self.end -= 1;
-            Some(unsafe { self.v.get(self.end) })
+            Some(unsafe { self.v.getx(self.end) })
         }
     }
 }
@@ -1422,7 +1471,7 @@ impl<T, A: Allocator> Iterator for Drain<'_, T, A> {
         }
         let x = self.gap.r;
         self.gap.r += 1;
-        Some(unsafe { self.gap.v.get(x) })
+        Some(unsafe { self.gap.v.getx(x) })
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -1438,7 +1487,7 @@ impl<T, A: Allocator> DoubleEndedIterator for Drain<'_, T, A> {
         }
         self.br -= 1;
         let x = self.br;
-        Some(unsafe { self.gap.v.get(x) })
+        Some(unsafe { self.gap.v.getx(x) })
     }
 }
 
