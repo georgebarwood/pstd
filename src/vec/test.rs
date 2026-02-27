@@ -1053,7 +1053,7 @@ fn test_into_iter_count() {
     assert_eq!([1, 2, 3].into_iter().count(), 3);
 }
 
-/*
+/* next_chunk is not stable
 
 #[test]
 fn test_into_iter_next_chunk() {
@@ -1084,7 +1084,7 @@ fn test_into_iter_clone() {
     assert_eq!(it.next(), None);
 }
 
-/* I don't see why 3rd elem would be dropped.
+/* I don't see why 3rd elem would be dropped. Answer: drop_in_place recovers from panics.
 
 #[test]
 #[cfg_attr(not(panic = "unwind"), ignore = "test requires unwinding support")]
@@ -1102,7 +1102,7 @@ fn test_into_iter_leak() {
 }
 */
 
-/* Use ov unstable methods and other problems..
+/* Use of unstable methods and other problems..
 
 #[test]
 fn test_into_iter_advance_by() {
@@ -1773,7 +1773,7 @@ fn test_try_with_capacity() {
     assert!(Vec::<u16>::try_with_capacity(isize::MAX as usize + 1).is_err());
 }
 
-/* assert_matches not stable. 
+/* assert_matches not stable.
 
 #[test]
 #[cfg_attr(miri, ignore)] // Miri does not support signalling OOM
@@ -2749,7 +2749,7 @@ fn test_box_zero_allocator() {
     // Ensure all ZSTs have been freed.
     assert!(alloc.state.borrow().0.is_empty());
 }
-
+*/
 #[test]
 fn test_vec_from_array_ref() {
     assert_eq!(Vec::from(&[1, 2, 3]), vec![1, 2, 3]);
@@ -2759,8 +2759,6 @@ fn test_vec_from_array_ref() {
 fn test_vec_from_array_mut_ref() {
     assert_eq!(Vec::from(&mut [1, 2, 3]), vec![1, 2, 3]);
 }
-
-*/
 
 #[test]
 fn test_pop_if() {
@@ -2792,7 +2790,7 @@ fn test_pop_if_mutates() {
     assert_eq!(v, [2]);
 }
 
-/*
+/* peek_mut not yet implemented.
 
 #[test]
 fn test_peek_mut() {
@@ -2811,12 +2809,14 @@ fn test_peek_mut() {
     assert_eq!(p, 0);
     assert_eq!(vec, vec![1]);
 }
+*/
 
 /// This assortment of tests, in combination with miri, verifies we handle UB on fishy arguments
 /// in the stdlib. Draining and extending the allocation are fairly well-tested earlier, but
 /// `vec.insert(usize::MAX, val)` once slipped by!
 ///
 /// All code that manipulates the collection types should be tested with "trivially wrong" args.
+
 #[test]
 fn max_dont_panic() {
     let mut v = vec![0];
@@ -2824,8 +2824,6 @@ fn max_dont_panic() {
     v.shrink_to(usize::MAX);
     v.truncate(usize::MAX);
 }
-
-*/
 
 #[test]
 #[should_panic]
