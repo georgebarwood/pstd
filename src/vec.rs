@@ -1027,7 +1027,7 @@ impl<T, A: Allocator> IntoIterator for Vec<T, A> {
     type Item = T;
     type IntoIter = IntoIter<T, A>;
     fn into_iter(self) -> Self::IntoIter {
-        IntoIter { start: 0, v: self }
+        IntoIter::new(self)
     }
 }
 
@@ -1123,10 +1123,18 @@ impl<T> FromIterator<T> for Vec<T> {
 #[derive(Debug)]
 pub struct IntoIter<T, A: Allocator = Global> {
     start: usize,
+    end: usize,
     v: Vec<T, A>,
 }
 
 impl<T, A: Allocator> IntoIter<T, A> {
+    fn new(mut v: Vec<T,A>) -> Self
+    {
+        let end = v.len;
+        v.len = 0;
+        Self{ start:0, end, v }
+    }
+    
     /// Returns the remaining items of this iterator as a slice.
     pub fn as_slice(&self) -> &[T] {
         unsafe { slice::from_raw_parts(self.v.ixp(self.start), self.len()) }
@@ -1141,9 +1149,7 @@ impl<T, A: Allocator> IntoIter<T, A> {
 impl<T, A: Allocator> Iterator for IntoIter<T, A> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
-        if self.start == self.v.len() {
-            self.start = 0;
-            self.v.len = 0;
+        if self.start == self.end {
             None
         } else {
             let ix = self.start;
@@ -1155,19 +1161,17 @@ impl<T, A: Allocator> Iterator for IntoIter<T, A> {
 
 impl<T, A: Allocator> ExactSizeIterator for IntoIter<T, A> {
     fn len(&self) -> usize {
-        self.v.len() - self.start
+        self.end - self.start
     }
 }
 
 impl<T, A: Allocator> DoubleEndedIterator for IntoIter<T, A> {
     fn next_back(&mut self) -> Option<T> {
-        if self.start == self.v.len() {
-            self.start = 0;
-            self.v.len = 0;
+        if self.start == self.end {
             None
         } else {
-            self.v.len -= 1;
-            Some(unsafe { self.v.get(self.v.len()) })
+            self.end -= 1;
+            Some(unsafe { self.v.get(self.end) })
         }
     }
 }
@@ -1208,6 +1212,22 @@ impl<'a, T, A: Allocator> Gap<'a, T, A> {
             }
         }
         self.v.len = self.len - g;
+    }
+
+    fn keep(&mut self, upto: usize)
+    {
+        unsafe {
+            while self.r < upto { // Could use ptr::copy
+                let nxt = self.v.ixp(self.r);
+                // Retain element
+                if self.r != self.w {
+                    let to = self.v.ixp(self.w);
+                    ptr::write(to, ptr::read(nxt));
+                }
+                self.r += 1;
+                self.w += 1;
+            }
+        }
     }
 
     /// For splice ( size must be > 0 )
@@ -1367,6 +1387,11 @@ impl<'a, T, A: Allocator> Drain<'a, T, A> {
         let gap = Gap::new(vec, b);
         Self { gap, end, br: end }
     }
+
+    /// Keep unyielded elements in the source `Vec`.
+    pub fn keep_rest(mut self) {
+        self.gap.keep(self.br);
+    }
 }
 
 impl<T, A: Allocator> Iterator for Drain<'_, T, A> {
@@ -1399,7 +1424,6 @@ impl<T, A: Allocator> DoubleEndedIterator for Drain<'_, T, A> {
 
 impl<T, A: Allocator> Drop for Drain<'_, T, A> {
     fn drop(&mut self) {
-        println!("self.gap.r={} self.br={}", self.gap.r, self.br);
         while self.next().is_some() {}
         self.gap.r = self.end;
     }
