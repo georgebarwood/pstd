@@ -15,14 +15,17 @@ use std::{
     // cmp::Ordering,
     fmt,
     fmt::Debug,
+    hash::{Hash,Hasher},
     iter::FusedIterator,
     mem,
     mem::ManuallyDrop,
     mem::MaybeUninit,
-    ops::{Bound, Deref, DerefMut, RangeBounds},
+    ops::{Bound, Deref, DerefMut, RangeBounds, Index, IndexMut},
     ptr,
     ptr::NonNull,
     slice,
+    slice::SliceIndex,
+    borrow::{Borrow,BorrowMut},
 };
 
 /// A vector that grows as elements are pushed onto it similar to similar to [`std::vec::Vec`].
@@ -95,6 +98,22 @@ impl<T, A: Allocator> Vec<T, A> {
             self.set(self.len, value);
         }
         self.len += 1;
+    }
+
+    /// Appends an element to the back of a collection, returning a reference to it.
+    ///
+    pub fn push_mut(&mut self, value: T) -> &mut T {
+        if self.cap == self.len {
+            let nc = if self.cap == 0 { 4 } else { self.cap * 2 };
+            self.set_capacity(nc).unwrap();
+        }
+        unsafe {
+            let end = self.as_mut_ptr().add(self.len);
+            ptr::write(end, value);
+            self.len += 1;
+            // SAFETY: We just wrote a value to the pointer that will live the lifetime of the reference.
+            &mut *end
+        }
     }
 
     /// Pop a value from the end of the vec.
@@ -365,6 +384,35 @@ impl<T, A: Allocator> Vec<T, A> {
             ptr::copy_nonoverlapping(self.ixp(at), other.ixp(0), other_len);
         }
         other
+    }
+
+    /// Returns vector content as a slice of `T`, along with the remaining spare
+    /// capacity of the vector as a slice of `MaybeUninit<T>`.
+    ///
+    /// The returned spare capacity slice can be used to fill the vector with data
+    /// (e.g. by reading from a file) before marking the data as initialized using
+    /// the [`set_len`] method.
+    ///
+    /// [`set_len`]: Vec::set_len
+    ///
+    pub fn split_at_spare_mut(&mut self) -> (&mut [T], &mut [MaybeUninit<T>]) {
+        let ptr = self.as_mut_ptr();
+        // SAFETY:
+        // - `ptr` is guaranteed to be valid for `self.len` elements
+        // - but the allocation extends out to `self.buf.capacity()` elements, possibly
+        // uninitialized
+        let spare_ptr = unsafe { ptr.add(self.len) };
+        let spare_ptr = spare_ptr as *mut MaybeUninit<T>;
+        let spare_len = self.cap - self.len;
+
+        // SAFETY:
+        // - `ptr` is guaranteed to be valid for `self.len` elements
+        // - `spare_ptr` is pointing one element past the buffer, so it doesn't overlap with `initialized`
+        unsafe {
+            let initialized = slice::from_raw_parts_mut(ptr, self.len);
+            let spare = slice::from_raw_parts_mut(spare_ptr, spare_len);
+            (initialized, spare)
+        }
     }
 
     /// Retains only the elements specified by the predicate.
@@ -793,6 +841,159 @@ impl<T, A: Allocator> Vec<T, A> {
         unsafe { slice::from_raw_parts(me.as_ptr(), me.len) }
     }
     */
+
+    /// Returns the remaining spare capacity of the vector as a slice of
+    /// `MaybeUninit<T>`.
+    ///
+    /// The returned slice can be used to fill the vector with data (e.g. by
+    /// reading from a file) before marking the data as initialized using the
+    /// [`set_len`] method.
+    ///
+    /// [`set_len`]: Vec::set_len
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::vec::Vec;
+    /// // Allocate vector big enough for 10 elements.
+    /// let mut v = Vec::with_capacity(10);
+    ///
+    /// // Fill in the first 3 elements.
+    /// let uninit = v.spare_capacity_mut();
+    /// uninit[0].write(0);
+    /// uninit[1].write(1);
+    /// uninit[2].write(2);
+    ///
+    /// // Mark the first 3 elements of the vector as being initialized.
+    /// unsafe {
+    ///     v.set_len(3);
+    /// }
+    ///
+    /// assert_eq!(&v, &[0, 1, 2]);
+    ///
+    pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
+        unsafe {
+            slice::from_raw_parts_mut(
+                self.as_mut_ptr().add(self.len) as *mut MaybeUninit<T>,
+                self.cap - self.len,
+            )
+        }
+    }
+
+    /// Forces the length of the vector to `new_len`.
+    ///
+    /// This is a low-level operation that maintains none of the normal
+    /// invariants of the type. Normally changing the length of a vector
+    /// is done using one of the a safe operation.
+    ///
+    /// # Safety
+    ///
+    /// - `new_len` must be less than or equal to [`capacity()`].
+    /// - The elements at `old_len..new_len` must be initialized.
+    ///
+    /// [`capacity()`]: Vec::capacity
+    ///
+    pub unsafe fn set_len(&mut self, new_len: usize) {
+        assert!(new_len <= self.cap);
+        self.len = new_len;
+    }
+
+    /// Groups every `N` elements in the `Vec<T>` into chunks to produce a `Vec<[T; N]>`, dropping
+    /// elements in the remainder. `N` must be greater than zero.
+    ///
+    /// If the capacity is not a multiple of the chunk size, the buffer will shrink down to the
+    /// nearest multiple with a reallocation or deallocation.
+    ///
+    /// This function can be used to reverse [`Vec::into_flattened`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::vec;
+    /// use pstd::vec::Vec;
+    ///
+    /// let vec = vec![0, 1, 2, 3, 4, 5, 6, 7];
+    /// assert_eq!(vec.into_chunks::<3>(), [[0, 1, 2], [3, 4, 5]]);
+    ///
+    /// let vec = vec![0, 1, 2, 3];
+    /// let chunks: Vec<[u8; 10]> = vec.into_chunks();
+    /// assert!(chunks.is_empty());
+    ///
+    /// let flat = vec![0; 8 * 8 * 8];
+    /// let reshaped: Vec<[[[u8; 8]; 8]; 8]> = flat.into_chunks().into_chunks().into_chunks();
+    /// assert_eq!(reshaped.len(), 1);
+    /// ```
+    pub fn into_chunks<const N: usize>(mut self) -> Vec<[T; N], A> {
+        const {
+            assert!(N != 0, "chunk size must be greater than zero");
+        }
+
+        let (len, cap) = (self.len(), self.capacity());
+
+        let len_remainder = len % N;
+        if len_remainder != 0 {
+            self.truncate(len - len_remainder);
+        }
+
+        let cap_remainder = cap % N;
+        if mem::size_of::<T>() != 0 && cap_remainder != 0 {
+            self.shrink_to(cap - cap_remainder);
+        }
+
+        let (ptr, _, _, alloc) = self.into_raw_parts_with_alloc();
+
+        // SAFETY:
+        // - `ptr` and `alloc` were just returned from `self.into_raw_parts_with_alloc()`
+        // - `[T; N]` has the same alignment as `T`
+        // - `size_of::<[T; N]>() * cap / N == size_of::<T>() * cap`
+        // - `len / N <= cap / N` because `len <= cap`
+        // - the allocated memory consists of `len / N` valid values of type `[T; N]`
+        // - `cap / N` fits the size of the allocated memory after shrinking
+        unsafe { Vec::from_raw_parts_in(ptr.cast(), len / N, cap / N, alloc) }
+    }
+}
+
+impl<T, A: Allocator, const N: usize> Vec<[T; N], A> {
+    /// Takes a `Vec<[T; N]>` and flattens it into a `Vec<T>`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the length of the resulting vector would overflow a `usize`.
+    ///
+    /// This is only possible when flattening a vector of arrays of zero-sized
+    /// types, and thus tends to be irrelevant in practice. If
+    /// `size_of::<T>() > 0`, this will never panic.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::vec;
+    /// let mut vec = vec![[1, 2, 3], [4, 5, 6], [7, 8, 9]];
+    /// assert_eq!(vec.pop(), Some([7, 8, 9]));
+    ///
+    /// let mut flattened = vec.into_flattened();
+    /// assert_eq!(flattened.pop(), Some(6));
+    /// ```
+    pub fn into_flattened(self) -> Vec<T, A> {
+        let (ptr, len, cap, alloc) = self.into_raw_parts_with_alloc();
+        let (new_len, new_cap) = if mem::size_of::<T>() == 0 {
+            (len.checked_mul(N).expect("vec len overflow"), usize::MAX)
+        } else {
+            // SAFETY:
+            // - `cap * N` cannot overflow because the allocation is already in
+            // the address space.
+            // - Each `[T; N]` has `N` valid elements, so there are `len * N`
+            // valid elements in the allocation.
+            unsafe { (len.unchecked_mul(N), cap.unchecked_mul(N)) }
+        };
+        // SAFETY:
+        // - `ptr` was allocated by `self`
+        // - `ptr` is well-aligned because `[T; N]` has the same alignment as `T`.
+        // - `new_cap` refers to the same sized allocation as `cap` because
+        // `new_cap * size_of::<T>()` == `cap * size_of::<[T; N]>()`
+        // - `len` <= `cap`, so `len * N` <= `cap * N`.
+        unsafe { Vec::<T, A>::from_raw_parts_in(ptr.cast(), new_len, new_cap, alloc) }
+    }
 }
 
 impl<T> Vec<T> {
@@ -857,61 +1058,6 @@ impl<T> Vec<T> {
         v.cap = capacity;
         v.nn = unsafe { NonNull::new_unchecked(ptr) };
         v
-    }
-
-    /// Returns the remaining spare capacity of the vector as a slice of
-    /// `MaybeUninit<T>`.
-    ///
-    /// The returned slice can be used to fill the vector with data (e.g. by
-    /// reading from a file) before marking the data as initialized using the
-    /// [`set_len`] method.
-    ///
-    /// [`set_len`]: Vec::set_len
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Allocate vector big enough for 10 elements.
-    /// let mut v = Vec::with_capacity(10);
-    ///
-    /// // Fill in the first 3 elements.
-    /// let uninit = v.spare_capacity_mut();
-    /// uninit[0].write(0);
-    /// uninit[1].write(1);
-    /// uninit[2].write(2);
-    ///
-    /// // Mark the first 3 elements of the vector as being initialized.
-    /// unsafe {
-    ///     v.set_len(3);
-    /// }
-    ///
-    /// assert_eq!(&v, &[0, 1, 2]);
-    ///
-    pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
-        unsafe {
-            slice::from_raw_parts_mut(
-                self.as_mut_ptr().add(self.len) as *mut MaybeUninit<T>,
-                self.cap - self.len,
-            )
-        }
-    }
-
-    /// Forces the length of the vector to `new_len`.
-    ///
-    /// This is a low-level operation that maintains none of the normal
-    /// invariants of the type. Normally changing the length of a vector
-    /// is done using one of the a safe operation.
-    ///
-    /// # Safety
-    ///
-    /// - `new_len` must be less than or equal to [`capacity()`].
-    /// - The elements at `old_len..new_len` must be initialized.
-    ///
-    /// [`capacity()`]: Vec::capacity
-    ///
-    pub unsafe fn set_len(&mut self, new_len: usize) {
-        assert!(new_len <= self.cap);
-        self.len = new_len;
     }
 }
 
@@ -986,15 +1132,43 @@ impl<T> Vec<T> {
 // Trait Impls ##############################################################
 // ##########################################################################
 
-unsafe impl<T: Send> Send for Vec<T> {}
-unsafe impl<T: Sync> Sync for Vec<T> {}
+unsafe impl<T: Send, A:Allocator+Send> Send for Vec<T,A> {}
+unsafe impl<T: Sync, A:Allocator+Send> Sync for Vec<T,A> {}
 
 impl<T: Eq, A: Allocator> Eq for Vec<T, A> {}
 
+
+impl<T, A1, A2> PartialOrd<Vec<T, A2>> for Vec<T, A1>
+where
+    T: PartialOrd,
+    A1: Allocator,
+    A2: Allocator,
+{
+    fn partial_cmp(&self, other: &Vec<T, A2>) -> Option<std::cmp::Ordering> {
+        PartialOrd::partial_cmp(&**self, &**other)
+    }
+}
+
+/// Implements ordering of vectors, [lexicographically](Ord#lexicographical-comparison).
+impl<T: Ord, A: Allocator> Ord for Vec<T, A> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        std::cmp::Ord::cmp(&**self, &**other)
+    }
+}
+
+/*
 impl<T: PartialEq, A: Allocator> PartialEq for Vec<T, A> {
     fn eq(&self, other: &Vec<T, A>) -> bool {
         self[..] == other[..]
     }
+}
+*/
+
+impl<T, U, A1: Allocator, A2: Allocator> PartialEq<Vec<U, A2>> for Vec<T, A1>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &Vec<U, A2>) -> bool { self[..] == other[..] }
 }
 
 impl<T, U, A: Allocator, const N: usize> PartialEq<[U; N]> for Vec<T, A>
@@ -1012,6 +1186,25 @@ where
 {
     fn eq(&self, other: &&[U; N]) -> bool {
         self[..] == other[..]
+    }
+}
+
+impl<T: Hash, A: Allocator> Hash for Vec<T, A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Hash::hash(&**self, state)
+    }
+}
+
+impl<T, I: SliceIndex<[T]>, A: Allocator> Index<I> for Vec<T, A> {
+    type Output = I::Output;
+    fn index(&self, index: I) -> &Self::Output {
+        Index::index(&**self, index)
+    }
+}
+
+impl<T, I: SliceIndex<[T]>, A: Allocator> IndexMut<I> for Vec<T, A> {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        IndexMut::index_mut(&mut **self, index)
     }
 }
 
@@ -1109,7 +1302,7 @@ impl<T: Clone> From<&[T]> for Vec<T> {
     ///
     /// ```
     /// assert_eq!(Vec::from(&[1, 2, 3][..]), vec![1, 2, 3]);
-    /// ``
+    /// ```
     fn from(s: &[T]) -> Vec<T> {
         let mut v = Vec::new();
         for e in s {
@@ -1126,7 +1319,7 @@ impl<T: Clone> From<&mut [T]> for Vec<T> {
     ///
     /// ```
     /// assert_eq!(Vec::from(&[1, 2, 3][..]), vec![1, 2, 3]);
-    /// ``
+    /// ```
     fn from(s: &mut [T]) -> Vec<T> {
         let mut v = Vec::new();
         for e in s {
@@ -1182,6 +1375,43 @@ impl<T: Clone, const N: usize> From<&mut [T; N]> for Vec<T> {
     /// ```
     fn from(s: &mut [T; N]) -> Vec<T> {
         Self::from(s.as_mut_slice())
+    }
+}
+
+impl<T, A: Allocator> AsRef<Vec<T, A>> for Vec<T, A> {
+    fn as_ref(&self) -> &Vec<T, A> {
+        self
+    }
+}
+
+impl<T, A: Allocator> AsMut<Vec<T, A>> for Vec<T, A> {
+    fn as_mut(&mut self) -> &mut Vec<T, A> {
+        self
+    }
+}
+
+
+impl<T, A: Allocator> AsRef<[T]> for Vec<T, A> {
+    fn as_ref(&self) -> &[T] {
+        self
+    }
+}
+
+impl<T, A: Allocator> AsMut<[T]> for Vec<T, A> {
+    fn as_mut(&mut self) -> &mut [T] {
+        self
+    }
+}
+
+impl<T, A: Allocator> Borrow<[T]> for Vec<T, A> {
+    fn borrow(&self) -> &[T] {
+        &self[..]
+    }
+}
+
+impl<T, A: Allocator> BorrowMut<[T]> for Vec<T, A> {
+    fn borrow_mut(&mut self) -> &mut [T] {
+        &mut self[..]
     }
 }
 
