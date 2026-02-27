@@ -6,7 +6,8 @@
 //!
 //! What about more non-panic methods: try_insert, index, index_mut
 
-use crate::alloc::{AllocError, Allocator, Global};
+use crate::alloc::{Allocator, Global};
+use crate::collections::{TryReserveError,TryReserveErrorKind};
 
 use std::{
     alloc::Layout,
@@ -473,13 +474,13 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     /// Set the allocation. This must be at least the current length.
-    fn set_capacity(&mut self, na: usize) -> Result<(), AllocError> {
+    fn set_capacity(&mut self, na: usize) -> Result<(), TryReserveError> {
         assert!(na >= self.len);
         if na == self.cap {
             return Ok(());
         }
         let result = unsafe { self.basic_set_capacity(self.cap, na) };
-        self.cap = na;
+        if result.is_ok(){ self.cap = na; }
         result
     }
 
@@ -487,7 +488,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// # Safety
     ///
     /// `oa` must be the previous alloc set (0 if no alloc has yet been set).
-    unsafe fn basic_set_capacity(&mut self, oa: usize, na: usize) -> Result<(), AllocError> {
+    unsafe fn basic_set_capacity(&mut self, oa: usize, na: usize) -> Result<(), TryReserveError> {
         unsafe {
             if mem::size_of::<T>() == 0 {
                 return Ok(());
@@ -500,7 +501,13 @@ impl<T, A: Allocator> Vec<T, A> {
                 self.nn = NonNull::dangling();
                 return Ok(());
             }
-            let new_layout = Layout::array::<T>(na).unwrap(); // Need to handle error here.
+            let new_layout = match Layout::array::<T>(na) {
+                Ok(x) => x,
+                Err(_e) => {
+                    let kind = TryReserveErrorKind::CapacityOverflow;
+                    return Err(TryReserveError{ kind });
+                }
+            };
             let new_ptr = if oa == 0 {
                 self.alloc.allocate(new_layout)
             } else {
@@ -512,8 +519,16 @@ impl<T, A: Allocator> Vec<T, A> {
                 } else {
                     self.alloc.shrink(old_ptr, old_layout, new_layout)
                 }
-            }?;
-            self.nn = NonNull::new(new_ptr.as_ptr().cast::<T>()).unwrap();
+            };
+            match new_ptr
+            {
+                Ok(p) => self.nn = NonNull::new(p.as_ptr().cast::<T>()).unwrap(),
+                Err(_e) => 
+                {
+                    let kind = TryReserveErrorKind::AllocError {layout: new_layout};
+                    return Err(TryReserveError{ kind });
+                }
+            }
         }
         Ok(())
     }
@@ -904,14 +919,14 @@ impl<T> Vec<T> {
 /// These are panic-free alternatives for programs that must not panic.
 impl<T, A: Allocator> Vec<T, A> {
     /// Constructs a new, empty Vec<T, A> with at least the specified capacity with the provided allocator.
-    pub fn try_with_capacity_in(capacity: usize, alloc: A) -> Result<Self, AllocError> {
+    pub fn try_with_capacity_in(capacity: usize, alloc: A) -> Result<Self, TryReserveError> {
         let mut v = Self::new_in(alloc);
         v.set_capacity(capacity)?;
         Ok(v)
     }
 
     /// Tries to reserve capacity for at least additional more elements to be inserted.
-    pub fn try_reserve(&mut self, additional: usize) -> Result<(), AllocError> {
+    pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {
         let capacity = self.len + additional;
         // Could round up to power of 2 here.
         if capacity > self.cap {
@@ -921,7 +936,7 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     /// Tries to reserve capacity for at least additional more elements to be inserted.
-    pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), AllocError> {
+    pub fn try_reserve_exact(&mut self, additional: usize) -> Result<(), TryReserveError> {
         let capacity = self.len + additional;
         if capacity > self.cap {
             return self.set_capacity(capacity);
@@ -960,7 +975,7 @@ impl<T, A: Allocator> Vec<T, A> {
 
 impl<T> Vec<T> {
     /// Constructs a new, empty `Vec<T>` with at least the specified capacity.
-    pub fn try_with_capacity(capacity: usize) -> Result<Vec<T>, AllocError> {
+    pub fn try_with_capacity(capacity: usize) -> Result<Vec<T>, TryReserveError> {
         let mut v = Vec::<T>::new();
         v.set_capacity(capacity)?;
         Ok(v)
