@@ -13,21 +13,21 @@ use crate::collections::{TryReserveError, TryReserveErrorKind};
 
 use std::{
     alloc::Layout,
+    borrow::{Borrow, BorrowMut},
     cmp,
     // cmp::Ordering,
     fmt,
     fmt::Debug,
-    hash::{Hash,Hasher},
+    hash::{Hash, Hasher},
     iter::FusedIterator,
     mem,
     mem::ManuallyDrop,
     mem::MaybeUninit,
-    ops::{Bound, Deref, DerefMut, RangeBounds, Index, IndexMut},
+    ops::{Bound, Deref, DerefMut, Index, IndexMut, RangeBounds},
     ptr,
     ptr::NonNull,
     slice,
     slice::SliceIndex,
-    borrow::{Borrow,BorrowMut},
 };
 
 /// A vector that grows as elements are pushed onto it similar to similar to [`std::vec::Vec`].
@@ -1134,11 +1134,10 @@ impl<T> Vec<T> {
 // Trait Impls ##############################################################
 // ##########################################################################
 
-unsafe impl<T: Send, A:Allocator+Send> Send for Vec<T,A> {}
-unsafe impl<T: Sync, A:Allocator+Send> Sync for Vec<T,A> {}
+unsafe impl<T: Send, A: Allocator + Send> Send for Vec<T, A> {}
+unsafe impl<T: Sync, A: Allocator + Send> Sync for Vec<T, A> {}
 
 impl<T: Eq, A: Allocator> Eq for Vec<T, A> {}
-
 
 impl<T, A1, A2> PartialOrd<Vec<T, A2>> for Vec<T, A1>
 where
@@ -1170,7 +1169,9 @@ impl<T, U, A1: Allocator, A2: Allocator> PartialEq<Vec<U, A2>> for Vec<T, A1>
 where
     T: PartialEq<U>,
 {
-    fn eq(&self, other: &Vec<U, A2>) -> bool { self[..] == other[..] }
+    fn eq(&self, other: &Vec<U, A2>) -> bool {
+        self[..] == other[..]
+    }
 }
 
 impl<T, U, A: Allocator, const N: usize> PartialEq<[U; N]> for Vec<T, A>
@@ -1392,7 +1393,6 @@ impl<T, A: Allocator> AsMut<Vec<T, A>> for Vec<T, A> {
     }
 }
 
-
 impl<T, A: Allocator> AsRef<[T]> for Vec<T, A> {
     fn as_ref(&self) -> &[T] {
         self
@@ -1445,6 +1445,35 @@ impl<T, A: Allocator> IntoIter<T, A> {
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { slice::from_raw_parts_mut(self.v.ixp(self.start), self.len()) }
     }
+
+    /// Returns a reference to the underlying allocator.
+    pub fn allocator(&self) -> &A {
+        &self.v.alloc
+    }
+}
+
+impl<T, A> Default for IntoIter<T, A>
+where
+    A: Allocator + Default,
+{
+    /// Creates an empty `vec::IntoIter`.
+    fn default() -> Self {
+        Vec::new_in(Default::default()).into_iter()
+    }
+}
+
+impl<T, A: Allocator> AsRef<[T]> for IntoIter<T, A> {
+    fn as_ref(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<T: Clone, A: Allocator + Clone> Clone for IntoIter<T, A> {
+    fn clone(&self) -> Self {
+        let mut v = Vec::new_in(self.allocator().clone());
+        v.extend_from_slice(self.as_slice());
+        v.into_iter()
+    }
 }
 
 impl<T, A: Allocator> Iterator for IntoIter<T, A> {
@@ -1484,6 +1513,8 @@ impl<T, A: Allocator> Drop for IntoIter<T, A> {
         while self.next().is_some() {}
     }
 }
+
+//######################## END IntoIter ##############################
 
 /// For removing multiple elements from a Vec.
 /// When dropped, it closes up any gap. The gap size is r-w.
@@ -1672,6 +1703,8 @@ impl<'a, T, A: Allocator> Drop for Gap<'a, T, A> {
     }
 }
 
+//######################## END Gap ##############################
+
 /// An iterator to remove a range.
 ///
 /// This struct is created by [`Vec::drain`].
@@ -1693,7 +1726,34 @@ impl<'a, T, A: Allocator> Drain<'a, T, A> {
     pub fn keep_rest(mut self) {
         self.gap.keep(self.br);
     }
+
+    /// Returns a reference to the underlying allocator.
+    #[must_use]
+    pub fn allocator(&self) -> &A {
+        &self.gap.v.alloc
+    }
+
+    /// Returns the remaining items of this iterator as a slice.`
+    #[must_use]
+    pub fn as_slice(&self) -> &[T] {
+        &self.gap.v[self.gap.r..self.br]
+    }
 }
+
+impl<'a, T, A: Allocator> AsRef<[T]> for Drain<'a, T, A> {
+    fn as_ref(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<T: fmt::Debug, A: Allocator> fmt::Debug for Drain<'_, T, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Drain").field(&self.as_slice()).finish()
+    }
+}
+
+//unsafe impl<T: Sync, A: Sync + Allocator> Sync for Drain<'_, T, A> {}
+//unsafe impl<T: Send, A: Send + Allocator> Send for Drain<'_, T, A> {}
 
 impl<T, A: Allocator> Iterator for Drain<'_, T, A> {
     type Item = T;
@@ -1734,6 +1794,8 @@ impl<T, A: Allocator> ExactSizeIterator for Drain<'_, T, A> {}
 
 impl<T, A: Allocator> FusedIterator for Drain<'_, T, A> {}
 
+//######################## END Drain ##############################
+
 /// An iterator which uses a closure to determine if an element should be removed.
 ///
 /// This struct is created by [`Vec::extract_if`].
@@ -1749,6 +1811,23 @@ impl<'a, T, F, A: Allocator> ExtractIf<'a, T, F, A> {
         let (b, end) = vec.get_range(range);
         let gap = Gap::new(vec, b);
         Self { gap, pred, end }
+    }
+
+    /// Returns a reference to the underlying allocator.
+    pub fn allocator(&self) -> &A {
+        &self.gap.v.alloc
+    }
+
+    /// Returns the remaining items of this iterator as a slice.`
+    #[must_use]
+    fn as_slice(&self) -> &[T] {
+        &self.gap.v[self.gap.r..self.end]
+    }
+}
+
+impl<T: fmt::Debug, A: Allocator> fmt::Debug for ExtractIf<'_, T, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ExtractIf").field(&self.as_slice()).finish()
     }
 }
 
@@ -1766,11 +1845,14 @@ where
     }
 }
 
+//######################## END ExtractIf ##############################
+
 /// A splicing iterator for `Vec`.
 ///
 /// This struct is created by [`Vec::splice()`].
 /// See its documentation for more.
 ///
+#[derive(Debug)]
 pub struct Splice<'a, I: Iterator + 'a, A: Allocator + Clone + 'a = Global> {
     drain: Drain<'a, I::Item, A>,
     replace_with: I,
@@ -1800,6 +1882,10 @@ impl<I: Iterator, A: Allocator + Clone> DoubleEndedIterator for Splice<'_, I, A>
         self.drain.next_back()
     }
 }
+
+impl<I: Iterator, A: Allocator + Clone> ExactSizeIterator for Splice<'_, I, A> {}
+
+//######################## END Splice ##############################
 
 /// Creates a [`Vec`] containing the arguments.
 #[macro_export]
