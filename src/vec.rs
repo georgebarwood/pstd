@@ -38,6 +38,7 @@ use std::{
 /// [Allocation](#allocation-methods)
 /// [Conversion](#conversion-methods)
 /// [Non-Panic](#non-panic-methods)
+/// [Traits](#trait-implementations)
 pub struct Vec<T, A: Allocator = Global> {
     len: usize,
     cap: usize,
@@ -134,6 +135,11 @@ impl<T, A: Allocator> Vec<T, A> {
     pub fn pop_if(&mut self, predicate: impl FnOnce(&mut T) -> bool) -> Option<T> {
         let last = self.last_mut()?;
         if predicate(last) { self.pop() } else { None }
+    }
+
+    /// Returns Entry to the last item in the vector, or `None` if it is empty.
+    pub fn peek_mut(&mut self) -> Option<PeekMut<'_, T, A>> {
+        if self.is_empty() { None } else { Some( PeekMut { vec:self }) }
     }
 
     /// Insert value at index, after moving elements up to make a space.
@@ -1417,6 +1423,54 @@ impl<T, A: Allocator> BorrowMut<[T]> for Vec<T, A> {
     }
 }
 
+impl<T, A: Allocator, const N: usize> TryFrom<Vec<T, A>> for [T; N] {
+    type Error = Vec<T, A>;
+
+    /// Gets the entire contents of the `Vec<T>` as an array,
+    /// if its size exactly matches that of the requested array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// assert_eq!(vec![1, 2, 3].try_into(), Ok([1, 2, 3]));
+    /// assert_eq!(<Vec<i32>>::new().try_into(), Ok([]));
+    /// ```
+    ///
+    /// If the length doesn't match, the input comes back in `Err`:
+    /// ```
+    /// let r: Result<[i32; 4], _> = (0..10).collect::<Vec<_>>().try_into();
+    /// assert_eq!(r, Err(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
+    /// ```
+    ///
+    /// If you're fine with just getting a prefix of the `Vec<T>`,
+    /// you can call [`.truncate(N)`](Vec::truncate) first.
+    /// ```
+    /// let mut v = String::from("hello world").into_bytes();
+    /// v.sort();
+    /// v.truncate(2);
+    /// let [a, b]: [_; 2] = v.try_into().unwrap();
+    /// assert_eq!(a, b' ');
+    /// assert_eq!(b, b'd');
+    /// ```
+    fn try_from(mut vec: Vec<T, A>) -> Result<[T; N], Vec<T, A>> {
+        if vec.len() != N {
+            return Err(vec);
+        }
+
+        // SAFETY: `.set_len(0)` is always sound.
+        unsafe { vec.set_len(0) };
+
+        // SAFETY: A `Vec`'s pointer is always aligned properly, and
+        // the alignment the array needs is the same as the items.
+        // We checked earlier that we have sufficient items.
+        // The items will not double-drop as the `set_len`
+        // tells the `Vec` not to also drop them.
+        let array = unsafe { ptr::read(vec.as_ptr() as *const [T; N]) };
+        Ok(array)
+    }
+}
+
+
 // ##########################################################################
 // Iterators ################################################################
 // ##########################################################################
@@ -1886,6 +1940,55 @@ impl<I: Iterator, A: Allocator + Clone> DoubleEndedIterator for Splice<'_, I, A>
 impl<I: Iterator, A: Allocator + Clone> ExactSizeIterator for Splice<'_, I, A> {}
 
 //######################## END Splice ##############################
+
+
+
+/// Structure wrapping a mutable reference to the last item in a
+/// `Vec`.
+///
+/// This `struct` is created by the [`peek_mut`] method on [`Vec`]. See
+/// its documentation for more.
+///
+/// [`peek_mut`]: Vec::peek_mut
+
+pub struct PeekMut<'a, T, A: Allocator = Global> {
+    vec: &'a mut Vec<T, A>,
+}
+
+impl<T: fmt::Debug, A: Allocator> fmt::Debug for PeekMut<'_, T, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("PeekMut").field(self.deref()).finish()
+    }
+}
+
+impl<'a, T, A: Allocator> PeekMut<'a, T, A> {
+    /// Removes the peeked value from the vector and returns it.
+    pub fn pop(this: Self) -> T {
+        // SAFETY: PeekMut is only constructed if the vec is non-empty
+        unsafe { this.vec.pop().unwrap_unchecked() }
+    }
+}
+
+impl<'a, T, A: Allocator> Deref for PeekMut<'a, T, A> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        let idx = self.vec.len() - 1;
+        // SAFETY: PeekMut is only constructed if the vec is non-empty
+        unsafe { self.vec.get_unchecked(idx) }
+    }
+}
+
+impl<'a, T, A: Allocator> DerefMut for PeekMut<'a, T, A> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        let idx = self.vec.len() - 1;
+        // SAFETY: PeekMut is only constructed if the vec is non-empty
+        unsafe { self.vec.get_unchecked_mut(idx) }
+    }
+}
+
+//######################## END  PeekMut ##############################
+    
 
 /// Creates a [`Vec`] containing the arguments.
 #[macro_export]
