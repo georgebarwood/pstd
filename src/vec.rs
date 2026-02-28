@@ -5,6 +5,8 @@
 //! Ideas : have features which allow exclusion of unstable features, methods which can panic.
 //!
 //! What about more non-panic methods: try_insert, index, index_mut
+//!
+//! Known differences : element drop order, leak after panic in drop (also applies to BTreeMap/BTreeSet).
 
 use crate::alloc::{Allocator, Global};
 use crate::collections::{TryReserveError, TryReserveErrorKind};
