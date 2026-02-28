@@ -2790,8 +2790,6 @@ fn test_pop_if_mutates() {
     assert_eq!(v, [2]);
 }
 
-/* peek_mut not yet implemented.
-
 #[test]
 fn test_peek_mut() {
     let mut vec = Vec::new();
@@ -2809,7 +2807,6 @@ fn test_peek_mut() {
     assert_eq!(p, 0);
     assert_eq!(vec, vec![1]);
 }
-*/
 
 /// This assortment of tests, in combination with miri, verifies we handle UB on fishy arguments
 /// in the stdlib. Draining and extending the allocation are fairly well-tested earlier, but
