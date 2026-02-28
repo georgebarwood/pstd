@@ -53,7 +53,7 @@ impl<T> Vec<T> {
     /// # Example
     ///
     /// ```
-    /// use pstd::vec::Vec;
+    /// use pstd::Vec;
     /// let mut v = Vec::new();
     /// v.push("England");
     /// v.push("France");
@@ -80,7 +80,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::vec::Vec;
+    /// use pstd::Vec;
     /// let mut v = Vec::new();
     /// assert!(v.is_empty());
     ///
@@ -689,7 +689,7 @@ impl<T> Vec<T> {
     /// # Example
     ///
     /// ```
-    /// use pstd::vec::Vec;
+    /// use pstd::Vec;
     /// let mut v = Vec::with_capacity(10);
     /// v.push("England");
     /// v.push("France");
@@ -862,7 +862,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// # Examples
     ///
     /// ```
-    /// use pstd::vec::Vec;
+    /// use pstd::Vec;
     /// // Allocate vector big enough for 10 elements.
     /// let mut v = Vec::with_capacity(10);
     ///
@@ -918,7 +918,7 @@ impl<T, A: Allocator> Vec<T, A> {
     ///
     /// ```
     /// use pstd::vec;
-    /// use pstd::vec::Vec;
+    /// use pstd::Vec;
     ///
     /// let vec = vec![0, 1, 2, 3, 4, 5, 6, 7];
     /// assert_eq!(vec.into_chunks::<3>(), [[0, 1, 2], [3, 4, 5]]);
@@ -1011,7 +1011,7 @@ impl<T> Vec<T> {
     /// # Example
     ///
     /// ```
-    /// use pstd::vec::Vec;
+    /// use pstd::Vec;
     /// let v = Vec::from_fn(10, |i| i * 2);
     /// ```
     pub fn from_fn<F>(length: usize, f: F) -> Vec<T>
@@ -1035,7 +1035,7 @@ impl<T> Vec<T> {
     /// # Example
     ///
     /// ```
-    /// use pstd::vec::Vec;
+    /// use pstd::Vec;
     /// let mut v = Vec::new();
     /// v.push("Hello");
     ///

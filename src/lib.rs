@@ -16,6 +16,7 @@ pub mod collections;
 
 /// [`vec::Vec`] similar to [`std::vec::Vec`], not yet well tested.
 pub mod vec;
+pub use vec::Vec;
 
 #[cfg(test)]
 mod testing {
