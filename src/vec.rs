@@ -1,10 +1,6 @@
-//! Not possible under stable Rust: Vec::const_make_global, Vec::into_boxed_slice (?)
+//! Not possible under stable Rust: Vec::const_make_global.
 //!
-//! ToDo : peek_mut (may not do that one),  various trait impls.
-//!
-//! Ideas : have features which allow exclusion of unstable features, methods which can panic.
-//!
-//! What about more non-panic methods: try_insert, index, index_mut
+//! Not possible without doing Box : Vec::into_boxed_slice
 //!
 //! Known differences : element drop order, leak after panic in drop (also applies to BTreeMap/BTreeSet).
 
@@ -139,7 +135,11 @@ impl<T, A: Allocator> Vec<T, A> {
 
     /// Returns Entry to the last item in the vector, or `None` if it is empty.
     pub fn peek_mut(&mut self) -> Option<PeekMut<'_, T, A>> {
-        if self.is_empty() { None } else { Some( PeekMut { vec:self }) }
+        if self.is_empty() {
+            None
+        } else {
+            Some(PeekMut { vec: self })
+        }
     }
 
     /// Insert value at index, after moving elements up to make a space.
@@ -1163,14 +1163,6 @@ impl<T: Ord, A: Allocator> Ord for Vec<T, A> {
     }
 }
 
-/*
-impl<T: PartialEq, A: Allocator> PartialEq for Vec<T, A> {
-    fn eq(&self, other: &Vec<T, A>) -> bool {
-        self[..] == other[..]
-    }
-}
-*/
-
 impl<T, U, A1: Allocator, A2: Allocator> PartialEq<Vec<U, A2>> for Vec<T, A1>
 where
     T: PartialEq<U>,
@@ -1297,8 +1289,6 @@ impl<T> Default for Vec<T> {
 
 impl<T: Debug, A: Allocator> Debug for Vec<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // panic!();
-        // f.debug_list().entries((*self).iter().finish()
         fmt::Debug::fmt(&**self, f)
     }
 }
@@ -1469,7 +1459,6 @@ impl<T, A: Allocator, const N: usize> TryFrom<Vec<T, A>> for [T; N] {
         Ok(array)
     }
 }
-
 
 // ##########################################################################
 // Iterators ################################################################
@@ -1806,9 +1795,6 @@ impl<T: fmt::Debug, A: Allocator> fmt::Debug for Drain<'_, T, A> {
     }
 }
 
-//unsafe impl<T: Sync, A: Sync + Allocator> Sync for Drain<'_, T, A> {}
-//unsafe impl<T: Send, A: Send + Allocator> Send for Drain<'_, T, A> {}
-
 impl<T, A: Allocator> Iterator for Drain<'_, T, A> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
@@ -1941,8 +1927,6 @@ impl<I: Iterator, A: Allocator + Clone> ExactSizeIterator for Splice<'_, I, A> {
 
 //######################## END Splice ##############################
 
-
-
 /// Structure wrapping a mutable reference to the last item in a
 /// `Vec`.
 ///
@@ -1950,7 +1934,6 @@ impl<I: Iterator, A: Allocator + Clone> ExactSizeIterator for Splice<'_, I, A> {
 /// its documentation for more.
 ///
 /// [`peek_mut`]: Vec::peek_mut
-
 pub struct PeekMut<'a, T, A: Allocator = Global> {
     vec: &'a mut Vec<T, A>,
 }
@@ -1988,7 +1971,6 @@ impl<'a, T, A: Allocator> DerefMut for PeekMut<'a, T, A> {
 }
 
 //######################## END  PeekMut ##############################
-    
 
 /// Creates a [`Vec`] containing the arguments.
 #[macro_export]
