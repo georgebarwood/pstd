@@ -1069,37 +1069,38 @@ impl<K, V> Leaf<K, V> {
     where
         K: Ord,
     {
-        let mut i = match self.look(&key) {
+        match self.look(&key) {
+            // Matching key already exists, overwrite existing key and swap value.
             Ok(i) => {
-                let value = x.value.take().unwrap();
                 let (k, v) = self.0.ixbm(i);
                 *k = key;
-                x.value = Some(mem::replace(v, value));
-                return;
+                let xv = x.value.as_mut().unwrap();
+                mem::swap(v, xv);
             }
-            Err(i) => i,
-        };
-        let value = x.value.take().unwrap();
-        if self.full() {
-            match x.atune.full_action(i, self.0.len()) {
-                FullAction::Split(b, a1, a2) => {
-                    let (med, mut right) = self.0.split(b, a1, a2, x.atune);
-                    if i > b {
-                        i -= b + 1;
-                        assert!(i < a2);
-                        right.insert(i, (key, value));
-                    } else {
-                        assert!(i < a1);
-                        self.0.insert(i, (key, value));
+            Err(mut i) => {
+                let value = x.value.take().unwrap();
+                if self.full() {
+                    match x.atune.full_action(i, self.0.len()) {
+                        FullAction::Split(b, a1, a2) => {
+                            let (med, mut right) = self.0.split(b, a1, a2, x.atune);
+                            if i > b {
+                                i -= b + 1;
+                                assert!(i < a2);
+                                right.insert(i, (key, value));
+                            } else {
+                                assert!(i < a1);
+                                self.0.insert(i, (key, value));
+                            }
+                            let right = Tree::L(Self(right));
+                            x.split = Some((med, right));
+                            return;
+                        }
+                        FullAction::Extend(na) => self.0.set_alloc(na, x.atune),
                     }
-                    let right = Tree::L(Self(right));
-                    x.split = Some((med, right));
-                    return;
                 }
-                FullAction::Extend(na) => self.0.set_alloc(na, x.atune),
+                self.0.insert(i, (key, value));
             }
         }
-        self.0.insert(i, (key, value));
     }
 
     fn remove<Q, A: Tuning>(&mut self, key: &Q, atune: &A) -> Option<(K, V)>
@@ -1278,10 +1279,10 @@ impl<K, V> NonLeafInner<K, V> {
     {
         match self.v.search(&key) {
             Ok(i) => {
-                let value = x.value.take().unwrap();
-                let (kp, vp) = self.v.ixbm(i);
-                *kp = key;
-                x.value = Some(mem::replace(vp, value));
+                let (k, v) = self.v.ixbm(i);
+                *k = key;
+                let xv = x.value.as_mut().unwrap();
+                mem::swap(v, xv);
             }
             Err(mut i) => {
                 self.c.ixm(i).insert(key, x);
@@ -2160,7 +2161,7 @@ pub struct Range<'a, K, V> {
     fwd_leaf: IterPairVec<'a, K, V>,
     bck_leaf: IterPairVec<'a, K, V>,
     fwd_stk: StkVec<Stk<'a, K, V>>,
-    bck_stk: StkVec<Stk<'a, K, V>>
+    bck_stk: StkVec<Stk<'a, K, V>>,
 }
 impl<'a, K, V> Range<'a, K, V> {
     #[inline]
