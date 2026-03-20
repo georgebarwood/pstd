@@ -1,6 +1,8 @@
 #![deny(missing_docs)]
 
-//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [`collections::BTreeMap`], [`collections::BTreeSet`] and [`vec::Vec`].
+//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [boxed::Box], [`collections::BTreeMap`], [`collections::BTreeSet`] and [`vec::Vec`].
+//!
+//! Box only has minimal methods implemented so far.
 
 //!# Features
 //!
@@ -14,9 +16,13 @@ pub mod alloc;
 /// Containers.
 pub mod collections;
 
-/// [`vec::Vec`] similar to [`std::vec::Vec`], not yet well tested.
+/// [`Vec`] similar to [`std::vec::Vec`].
 pub mod vec;
 pub use vec::Vec;
+
+/// [`Box`] similar to [`std::boxed::Box`].
+pub mod boxed;
+pub use boxed::Box;
 
 #[cfg(test)]
 mod testing {
