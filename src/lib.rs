@@ -2,7 +2,7 @@
 
 //! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [boxed::Box], [`collections::BTreeMap`], [`collections::BTreeSet`] and [`vec::Vec`].
 //!
-//! Box only has minimal methods implemented so far.
+//! Box only has minimal methods/traits implemented so far.
 
 //!# Features
 //!

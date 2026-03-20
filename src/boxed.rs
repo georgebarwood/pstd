@@ -5,6 +5,7 @@ use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr;
 use std::ptr::NonNull;
+use std::fmt;
 
 /// A pointer type that uniquely owns a heap allocation of type `T`.
 pub struct Box<T, A: Allocator = Global> {
@@ -41,6 +42,11 @@ impl<T, A: Allocator> Box<T, A> {
         };
         Self { nn, a }
     }
+
+    fn r(&self) -> &T
+    {
+        unsafe{ &*self.nn.as_ptr() }
+    }
 }
 
 impl<T, A: Allocator> Drop for Box<T, A> {
@@ -58,7 +64,7 @@ impl<T, A: Allocator> Deref for Box<T, A> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe { &*self.nn.as_ptr() }
+        self.r()
     }
 }
 
@@ -68,9 +74,22 @@ impl<T, A: Allocator> DerefMut for Box<T, A> {
     }
 }
 
+impl<T: fmt::Display, A: Allocator> fmt::Display for Box<T, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self.r(), f)
+    }
+}
+
+impl<T: fmt::Debug, A: Allocator> fmt::Debug for Box<T, A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self.r(), f)
+    }
+}
+
 #[test]
 fn test_boxed()
 {
     let b = Box::new(Box::new(99));
     assert_eq!( **b, 99 );
+    println!("b={}", b);
 }
