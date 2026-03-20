@@ -45,6 +45,7 @@ impl<T, A: Allocator> Box<T, A> {
 
 impl<T, A: Allocator> Drop for Box<T, A> {
     fn drop(&mut self) {
+        unsafe { let _ = ptr::read( self.nn.as_ptr() ); }
         if mem::size_of::<T>() > 0 {
             let layout = Layout::new::<T>();
             let p = NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap();
@@ -65,4 +66,11 @@ impl<T, A: Allocator> DerefMut for Box<T, A> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.nn.as_ptr() }
     }
+}
+
+#[test]
+fn test_boxed()
+{
+    let b = Box::new(Box::new(99));
+    assert_eq!( **b, 99 );
 }
