@@ -1222,7 +1222,7 @@ impl<T, A: Allocator> DerefMut for Vec<T, A> {
     }
 }
 
-impl<'a, T: 'a> IntoIterator for &'a Vec<T> {
+impl<'a, T: 'a, A: Allocator> IntoIterator for &'a Vec<T, A> {
     type Item = &'a T;
     type IntoIter = slice::Iter<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
@@ -1230,7 +1230,7 @@ impl<'a, T: 'a> IntoIterator for &'a Vec<T> {
     }
 }
 
-impl<'a, T: 'a> IntoIterator for &'a mut Vec<T> {
+impl<'a, T: 'a, A: Allocator> IntoIterator for &'a mut Vec<T, A> {
     type Item = &'a mut T;
     type IntoIter = slice::IterMut<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
