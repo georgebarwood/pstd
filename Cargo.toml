@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "1.0.43"
+version = "1.0.50"
 edition = "2024"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
@@ -22,6 +22,7 @@ rand = "0.8.5"
 default = ["serde"]
 serde = ["dep:serde"]
 unsafe-optim = []
+dynbox = []
 
 # Features for testing
 cap = [] # High performance allocator
