@@ -1,14 +1,14 @@
 use crate::alloc::{Allocator, Global};
 use std::alloc::Layout;
+use std::fmt;
 use std::mem;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr;
 use std::ptr::NonNull;
-use std::fmt;
 
 /// A pointer type that uniquely owns a heap allocation of type `T`.
-pub struct Box<T, A: Allocator = Global> {
+pub struct Box<T: ?Sized, A: Allocator = Global> {
     nn: NonNull<T>,
     a: A,
 }
@@ -31,6 +31,7 @@ impl<T, A: Allocator> Box<T, A> {
     pub fn new_in(t: T, a: A) -> Self {
         let nn = if mem::size_of::<T>() > 0 {
             let layout = Layout::new::<T>();
+            // println!("alloc layout={:?}", layout);
             let nn = a.allocate(layout).unwrap();
             let nn = NonNull::<T>::new(nn.as_ptr().cast::<T>()).unwrap();
             unsafe {
@@ -42,54 +43,109 @@ impl<T, A: Allocator> Box<T, A> {
         };
         Self { nn, a }
     }
+}
 
-    fn r(&self) -> &T
-    {
-        unsafe{ &*self.nn.as_ptr() }
+impl<T: ?Sized, A: Allocator> Box<T, A> {
+    fn r(&self) -> &T {
+        unsafe { &*self.nn.as_ptr() }
     }
 }
 
-impl<T, A: Allocator> Drop for Box<T, A> {
+impl<T: ?Sized, A: Allocator> Drop for Box<T, A> {
     fn drop(&mut self) {
-        unsafe { let _ = ptr::read( self.nn.as_ptr() ); }
-        if mem::size_of::<T>() > 0 {
-            let layout = Layout::new::<T>();
+        /*
+                unsafe { let _ = ptr::read( self.nn.as_ptr() ); }
+                if mem::size_of::<T>() > 0 {
+                    let layout = Layout::new::<T>();
+                    let p = NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap();
+                    unsafe { self.a.deallocate(p, layout) }
+                }
+        */
+
+        unsafe {
+            self.nn.drop_in_place();
+        }
+        
+        let layout = unsafe{ Layout::for_value(&*self.nn.as_ptr()) };
+        // println!("dealloc layout={:?}", layout);
+        // let layout = Layout::new::<T>();
+        
+
+        
+        if layout.size() != 0 {
             let p = NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap();
             unsafe { self.a.deallocate(p, layout) }
         }
     }
 }
 
-impl<T, A: Allocator> Deref for Box<T, A> {
+impl<T: ?Sized, A: Allocator> Deref for Box<T, A> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        self.r()
+        unsafe { &*self.nn.as_ptr() }
     }
 }
 
-impl<T, A: Allocator> DerefMut for Box<T, A> {
+impl<T: ?Sized, A: Allocator> DerefMut for Box<T, A> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe { &mut *self.nn.as_ptr() }
     }
 }
 
-impl<T: fmt::Display, A: Allocator> fmt::Display for Box<T, A> {
+impl<T: ?Sized + fmt::Display, A: Allocator> fmt::Display for Box<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self.r(), f)
     }
 }
 
-impl<T: fmt::Debug, A: Allocator> fmt::Debug for Box<T, A> {
+impl<T : ?Sized + fmt::Debug, A: Allocator> fmt::Debug for Box<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.r(), f)
     }
 }
 
+#[cfg(feature = "dynbox")]
+use std::{marker::Unsize, ops::CoerceUnsized};
+
+#[cfg(feature = "dynbox")]
+impl<T: ?Sized + Unsize<U>, U: ?Sized, A: Allocator> CoerceUnsized<Box<U, A>> for Box<T, A> {}
+
+/*
+#[cfg(feature = "dynbox")]
+impl<T: ?Sized + Unsize<U>, U: ?Sized> DispatchFromDyn<Box<U>> for Box<T, Global> {}
+*/
+
 #[test]
-fn test_boxed()
-{
-    let b = Box::new(Box::new(99));
-    assert_eq!( **b, 99 );
-    println!("b={}", b);
+fn test_boxed() {
+    struct D(usize,usize,usize);
+    impl Drop for D {
+        fn drop(&mut self) {
+            println!("Dropping D value={} {} {}", self.0, self.1, self.2);
+        }
+    }
+
+    {
+        let b = Box::new(D(99,1,2));
+        assert_eq!(b.0, 99);
+        println!("b.0={}", b.0);
+    }
+
+    #[cfg(feature = "dynbox")]
+    {
+        trait E {
+            fn say_hello(&self);
+        }
+
+        impl E for D {
+            fn say_hello(&self) { println!("Hello"); }
+        }
+
+        type Ep = /*std::boxed::*/ Box<dyn E>;
+
+        let x: Ep = /*std::boxed::*/ Box::new(D(999,1000,1001));
+        x.say_hello();
+        //let y = x.deref();
+        //y.say_hello();
+    }
 }
