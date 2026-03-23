@@ -7,7 +7,7 @@
 //#![feature(coerce_unsized)]
 //#![feature(unsize)]
 
-//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [boxed::Box], [`collections::BTreeMap`], [`collections::BTreeSet`] and [`vec::Vec`].
+//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), in particular [Box], [Vec], [`collections::BTreeMap`] and [`collections::BTreeSet`].
 //!
 //! Box only has minimal methods/traits implemented so far.
 

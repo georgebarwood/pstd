@@ -31,7 +31,6 @@ impl<T, A: Allocator> Box<T, A> {
     pub fn new_in(t: T, a: A) -> Self {
         let nn = if mem::size_of::<T>() > 0 {
             let layout = Layout::new::<T>();
-            // println!("alloc layout={:?}", layout);
             let nn = a.allocate(layout).unwrap();
             let nn = NonNull::<T>::new(nn.as_ptr().cast::<T>()).unwrap();
             unsafe {
@@ -51,27 +50,15 @@ impl<T: ?Sized, A: Allocator> Box<T, A> {
     }
 }
 
+unsafe impl<T: Send, A: Allocator + Send> Send for Box<T, A> {}
+unsafe impl<T: Sync, A: Allocator + Send> Sync for Box<T, A> {}
+
 impl<T: ?Sized, A: Allocator> Drop for Box<T, A> {
     fn drop(&mut self) {
-        /*
-                unsafe { let _ = ptr::read( self.nn.as_ptr() ); }
-                if mem::size_of::<T>() > 0 {
-                    let layout = Layout::new::<T>();
-                    let p = NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap();
-                    unsafe { self.a.deallocate(p, layout) }
-                }
-        */
-
+        let layout = unsafe{ Layout::for_value(&*self.nn.as_ptr()) };
         unsafe {
             self.nn.drop_in_place();
         }
-        
-        let layout = unsafe{ Layout::for_value(&*self.nn.as_ptr()) };
-        // println!("dealloc layout={:?}", layout);
-        // let layout = Layout::new::<T>();
-        
-
-        
         if layout.size() != 0 {
             let p = NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap();
             unsafe { self.a.deallocate(p, layout) }
@@ -83,7 +70,7 @@ impl<T: ?Sized, A: Allocator> Deref for Box<T, A> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe { &*self.nn.as_ptr() }
+        self.r()
     }
 }
 
@@ -111,11 +98,6 @@ use std::{marker::Unsize, ops::CoerceUnsized};
 #[cfg(feature = "dynbox")]
 impl<T: ?Sized + Unsize<U>, U: ?Sized, A: Allocator> CoerceUnsized<Box<U, A>> for Box<T, A> {}
 
-/*
-#[cfg(feature = "dynbox")]
-impl<T: ?Sized + Unsize<U>, U: ?Sized> DispatchFromDyn<Box<U>> for Box<T, Global> {}
-*/
-
 #[test]
 fn test_boxed() {
     struct D(usize,usize,usize);
@@ -141,11 +123,8 @@ fn test_boxed() {
             fn say_hello(&self) { println!("Hello"); }
         }
 
-        type Ep = /*std::boxed::*/ Box<dyn E>;
-
-        let x: Ep = /*std::boxed::*/ Box::new(D(999,1000,1001));
+        type Ep = Box<dyn E>;
+        let x: Ep = Box::new(D(999,1000,1001));
         x.say_hello();
-        //let y = x.deref();
-        //y.say_hello();
     }
 }
