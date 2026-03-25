@@ -6,6 +6,19 @@ pub mod btree_set;
 
 pub use btree_set::BTreeSet;
 
+/// Hashmap.
+pub mod hash_map {
+    pub use hashbrown::hash_map::*;
+}
+pub use hash_map::HashMap;
+pub use hashbrown::DefaultHashBuilder;
+
+/// Hashset.
+pub mod hash_set {
+    pub use hashbrown::hash_set::*;
+}
+pub use hash_set::HashSet;
+
 mod merge_iter;
 
 /// The error type for `try_reserve` methods.

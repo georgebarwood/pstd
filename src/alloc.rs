@@ -1,3 +1,6 @@
+pub use allocator_api2::alloc::*;
+
+/*
 use std::alloc::Layout;
 use std::error::Error;
 use std::fmt;
@@ -206,7 +209,7 @@ where
 }
 
 /// Default implementation of Allocator.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Global;
 unsafe impl Allocator for Global {
     fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
@@ -225,3 +228,4 @@ unsafe impl Allocator for Global {
         }
     }
 }
+*/

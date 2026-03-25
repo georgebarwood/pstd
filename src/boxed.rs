@@ -55,7 +55,7 @@ unsafe impl<T: Sync, A: Allocator + Send> Sync for Box<T, A> {}
 
 impl<T: ?Sized, A: Allocator> Drop for Box<T, A> {
     fn drop(&mut self) {
-        let layout = unsafe{ Layout::for_value(&*self.nn.as_ptr()) };
+        let layout = unsafe { Layout::for_value(&*self.nn.as_ptr()) };
         unsafe {
             self.nn.drop_in_place();
         }
@@ -86,7 +86,7 @@ impl<T: ?Sized + fmt::Display, A: Allocator> fmt::Display for Box<T, A> {
     }
 }
 
-impl<T : ?Sized + fmt::Debug, A: Allocator> fmt::Debug for Box<T, A> {
+impl<T: ?Sized + fmt::Debug, A: Allocator> fmt::Debug for Box<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.r(), f)
     }
@@ -100,7 +100,7 @@ impl<T: ?Sized + Unsize<U>, U: ?Sized, A: Allocator> CoerceUnsized<Box<U, A>> fo
 
 #[test]
 fn test_boxed() {
-    struct D(usize,usize,usize);
+    struct D(usize, usize, usize);
     impl Drop for D {
         fn drop(&mut self) {
             println!("Dropping D value={} {} {}", self.0, self.1, self.2);
@@ -108,7 +108,7 @@ fn test_boxed() {
     }
 
     {
-        let b = Box::new(D(99,1,2));
+        let b = Box::new(D(99, 1, 2));
         assert_eq!(b.0, 99);
         println!("b.0={}", b.0);
     }
@@ -120,11 +120,13 @@ fn test_boxed() {
         }
 
         impl E for D {
-            fn say_hello(&self) { println!("Hello"); }
+            fn say_hello(&self) {
+                println!("Hello");
+            }
         }
 
         type Ep = Box<dyn E>;
-        let x: Ep = Box::new(D(999,1000,1001));
+        let x: Ep = Box::new(D(999, 1000, 1001));
         x.say_hello();
     }
 }
