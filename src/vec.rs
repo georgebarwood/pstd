@@ -1,6 +1,7 @@
-//! Not possible under stable Rust: Vec::const_make_global.
 //!
 //! Known differences : element drop order, leak after panic in drop (also applies to BTreeMap/BTreeSet).
+//!
+//! Not possible under stable Rust: Vec::const_make_global.
 
 use crate::alloc::{Allocator, Global};
 use crate::collections::{TryReserveError, TryReserveErrorKind};

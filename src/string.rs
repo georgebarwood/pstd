@@ -16,6 +16,21 @@ impl <A:Allocator> String<A>
         Self( v )
     }
 
+    /// Appends a given string slice onto the end of this `String`.
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::{String,alloc::Global};
+    /// let mut s = String::from_str_in("foo",Global);
+    ///
+    /// s.push_str("bar");
+    ///
+    /// assert_eq!("foobar", &*s);
+    /// ```
+    pub fn push_str(&mut self, string: &str) {
+        self.0.extend_from_slice(string.as_bytes())
+    }
+
     /// Extracts a string slice containing the entire String.
     pub fn as_str(&self) -> &str
     {
