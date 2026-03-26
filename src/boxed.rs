@@ -9,8 +9,8 @@ use std::ptr::NonNull;
 
 /// A pointer type that uniquely owns a heap allocation of type `T`.
 pub struct Box<T: ?Sized, A: Allocator = Global> {
-    nn: NonNull<T>,
-    a: A,
+    pub(crate) nn: NonNull<T>,
+    pub(crate) a: A,
 }
 
 impl<T> Box<T> {

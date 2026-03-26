@@ -1,7 +1,5 @@
 //! Not possible under stable Rust: Vec::const_make_global.
 //!
-//! Not possible without doing Box : Vec::into_boxed_slice
-//!
 //! Known differences : element drop order, leak after panic in drop (also applies to BTreeMap/BTreeSet).
 
 use crate::alloc::{Allocator, Global};
@@ -708,6 +706,14 @@ impl<T> Vec<T> {
 ///
 /// These convert a [`Vec`] to and from various types.
 impl<T, A: Allocator> Vec<T, A> {
+    /// Converts the vector into `Box<[T]>` owned slice.
+    pub fn into_boxed_slice(mut self) -> crate::Box<[T], A> {
+        self.shrink_to_fit();
+        let (p, len, _cap, a) = self.into_parts_with_alloc();
+        let nn = NonNull::slice_from_raw_parts(p, len);
+        crate::Box { nn, a }
+    }
+
     /// Extracts a slice containing the entire vector.
     ///
     /// Equivalent to `&s[..]`.
@@ -806,24 +812,6 @@ impl<T, A: Allocator> Vec<T, A> {
             len: length,
         }
     }
-
-    /* Would need to implement Box first to make this possible under Stable.
-        /// Converts the vector into [`Box<[T]>`][owned slice].
-        ///
-        /// Before doing the conversion, this method discards excess capacity like [`shrink_to_fit`].
-        ///
-        /// [owned slice]: Box
-        /// [`shrink_to_fit`]: Vec::shrink_to_fit
-        pub fn into_boxed_slice(mut self) -> Box<[T], A> {
-            unsafe {
-                self.shrink_to_fit();
-                let me = ManuallyDrop::new(self);
-                let alloc = unsafe { ptr::read(&me.alloc) };
-                let slice = me.as_mut_slice();
-                Box::from_raw_in(slice, alloc)
-            }
-        }
-    */
 
     /// Consumes and leaks the `Vec`, returning a mutable reference to the contents.
     pub fn leak<'a>(self) -> &'a mut [T]
