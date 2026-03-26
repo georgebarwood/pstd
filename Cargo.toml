@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "1.0.54"
+version = "1.0.57"
 edition = "2024"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
@@ -17,6 +17,7 @@ serde = { version = "1.0.197", optional=true }
 mimalloc = "0.1.39"
 criterion = "0.5.1"
 rand = "0.8.5"
+bincode = "1.3.3"
 
 [features]
 default = ["serde"]
