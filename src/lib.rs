@@ -14,11 +14,15 @@
 //! - `serde` : enables serialisation of [`BTreeMap`](collections::BTreeMap) and [`BTreeSet`](collections::BTreeSet) via serde crate.
 //! - `unsafe-optim` : Enable unsafe optimisations in release mode.
 //! - `dynbox` : enables Boxing of dyn values, requires nightly toolchain.
+//! - `log-bump` : prints details of bump allocation when thread terminates.
 
 /// Memory allocation.
 pub mod alloc {
     pub use allocator_api2::alloc::*;
 }
+
+/// Thread-local bump allocators.
+pub mod localalloc;
 
 /// Containers: BTreeMap, BTreeSet, HashMap and HashSet.
 pub mod collections;
