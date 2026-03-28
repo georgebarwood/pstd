@@ -1,11 +1,13 @@
 use crate::alloc::{Allocator, Global};
 use std::alloc::Layout;
 use std::fmt;
-use std::mem;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr;
 use std::ptr::NonNull;
+use std::hash::Hasher;
+use std::hash::Hash;
+use std::cmp::Ordering;
 
 /// A pointer type that uniquely owns a heap allocation of type `T`.
 pub struct Box<T: ?Sized, A: Allocator = Global> {
@@ -29,24 +31,83 @@ impl<T> Box<T> {
 impl<T, A: Allocator> Box<T, A> {
     /// Allocates memory in the given allocator then places x into it.
     pub fn new_in(t: T, a: A) -> Self {
-        let nn = if mem::size_of::<T>() > 0 {
-            let layout = Layout::new::<T>();
-            let nn = a.allocate(layout).unwrap();
-            let nn = NonNull::<T>::new(nn.as_ptr().cast::<T>()).unwrap();
-            unsafe {
-                ptr::write(nn.as_ptr(), t);
-            }
-            nn
-        } else {
-            NonNull::<T>::dangling()
-        };
+        let layout = Layout::new::<T>();
+        let nn = a.allocate(layout).unwrap();
+        let nn = unsafe{ NonNull::<T>::new_unchecked(nn.as_ptr().cast::<T>()) };
+        unsafe {
+            ptr::write(nn.as_ptr(), t);
+        }
         Self { nn, a }
+    }
+
+    /// Allocates memory in the given allocator then clones s into it.
+    pub fn from_slice_in(s: &[T], a: A) -> Box<[T],A> where T: Clone
+    {
+        let n = s.len();
+        let layout = Layout::array::<T>(n).unwrap();
+        let nn = a.allocate(layout).unwrap();
+        let p = nn.as_ptr().cast::<T>();
+        for (i, e) in s.iter().enumerate()
+        {
+            unsafe{ ptr::write(p.add(i), e.clone()); }
+        }
+        let nn = unsafe{ NonNull::new_unchecked(p) };
+        let nn = NonNull::slice_from_raw_parts(nn,n);
+        Box::<[T],A> { nn, a }
+    }
+}
+
+impl<T: ?Sized, A: Allocator> Box<T, A> {
+
+    /// Allocates memory in the given allocator then clones s into it.
+    pub fn from_str_in(s: &str, a:A ) -> Box<str,A>
+    {
+        let s = s.as_bytes();
+        let n = s.len();
+        let layout = Layout::array::<u8>(n).unwrap();
+        let nn = a.allocate(layout).unwrap();
+        let p = nn.as_ptr().cast::<u8>();
+        for (i, e) in s.iter().enumerate()
+        {
+            unsafe{ ptr::write(p.add(i), *e); }
+        }
+        let nn = unsafe{ NonNull::new_unchecked(p) };
+        let nn = NonNull::slice_from_raw_parts(nn,n);
+        let p = nn.as_ptr() as * mut str;
+        let nn = unsafe{ NonNull::new_unchecked(p) };
+        Box::<str,A>{ nn, a }
     }
 }
 
 impl<T: ?Sized, A: Allocator> Box<T, A> {
     fn r(&self) -> &T {
         unsafe { &*self.nn.as_ptr() }
+    }
+}
+
+impl<A: Allocator+Clone> Clone for Box<str,A> {
+    fn clone(&self) -> Box<str,A> {
+        Box::<str,A>::from_str_in( self.r(), self.a.clone() )
+    }
+}
+
+impl<T: ?Sized + Hash, A: Allocator> Hash for Box<T, A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (**self).hash(state);
+    }
+}
+
+impl<T: ?Sized + Eq, A: Allocator> Eq for Box<T, A> {}
+
+impl<T: ?Sized + PartialEq, A: Allocator> PartialEq for Box<T, A> {
+    fn eq(&self, other: &Self) -> bool {
+        PartialEq::eq(&**self, &**other)
+    }
+}
+
+impl<T: ?Sized + PartialOrd, A: Allocator> PartialOrd for Box<T, A> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        PartialOrd::partial_cmp(&**self, &**other)
     }
 }
 
@@ -59,10 +120,8 @@ impl<T: ?Sized, A: Allocator> Drop for Box<T, A> {
         unsafe {
             self.nn.drop_in_place();
         }
-        if layout.size() != 0 {
-            let p = NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap();
-            unsafe { self.a.deallocate(p, layout) }
-        }
+        let p = NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap();
+        unsafe { self.a.deallocate(p, layout) }
     }
 }
 

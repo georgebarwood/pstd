@@ -8,82 +8,87 @@
 //! assert!( *b == 99 );
 //! ```
 
-use crate::alloc::{Allocator, AllocError, Global};
-use crate::collections::{HashMap, DefaultHashBuilder};
+use crate::alloc::{AllocError, Allocator, Global};
 use crate::collections::{BTreeMap, btree_map::CustomTuning};
-use crate::{Box,Vec,String};
+use crate::collections::{DefaultHashBuilder, HashMap};
+use crate::{Box, String};
 
 use std::cell::RefCell;
+use std::marker::PhantomData;
 use std::ptr::slice_from_raw_parts_mut;
 use std::{alloc::Layout, ptr::NonNull};
-use std::marker::PhantomData;
 
-/// Box allocated from Temp
+/// `Box` allocated from `Temp`
 pub type TBox<T> = Box<T, Temp>;
 
-/// Allocate a TBox.
+/// Allocate a `TBox`.
 pub fn tbox<T>(t: T) -> TBox<T> {
     TBox::new_in(t, Temp::new())
 }
 
-/// Vec allocated from Temp
-pub type TVec<T> = Vec<T, Temp>;
+/// `Vec` allocated from `Temp`
+pub type TVec<T> = crate::Vec<T, Temp>;
 
-/// Create a TVec.
+/// Create a `TVec`.
 pub fn tvec<T>() -> TVec<T> {
     TVec::new_in(Temp::new())
 }
 
-/// Box allocated from Local
+/// `Box` allocated from `Local`
 pub type LBox<T> = Box<T, Local>;
 
-/// Allocate a LBox.
+/// Allocate a `LBox`.
 pub fn lbox<T>(t: T) -> LBox<T> {
     LBox::new_in(t, Local::new())
 }
 
-/// Vec allocated from Local
-pub type LVec<T> = Vec<T, Local>;
+/// `Vec` allocated from `Local`
+pub type LVec<T> = crate::Vec<T, Local>;
 
-/// Create a LVec.
+/// Create a `LVec`.
 pub fn lvec<T>() -> LVec<T> {
     LVec::new_in(Local::new())
 }
 
-/// BTreeMap allocated from Local
+/// `BTreeMap` allocated from `Local`
 pub type LBTreeMap<K, V> = BTreeMap<K, V, CustomTuning<Local>>;
 
-/// Create a LBTreeMap .
+/// Create a `LBTreeMap`.
 pub fn lbtreemap<K, V>() -> LBTreeMap<K, V> {
     LBTreeMap::with_tuning(CustomTuning::default())
 }
 
-/// HashMap allocated from Local
+/// `HashMap` allocated from `Local`
 pub type LHashMap<K, V> = HashMap<K, V, DefaultHashBuilder, Local>;
 
-/// Create a LHashMap.
+/// Create a `LHashMap`.
 pub fn lhashmap<K, V>() -> LHashMap<K, V> {
     LHashMap::new_in(Local::new())
 }
 
-/// Allocate a std::boxed::Box or LBox depending on whether dynbox feature is selected.
+/// Allocate a `std::boxed::Box` or `LBox` depending on whether dynbox feature is selected.
 #[cfg(feature = "dynbox")]
 pub fn dbox<T>(t: T) -> LBox<T> {
     LBox::new_in(t, Local::new())
 }
 
-/// Allocate a std::boxed::Box or LBox depending on whether dynbox feature is selected.
+/// Allocate a `std::boxed::Box` or `LBox` depending on whether dynbox feature is selected.
 #[cfg(not(feature = "dynbox"))]
 pub fn dbox<T>(t: T) -> std::boxed::Box<T> {
     std::boxed::Box::new(t)
 }
 
-/// String allocated from Local
+/// `String` allocated from `Local`
 pub type LString = String<Local>;
 
-/// Convert str to LString.
+/// Convert `str` to `LString`.
 pub fn lstring(s: &str) -> LString {
-    crate::String::from_str_in( s, Local::new() )
+    crate::String::from_str_in(s, Local::new())
+}
+
+/// Convert `str` to `LBox<str>`.
+pub fn lboxstr(s: &str) -> LBox<str> {
+    LBox::<str>::from_str_in(s, Local::new())
 }
 
 thread_local! {
@@ -95,46 +100,43 @@ const USE_BUMP: bool = !cfg!(miri);
 const K: usize = 1024;
 const MAX_ALIGN: usize = 128;
 
-/// Temp Allocator.
+/// Temp [`Allocator`].
 #[derive(Default, Clone)]
-pub struct Temp
-{
-    pd : PhantomData<NonNull<()>> // To make Temp !Send and !Sync
+pub struct Temp {
+    pd: PhantomData<NonNull<()>>, // To make Temp !Send and !Sync
 }
 
-impl Temp
-{
+impl Temp {
     /// Create a Temp allocator
-    pub fn new() -> Self
-    {
-        Self{ pd: PhantomData }
+    pub fn new() -> Self {
+        Self { pd: PhantomData }
     }
 }
 
 unsafe impl Allocator for Temp {
     fn allocate(&self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        // println!("Temp allocating");
         TA.with_borrow_mut(|a| a.allocate(lay))
     }
 
     unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
+        // println!("Temp deallocating");
         TA.with_borrow_mut(|a| a.deallocate(p, lay));
     }
 }
 
-/// Local Allocator.
+/// Local [`Allocator`].
 #[derive(Default, Clone)]
-pub struct Local
-{
-    pd : PhantomData<NonNull<()>> // To make Local !Send and !Sync
+pub struct Local {
+    pd: PhantomData<NonNull<()>>, // To make Local !Send and !Sync
 }
 
 impl Local {
     /// Create a Local allocator
-    pub fn new() -> Self
-    {
-        Self{ pd: PhantomData }
+    pub fn new() -> Self {
+        Self { pd: PhantomData }
     }
-    
+
     /// Enable Local bump allocation for current thread with default size (256KB).
     pub fn enable_bump() {
         Self::enable_bump_with(256 * K);
@@ -153,10 +155,12 @@ impl Local {
 
 unsafe impl Allocator for Local {
     fn allocate(&self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        //println!("Local allocating");
         LA.with_borrow_mut(|a| a.allocate(lay))
     }
 
     unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
+        //println!("Local deallocating");
         LA.with_borrow_mut(|a| a.deallocate(p, lay));
     }
 }
@@ -192,13 +196,13 @@ impl Block {
 }
 
 struct BumpAllocator {
-    bsize: usize, // Block size
-    max_size: usize, // Limit on sizes that can be bump allocated
-    alloc_count: u64, // Number of current allocations
-    idx: usize, // Current bytes allocated from cur
-    cur: Block, // Current block for allocation
-    overflow: Vec<Block>, // List of used up blocks
-    _alloc_bytes: usize, // Only for diagnostic purposes.
+    bsize: usize,                   // Block size
+    max_size: usize,                // Limit on sizes that can be bump allocated
+    alloc_count: u64,               // Number of current allocations
+    idx: usize,                     // Current bytes allocated from cur
+    cur: Block,                     // Current block for allocation
+    overflow: std::vec::Vec<Block>, // List of used up blocks
+    _alloc_bytes: usize,            // Only for diagnostic purposes.
     _max_alloc: usize,
     _reset_count: usize,
     _total_count: usize,
@@ -225,8 +229,7 @@ impl BumpAllocator {
     }
 
     fn enable_with(&mut self, bsize: usize) {
-        if self.alloc_count != 0
-        {
+        if self.alloc_count != 0 {
             println!("BumpAllocator enable_with alloc_count not zero, aborting");
             std::process::abort();
         }
@@ -292,16 +295,19 @@ impl BumpAllocator {
 
 impl Drop for BumpAllocator {
     fn drop(&mut self) {
-        if self.alloc_count != 0 {
-            println!("BumpAllocator has outstanding allocations, aborting");
-            std::process::abort();
-        }
-
         #[cfg(feature = "log-bump")]
         println!(
             "Bump Allocator Dropped temp={} total_count={} total_alloc={} max_alloc={} reset_count={}",
             self._temp, self._total_count, self._total_alloc, self._max_alloc, self._reset_count
         );
+
+        if self.alloc_count != 0 {
+            println!(
+                "BumpAllocator has {} outstanding allocations, aborting",
+                self.alloc_count,
+            );
+            std::process::abort();
+        }
 
         self.cur.drop(self.bsize);
         self.reset_overflow();
