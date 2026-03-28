@@ -54,27 +54,27 @@ impl<T, A: Allocator> Box<T, A> {
         let nn = unsafe{ NonNull::new_unchecked(p) };
         let nn = NonNull::slice_from_raw_parts(nn,n);
         Box::<[T],A> { nn, a }
-    }
+    }   
 }
 
 impl<T: ?Sized, A: Allocator> Box<T, A> {
 
-    /// Allocates memory in the given allocator then clones s into it.
+    /// Allocates memory in the given allocator then copies s into it.
+    ///
+    /// Note: there is currently no requivalent in the standard library.
     pub fn from_str_in(s: &str, a:A ) -> Box<str,A>
     {
-        let s = s.as_bytes();
         let n = s.len();
         let layout = Layout::array::<u8>(n).unwrap();
-        let nn = a.allocate(layout).unwrap();
-        let p = nn.as_ptr().cast::<u8>();
-        for (i, e) in s.iter().enumerate()
-        {
-            unsafe{ ptr::write(p.add(i), *e); }
-        }
-        let nn = unsafe{ NonNull::new_unchecked(p) };
-        let nn = NonNull::slice_from_raw_parts(nn,n);
-        let p = nn.as_ptr() as * mut str;
-        let nn = unsafe{ NonNull::new_unchecked(p) };
+        let nn : NonNull<[u8]> = a.allocate(layout).unwrap();
+        let p : * mut u8 = nn.as_ptr().cast::<u8>();
+
+        unsafe{ ptr::copy_nonoverlapping( s.as_ptr(), p, n ); }
+        
+        let nn : NonNull<u8> = unsafe{ NonNull::new_unchecked(p) };
+        let nn : NonNull<[u8]> = NonNull::slice_from_raw_parts(nn,n);
+        let p : * mut str = nn.as_ptr() as * mut str;
+        let nn : NonNull<str> = unsafe{ NonNull::new_unchecked(p) };
         Box::<str,A>{ nn, a }
     }
 }
@@ -102,6 +102,12 @@ impl<T: ?Sized + Eq, A: Allocator> Eq for Box<T, A> {}
 impl<T: ?Sized + PartialEq, A: Allocator> PartialEq for Box<T, A> {
     fn eq(&self, other: &Self) -> bool {
         PartialEq::eq(&**self, &**other)
+    }
+}
+
+impl<T: ?Sized + Ord, A: Allocator> Ord for Box<T, A> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        Ord::cmp(&**self, &**other)
     }
 }
 
@@ -151,6 +157,20 @@ impl<T: ?Sized + fmt::Debug, A: Allocator> fmt::Debug for Box<T, A> {
     }
 }
 
+use std::borrow::Borrow;
+impl<T: ?Sized, A: Allocator> Borrow<T> for Box<T, A> {
+    fn borrow(&self) -> &T {
+        self
+    }
+}
+
+use std::borrow::BorrowMut;
+impl<T: ?Sized, A: Allocator> BorrowMut<T> for Box<T, A> {
+    fn borrow_mut(&mut self) -> &mut T {
+        self
+    }
+}
+
 #[cfg(feature = "dynbox")]
 use std::{marker::Unsize, ops::CoerceUnsized};
 
@@ -171,6 +191,31 @@ fn test_boxed() {
         assert_eq!(b.0, 99);
         println!("b.0={}", b.0);
     }
+
+    {
+        let b = Box::<str>::from_str_in( "Hello There", Global );
+        assert_eq!( "Hello There", &*b );
+    }
+
+    {
+        use crate::localalloc::*;
+        let mut hm = lhashmap();
+        let s = lboxstr("Hello George");
+        hm.insert(s,1);
+        let v = hm.get("Hello George");
+        println!("v={:?}", v);
+        assert_eq!( v, Some(&1) );
+    }
+
+    {
+        use crate::localalloc::*;
+        let mut hm = lbtreemap();
+        let s = lboxstr("Hello George");
+        hm.insert(s,1);
+        let v = hm.get("Hello George");
+        println!("v={:?}", v);
+        assert_eq!( v, Some(&1) );
+    }   
 
     #[cfg(feature = "dynbox")]
     {
