@@ -71,8 +71,6 @@ impl<T: ?Sized, A: Allocator> Box<T, A> {
 
         unsafe{ ptr::copy_nonoverlapping( s.as_ptr(), p, n ); }
         
-        let nn : NonNull<u8> = unsafe{ NonNull::new_unchecked(p) };
-        let nn : NonNull<[u8]> = NonNull::slice_from_raw_parts(nn,n);
         let p : * mut str = nn.as_ptr() as * mut str;
         let nn : NonNull<str> = unsafe{ NonNull::new_unchecked(p) };
         Box::<str,A>{ nn, a }
@@ -199,20 +197,20 @@ fn test_boxed() {
 
     {
         use crate::localalloc::*;
-        let mut hm = lhashmap();
+        let mut m = lhashmap();
         let s = lboxstr("Hello George");
-        hm.insert(s,1);
-        let v = hm.get("Hello George");
+        m.insert(s,1);
+        let v = m.get("Hello George");
         println!("v={:?}", v);
         assert_eq!( v, Some(&1) );
     }
 
     {
         use crate::localalloc::*;
-        let mut hm = lbtreemap();
+        let mut m = lbtreemap();
         let s = lboxstr("Hello George");
-        hm.insert(s,1);
-        let v = hm.get("Hello George");
+        m.insert(s,1);
+        let v = m.get("Hello George");
         println!("v={:?}", v);
         assert_eq!( v, Some(&1) );
     }   
