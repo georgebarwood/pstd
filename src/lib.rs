@@ -39,6 +39,10 @@ pub use string::String;
 pub mod boxed;
 pub use boxed::Box;
 
+/// [`Rc`] similar to [`std::rc::Rc`].
+pub mod rc;
+pub use rc::Rc;
+
 #[cfg(test)]
 mod testing {
     pub mod crash_test;

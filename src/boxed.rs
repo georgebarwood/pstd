@@ -123,12 +123,12 @@ unsafe impl<T: Sync, A: Allocator + Send> Sync for Box<T, A> {}
 
 impl<T: ?Sized, A: Allocator> Drop for Box<T, A> {
     fn drop(&mut self) {
-        let layout = unsafe { Layout::for_value(&*self.nn.as_ptr()) };
         unsafe {
+            let layout = Layout::for_value(&*self.nn.as_ptr());
             self.nn.drop_in_place();
+            let p = NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap();
+            self.a.deallocate(p, layout);
         }
-        let p = NonNull::new(self.nn.as_ptr().cast::<u8>()).unwrap();
-        unsafe { self.a.deallocate(p, layout) }
     }
 }
 
