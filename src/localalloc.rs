@@ -91,6 +91,11 @@ pub fn lboxstr(s: &str) -> LBox<str> {
     LBox::<str>::from_str_in(s, Local::new())
 }
 
+/// Convert `str` to `TBox<str>`.
+pub fn tboxstr(s: &str) -> TBox<str> {
+    TBox::<str>::from_str_in(s, Temp::new())
+}
+
 thread_local! {
     static TA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new(true,256*K));
     static LA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new(false,0));

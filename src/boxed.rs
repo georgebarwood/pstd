@@ -1,13 +1,13 @@
 use crate::alloc::{Allocator, Global};
 use std::alloc::Layout;
+use std::cmp::Ordering;
 use std::fmt;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ptr;
 use std::ptr::NonNull;
-use std::hash::Hasher;
-use std::hash::Hash;
-use std::cmp::Ordering;
 
 /// A pointer type that uniquely owns a heap allocation of type `T`.
 pub struct Box<T: ?Sized, A: Allocator = Global> {
@@ -33,7 +33,7 @@ impl<T, A: Allocator> Box<T, A> {
     pub fn new_in(t: T, a: A) -> Self {
         let layout = Layout::new::<T>();
         let nn = a.allocate(layout).unwrap();
-        let nn = unsafe{ NonNull::<T>::new_unchecked(nn.as_ptr().cast::<T>()) };
+        let nn = unsafe { NonNull::<T>::new_unchecked(nn.as_ptr().cast::<T>()) };
         unsafe {
             ptr::write(nn.as_ptr(), t);
         }
@@ -41,39 +41,42 @@ impl<T, A: Allocator> Box<T, A> {
     }
 
     /// Allocates memory in the given allocator then clones s into it.
-    pub fn from_slice_in(s: &[T], a: A) -> Box<[T],A> where T: Clone
+    pub fn from_slice_in(s: &[T], a: A) -> Box<[T], A>
+    where
+        T: Clone,
     {
         let n = s.len();
         let layout = Layout::array::<T>(n).unwrap();
         let nn = a.allocate(layout).unwrap();
         let p = nn.as_ptr().cast::<T>();
-        for (i, e) in s.iter().enumerate()
-        {
-            unsafe{ ptr::write(p.add(i), e.clone()); }
+        for (i, e) in s.iter().enumerate() {
+            unsafe {
+                ptr::write(p.add(i), e.clone());
+            }
         }
-        let nn = unsafe{ NonNull::new_unchecked(p) };
-        let nn = NonNull::slice_from_raw_parts(nn,n);
-        Box::<[T],A> { nn, a }
-    }   
+        let nn = unsafe { NonNull::new_unchecked(p) };
+        let nn = NonNull::slice_from_raw_parts(nn, n);
+        Box::<[T], A> { nn, a }
+    }
 }
 
 impl<T: ?Sized, A: Allocator> Box<T, A> {
-
     /// Allocates memory in the given allocator then copies s into it.
     ///
-    /// Note: there is currently no requivalent in the standard library.
-    pub fn from_str_in(s: &str, a:A ) -> Box<str,A>
-    {
+    /// Note: there is currently no equivalent in the standard library.
+    pub fn from_str_in(s: &str, a: A) -> Box<str, A> {
         let n = s.len();
         let layout = Layout::array::<u8>(n).unwrap();
-        let nn : NonNull<[u8]> = a.allocate(layout).unwrap();
-        let p : * mut u8 = nn.as_ptr().cast::<u8>();
+        let nn: NonNull<[u8]> = a.allocate(layout).unwrap();
+        let p: *mut u8 = nn.as_ptr().cast::<u8>();
 
-        unsafe{ ptr::copy_nonoverlapping( s.as_ptr(), p, n ); }
-        
-        let p : * mut str = nn.as_ptr() as * mut str;
-        let nn : NonNull<str> = unsafe{ NonNull::new_unchecked(p) };
-        Box::<str,A>{ nn, a }
+        unsafe {
+            ptr::copy_nonoverlapping(s.as_ptr(), p, n);
+        }
+
+        let p: *mut str = nn.as_ptr() as *mut str;
+        let nn: NonNull<str> = unsafe { NonNull::new_unchecked(p) };
+        Box::<str, A> { nn, a }
     }
 }
 
@@ -83,9 +86,9 @@ impl<T: ?Sized, A: Allocator> Box<T, A> {
     }
 }
 
-impl<A: Allocator+Clone> Clone for Box<str,A> {
-    fn clone(&self) -> Box<str,A> {
-        Box::<str,A>::from_str_in( self.r(), self.a.clone() )
+impl<A: Allocator + Clone> Clone for Box<str, A> {
+    fn clone(&self) -> Box<str, A> {
+        Box::<str, A>::from_str_in(self.r(), self.a.clone())
     }
 }
 
@@ -191,29 +194,29 @@ fn test_boxed() {
     }
 
     {
-        let b = Box::<str>::from_str_in( "Hello There", Global );
-        assert_eq!( "Hello There", &*b );
+        let b = Box::<str>::from_str_in("Hello There", Global);
+        assert_eq!("Hello There", &*b);
     }
 
     {
         use crate::localalloc::*;
         let mut m = lhashmap();
         let s = lboxstr("Hello George");
-        m.insert(s,1);
+        m.insert(s, 1);
         let v = m.get("Hello George");
         println!("v={:?}", v);
-        assert_eq!( v, Some(&1) );
+        assert_eq!(v, Some(&1));
     }
 
     {
         use crate::localalloc::*;
         let mut m = lbtreemap();
         let s = lboxstr("Hello George");
-        m.insert(s,1);
+        m.insert(s, 1);
         let v = m.get("Hello George");
         println!("v={:?}", v);
-        assert_eq!( v, Some(&1) );
-    }   
+        assert_eq!(v, Some(&1));
+    }
 
     #[cfg(feature = "dynbox")]
     {
