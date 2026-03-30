@@ -6,30 +6,78 @@ use std::hash::Hash;
 use std::hash::Hasher;
 use std::cmp::Ordering;
 use std::fmt;
+use crate::{Box};
 
 /// A single-threaded reference-counting pointer. ‘Rc’ stands for ‘Reference Counted’.
-pub struct Rc<T, A: Allocator = Global> {
+pub struct Rc<T: ?Sized, A: Allocator = Global> {
     nn: NonNull<Inner<T, A>>,
+}
+
+struct Inner<T:?Sized, A: Allocator> {
+    n: usize,
+    a: A,
+    v: T,
 }
 
 impl<T, A: Allocator> Rc<T, A> {
     /// Allocate a new Rc in specified allocator and move v into it.
     pub fn new_in(v: T, a: A) -> Rc<T, A> {
-        let layout = Layout::new::<Inner<T, A>>();
-        let nn = a.allocate(layout).unwrap();
-        let p = nn.as_ptr().cast::<Inner<T, A>>();
-
-        let inner = Inner { n: 0, v, a };
         unsafe {
-            std::ptr::write(p, inner);
-        }
+            let layout = Layout::new::<Inner<T, A>>();
+            let nn = a.allocate(layout).unwrap();
+            let p = nn.as_ptr().cast::<Inner<T, A>>();
 
-        let nn = unsafe { NonNull::new_unchecked(p) };
-        Self { nn }
+            let inner = Inner { n: 0, a, v };
+            std::ptr::write(p, inner);
+            let nn = NonNull::new_unchecked(p);
+            Self { nn }
+        }
+    }
+
+/* Could not get this to work.
+    /// Allocates memory in the given allocator then clones s into it.
+    pub fn from_slice_in(s: &[T], a: A) -> Rc<[T], A>
+    where
+        T: Clone,
+    {   
+        unsafe{
+            let n = s.len();
+            let slice_layout = Layout::array::<T>(n).unwrap();
+    
+            let layout = Layout::new::<Inner<(), A>>();
+            let (layout,off) = layout.extend( slice_layout ).unwrap();
+            let nn = a.allocate(layout).unwrap();
+
+            let p = nn.as_ptr().cast::<Inner<(), A>>();
+            (*p).n = 0;
+            (*p).a = a;
+            let p = p.cast::<u8>();
+            let slice_p = p.add(off).cast::<T>();
+            for (i, e) in s.iter().enumerate() {
+                std::ptr::write(slice_p.add(i), e.clone());
+            }
+            // let p = p.cast::<Inner<[()], A>>();
+            // let nn = NonNull::new_unchecked(p);
+            // let _nn = nn.cast::< Inner<[T],A> >();
+            // let rc = Rc::<(), A> { nn };
+            // rc as Rc<[T], A>
+            todo!()
+        }
+    }
+*/
+} 
+
+impl<T, A: Allocator> Rc<T, A> {
+    /// Returns a reference to the underlying allocator.
+    pub fn allocator(this: &Self) -> &A {
+        let p = this.nn.as_ptr();
+        unsafe{ &(*p).a }
     }
 }
 
-/*impl<T: ?Sized, A: Allocator> Rc<T, A> {
+/* Could not get this to work.
+
+impl<T: ?Sized, A: Allocator> Rc<T, A> {
     /// Allocates memory in the given allocator then copies s into it.
     pub fn from_str_in(s: &str, a: A) -> Rc<str, A> {
         let n = s.len();
@@ -46,12 +94,6 @@ impl<T, A: Allocator> Rc<T, A> {
         Box::<str, A> { nn, a }
     }
 }*/
-
-struct Inner<T, A: Allocator> {
-    n: usize,
-    a: A,
-    v: T,
-}
 
 impl<T, A: Allocator> Deref for Rc<T, A> {
     type Target = T;
@@ -72,13 +114,13 @@ impl<T, A: Allocator> Clone for Rc<T, A> {
     }
 }
 
-impl<T, A: Allocator> Drop for Rc<T, A> {
+impl<T:?Sized, A: Allocator> Drop for Rc<T, A> {
     fn drop(&mut self) {
         unsafe {
             let p = self.nn.as_ptr();
             if (*p).n == 0 {
                 self.nn.drop_in_place();
-                let layout = Layout::new::<Inner<T, A>>();
+                let layout = Layout::for_value(&*self.nn.as_ptr());
                 let dp = NonNull::new(p.cast::<u8>()).unwrap();
                 (*p).a.deallocate(dp, layout)
             } else {
@@ -133,63 +175,72 @@ impl<T, A: Allocator> Borrow<T> for Rc<T, A> {
     }
 }
 
+/// Reference-counted String.
+#[derive(Clone)]
+pub struct RcStr<A:Allocator>{ 
+     inner: Rc<Box<str,A>,A>
+}
+
+impl <A:Allocator + Clone> RcStr<A>
+{
+    /// Create a RcStr from s in specified allocator. 
+    pub fn from_str_in( s:&str, a: A ) -> RcStr<A>
+    {
+        let s = Box::<str,A>::from_str_in( s, a.clone());
+        let inner = Rc::new_in( s, a );
+        RcStr::<A>{ inner }
+    }
+}
+
+impl <A:Allocator> Deref for RcStr<A>
+{
+    type Target = str;
+    fn deref(&self) -> &str { 
+          // let b : &Box<str,A> = self.inner.deref();
+          // b.deref()
+          self.inner.deref().deref()
+    }
+}
+
+impl<A: Allocator> Hash for RcStr<A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.deref().hash(state);
+    }
+}
+
+impl<A: Allocator> PartialOrd for RcStr<A> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        PartialOrd::partial_cmp(&**self, &**other)
+    }
+}
+
+impl<A: Allocator> Ord for RcStr<A>{
+    fn cmp(&self, other: &Self) -> Ordering {
+        Ord::cmp(&**self, &**other)
+    }
+}
+
+impl<A: Allocator> Eq for RcStr<A> {}
+
+impl<A: Allocator> PartialEq for RcStr<A> {
+    fn eq(&self, other: &Self) -> bool {
+        PartialEq::eq(&**self, &**other)
+    }
+}
+
+impl<A: Allocator> Borrow<str> for RcStr<A> {
+    fn borrow(&self) -> &str {
+        self.deref()
+    }
+}
+
 
 #[test]
 fn rc_test()
 {
-    let r = Rc::new_in(99,Global);
-    assert!( *r == 99 );
-    {
-        let r1 = r.clone();
-        assert!( *r1 == 99 );
-    }
-
-    // use crate::collections::*;
     use crate::localalloc::*;
-   
-    let mut m = lbtreemap();
-    let x : usize = 99;
-    let k = lrc(x);
-    m.insert( k, 55 );
-    println!( "m={:?}", m);
-    assert!( m.get(&99).is_some() );
-
-    let mut m = std::collections::BTreeMap::new();
-    let x: usize = 99;
-    let k = std::rc::Rc::new(x);
-    m.insert( k, 55 );
-    assert!( m.get(&99).is_some() );
-
-    let mut m = std::collections::BTreeMap::new();
-    let x: usize = 99;
-    let k = std::rc::Rc::new(std::boxed::Box::new(x));
-    m.insert( k, 55 );
-    assert!( m.get(&std::boxed::Box::new(x)).is_some());
-    // assert!( m.get(&x).is_some() );
-
-    let mut m = std::collections::BTreeMap::new();
-    let x: String = "hello".to_string();
-    let k = std::rc::Rc::new(x.clone());
-    m.insert( k, 55 );
-    // assert!( m.get("hello").is_some() ); // Doesn't work
-    let k2 = std::rc::Rc::new(x);
-    assert!( m.get(&k2).is_some() ); // Ok
-    
-
-    let mut m = std::collections::BTreeMap::new();
-    let k : std::rc::Rc<str> = std::rc::Rc::from("hello");
-
-    m.insert( k, 55 );
-    assert!( m.get("hello").is_some() );
-
-    let mut m = lbtreemap();
-    let x : usize = 99;
-    let k = lrc(lbox(x));
-    m.insert( k.clone(), 55 );
-    println!( "m={:?}", m);
-    assert!( m.get(&k).is_some() );
-
-    let bk = lbox(x);
-    assert!( m.get(&bk).is_some() );
-    // assert!( m.get(&x).is_some() );
+    let mut m = lhashmap();
+    let x = RcStr::from_str_in( "George", Local::new() );
+    m.insert(x.clone(), 99);
+    assert!( m.get("George").is_some() )
 }
