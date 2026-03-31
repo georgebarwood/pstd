@@ -10,6 +10,8 @@ use std::ptr;
 use std::ptr::NonNull;
 
 /// A pointer type that uniquely owns a heap allocation of type `T`.
+///
+/// Boxing dyn values requires the dynbox feature to be enabled ( which currently requires the nightly toolchain ).
 pub struct Box<T: ?Sized, A: Allocator = Global> {
     pub(crate) nn: NonNull<T>,
     pub(crate) a: A,

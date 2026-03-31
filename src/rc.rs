@@ -6,7 +6,7 @@ use std::{
     fmt,
     hash::{Hash, Hasher},
     ops::Deref,
-    ptr::{NonNull},
+    ptr::NonNull,
 };
 
 /// A single-threaded reference-counting pointer. ‘Rc’ stands for ‘Reference Counted’.
@@ -47,7 +47,7 @@ impl<T, A: Allocator> Rc<T, A> {
 
     /// Provides a raw pointer to the data.
     pub fn as_ptr(this: &Self) -> *const T {
-        let ptr: *mut Inner<T,A> = this.nn.as_ptr();
+        let ptr: *mut Inner<T, A> = this.nn.as_ptr();
         unsafe { &raw mut (*ptr).v }
     }
 }
@@ -78,7 +78,7 @@ impl<T, A: Allocator> Drop for Rc<T, A> {
             if (*p).n == 0 {
                 self.nn.drop_in_place();
                 let layout = Layout::for_value(&*self.nn.as_ptr());
-                let dp = NonNull::new(p.cast::<u8>()).unwrap();
+                let dp = NonNull::new_unchecked(p.cast::<u8>());
                 (*p).a.deallocate(dp, layout)
             } else {
                 (*p).n -= 1;
@@ -136,7 +136,7 @@ impl<T, A: Allocator> Borrow<T> for Rc<T, A> {
 /// Reference-counted String.
 #[derive(Clone)]
 pub struct RcStr<A: Allocator> {
-    inner: Rc<Box<str, A>, A>, // The Box could be eliminated eventually when various library features stabilise.
+    inner: Rc<Box<str, A>, A>, // The Box could be eliminated when various library features stabilise.
 }
 
 impl<A: Allocator + Clone> RcStr<A> {
@@ -151,15 +151,19 @@ impl<A: Allocator + Clone> RcStr<A> {
 impl<A: Allocator> Deref for RcStr<A> {
     type Target = str;
     fn deref(&self) -> &str {
-        // let b : &Box<str,A> = self.inner.deref();
-        // b.deref()
         self.inner.deref().deref()
     }
 }
 
-impl<A: Allocator> Hash for RcStr<A> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.deref().hash(state);
+impl<A: Allocator> Borrow<str> for RcStr<A> {
+    fn borrow(&self) -> &str {
+        self.deref()
+    }
+}
+
+impl<A: Allocator> Ord for RcStr<A> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        Ord::cmp(self.deref(), other.deref())
     }
 }
 
@@ -169,23 +173,17 @@ impl<A: Allocator> PartialOrd for RcStr<A> {
     }
 }
 
-impl<A: Allocator> Ord for RcStr<A> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        Ord::cmp(&**self, &**other)
-    }
-}
-
 impl<A: Allocator> Eq for RcStr<A> {}
 
 impl<A: Allocator> PartialEq for RcStr<A> {
     fn eq(&self, other: &Self) -> bool {
-        PartialEq::eq(&**self, &**other)
+        PartialEq::eq(self.deref(), other.deref())
     }
 }
 
-impl<A: Allocator> Borrow<str> for RcStr<A> {
-    fn borrow(&self) -> &str {
-        self.deref()
+impl<A: Allocator> Hash for RcStr<A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.deref().hash(state);
     }
 }
 
