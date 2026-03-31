@@ -1,15 +1,18 @@
 #![deny(missing_docs)]
 #![cfg_attr(feature = "dynbox", feature(unsize))]
 #![cfg_attr(feature = "dynbox", feature(coerce_unsized))]
+//#![cfg_attr(feature = "dynbox", feature(core_intrinsics))]
 
-//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ), 
+//! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ),
 //! in particular [`Box`], [`Vec`], [`Rc`], [`String`] and [collections]::{ [`BTreeMap`](collections::BTreeMap), [`BTreeSet`](collections::BTreeSet), [`HashMap`](collections::HashMap), [`HashSet`](collections::HashMap) }.
 //!
-//! Box, Rc and String only have minimal methods/traits implemented currently.
+//! Box, Rc and String currently only have minimal methods/traits implemented.
 //!
 //! HashMap and HashSet are imported from the hashbrown crate.
-//! 
+//!
 //! [`RcStr`] is a reference-counted string.
+//!
+//! The [`localalloc`] module has fast thread-local bump allocators.
 //!
 //!# Features
 //!

@@ -253,20 +253,7 @@ impl<T, A: Allocator> Vec<T, A> {
         T: Clone,
         R: RangeBounds<usize>,
     {
-        /*
-        let start = match src.start_bound() {
-            Bound::Included(x) => *x,
-            Bound::Excluded(x) => *x + 1,
-            Bound::Unbounded => 0,
-        };
-        let end = match src.end_bound() {
-            Bound::Included(x) => *x + 1,
-            Bound::Excluded(x) => *x,
-            Bound::Unbounded => self.len,
-        };
-        */
         let (start, end) = self.get_range(src);
-
         for i in start..end {
             let e = self[i].clone();
             self.push(e);
@@ -764,12 +751,6 @@ impl<T, A: Allocator> Vec<T, A> {
 
     /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity)`.
     pub fn into_raw_parts(self) -> (*mut T, usize, usize) {
-        /* let len = self.len;
-        let cap = self.cap;
-        let ptr = unsafe{ self.nn.as_mut() };
-        mem::forget(self);
-        (ptr, len, cap)
-        */
         let mut me = ManuallyDrop::new(self);
         (me.as_mut_ptr(), me.len, me.cap)
     }
@@ -823,20 +804,21 @@ impl<T, A: Allocator> Vec<T, A> {
         unsafe { slice::from_raw_parts_mut(me.as_mut_ptr(), me.len) }
     }
 
-    /* Not clear how to implement this...
-    /// Interns the `Vec<T>`, making the underlying memory read-only. This method should be
-    /// called during compile time. (This is a no-op if called during runtime)
-    ///
-    /// This method must be called if the memory used by `Vec` needs to appear in the final
-    /// values of constants.
-    pub const fn const_make_global(mut self) -> &'static [T]
-    where
-        T: Freeze,
-    {
-        unsafe { core::intrinsics::const_make_global(self.as_mut_ptr().cast()) };
-        let me = ManuallyDrop::new(self);
-        unsafe { slice::from_raw_parts(me.as_ptr(), me.len) }
-    }
+    /*
+        /// Interns the `Vec<T>`, making the underlying memory read-only. This method should be
+        /// called during compile time. (This is a no-op if called during runtime)
+        ///
+        /// This method must be called if the memory used by `Vec` needs to appear in the final
+        /// values of constants.
+        #[cfg(feature = "dynbox")]
+        pub const fn const_make_global(mut self) -> &'static [T]
+        where
+            T: Freeze,
+        {
+            unsafe { core::intrinsics::const_make_global(self.as_mut_ptr().cast()) };
+            let me = ManuallyDrop::new(self);
+            unsafe { slice::from_raw_parts(me.as_ptr(), me.len) }
+        }
     */
 
     /// Returns the remaining spare capacity of the vector as a slice of
