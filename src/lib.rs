@@ -41,7 +41,7 @@ pub use boxed::Box;
 
 /// [`Rc`] similar to [`std::rc::Rc`].
 pub mod rc;
-pub use rc::{Rc,RcStr};
+pub use rc::{Rc, RcStr};
 
 #[cfg(test)]
 mod testing {

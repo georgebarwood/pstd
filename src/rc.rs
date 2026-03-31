@@ -1,19 +1,22 @@
+use crate::Box;
 use crate::alloc::{Allocator, Global};
-use std::alloc::Layout;
-use std::ops::Deref;
-use std::ptr::NonNull;
-use std::hash::Hash;
-use std::hash::Hasher;
-use std::cmp::Ordering;
-use std::fmt;
-use crate::{Box};
+use std::{
+    alloc::Layout,
+    cmp::Ordering,
+    fmt,
+    hash::{Hash, Hasher},
+    ops::Deref,
+    ptr::{NonNull},
+};
 
 /// A single-threaded reference-counting pointer. ‘Rc’ stands for ‘Reference Counted’.
-pub struct Rc<T: ?Sized, A: Allocator = Global> {
+///
+/// Note: does not currently support DSTs as this would require various unstable library features.
+pub struct Rc<T, A: Allocator = Global> {
     nn: NonNull<Inner<T, A>>,
 }
 
-struct Inner<T:?Sized, A: Allocator> {
+struct Inner<T, A: Allocator> {
     n: usize,
     a: A,
     v: T,
@@ -33,67 +36,21 @@ impl<T, A: Allocator> Rc<T, A> {
             Self { nn }
         }
     }
-
-/* Could not get this to work.
-    /// Allocates memory in the given allocator then clones s into it.
-    pub fn from_slice_in(s: &[T], a: A) -> Rc<[T], A>
-    where
-        T: Clone,
-    {   
-        unsafe{
-            let n = s.len();
-            let slice_layout = Layout::array::<T>(n).unwrap();
-    
-            let layout = Layout::new::<Inner<(), A>>();
-            let (layout,off) = layout.extend( slice_layout ).unwrap();
-            let nn = a.allocate(layout).unwrap();
-
-            let p = nn.as_ptr().cast::<Inner<(), A>>();
-            (*p).n = 0;
-            (*p).a = a;
-            let p = p.cast::<u8>();
-            let slice_p = p.add(off).cast::<T>();
-            for (i, e) in s.iter().enumerate() {
-                std::ptr::write(slice_p.add(i), e.clone());
-            }
-            // let p = p.cast::<Inner<[()], A>>();
-            // let nn = NonNull::new_unchecked(p);
-            // let _nn = nn.cast::< Inner<[T],A> >();
-            // let rc = Rc::<(), A> { nn };
-            // rc as Rc<[T], A>
-            todo!()
-        }
-    }
-*/
-} 
+}
 
 impl<T, A: Allocator> Rc<T, A> {
     /// Returns a reference to the underlying allocator.
     pub fn allocator(this: &Self) -> &A {
         let p = this.nn.as_ptr();
-        unsafe{ &(*p).a }
+        unsafe { &(*p).a }
+    }
+
+    /// Provides a raw pointer to the data.
+    pub fn as_ptr(this: &Self) -> *const T {
+        let ptr: *mut Inner<T,A> = this.nn.as_ptr();
+        unsafe { &raw mut (*ptr).v }
     }
 }
-
-/* Could not get this to work.
-
-impl<T: ?Sized, A: Allocator> Rc<T, A> {
-    /// Allocates memory in the given allocator then copies s into it.
-    pub fn from_str_in(s: &str, a: A) -> Rc<str, A> {
-        let n = s.len();
-        let layout = Layout::array::<u8>(n).unwrap();
-        let nn: NonNull<[u8]> = a.allocate(layout).unwrap();
-        let p: *mut u8 = nn.as_ptr().cast::<u8>();
-
-        unsafe {
-            ptr::copy_nonoverlapping(s.as_ptr(), p, n);
-        }
-
-        let p: *mut str = nn.as_ptr() as *mut str;
-        let nn: NonNull<str> = unsafe { NonNull::new_unchecked(p) };
-        Box::<str, A> { nn, a }
-    }
-}*/
 
 impl<T, A: Allocator> Deref for Rc<T, A> {
     type Target = T;
@@ -114,7 +71,7 @@ impl<T, A: Allocator> Clone for Rc<T, A> {
     }
 }
 
-impl<T:?Sized, A: Allocator> Drop for Rc<T, A> {
+impl<T, A: Allocator> Drop for Rc<T, A> {
     fn drop(&mut self) {
         unsafe {
             let p = self.nn.as_ptr();
@@ -175,30 +132,28 @@ impl<T, A: Allocator> Borrow<T> for Rc<T, A> {
     }
 }
 
+////////////////////////////////////////////////////////////
 /// Reference-counted String.
 #[derive(Clone)]
-pub struct RcStr<A:Allocator>{ 
-     inner: Rc<Box<str,A>,A>
+pub struct RcStr<A: Allocator> {
+    inner: Rc<Box<str, A>, A>, // The Box could be eliminated eventually when various library features stabilise.
 }
 
-impl <A:Allocator + Clone> RcStr<A>
-{
-    /// Create a RcStr from s in specified allocator. 
-    pub fn from_str_in( s:&str, a: A ) -> RcStr<A>
-    {
-        let s = Box::<str,A>::from_str_in( s, a.clone());
-        let inner = Rc::new_in( s, a );
-        RcStr::<A>{ inner }
+impl<A: Allocator + Clone> RcStr<A> {
+    /// Create a RcStr from s in specified allocator.
+    pub fn from_str_in(s: &str, a: A) -> RcStr<A> {
+        let s = Box::<str, A>::from_str_in(s, a.clone());
+        let inner = Rc::new_in(s, a);
+        RcStr::<A> { inner }
     }
 }
 
-impl <A:Allocator> Deref for RcStr<A>
-{
+impl<A: Allocator> Deref for RcStr<A> {
     type Target = str;
-    fn deref(&self) -> &str { 
-          // let b : &Box<str,A> = self.inner.deref();
-          // b.deref()
-          self.inner.deref().deref()
+    fn deref(&self) -> &str {
+        // let b : &Box<str,A> = self.inner.deref();
+        // b.deref()
+        self.inner.deref().deref()
     }
 }
 
@@ -210,11 +165,11 @@ impl<A: Allocator> Hash for RcStr<A> {
 
 impl<A: Allocator> PartialOrd for RcStr<A> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        PartialOrd::partial_cmp(&**self, &**other)
+        Some(self.cmp(other))
     }
 }
 
-impl<A: Allocator> Ord for RcStr<A>{
+impl<A: Allocator> Ord for RcStr<A> {
     fn cmp(&self, other: &Self) -> Ordering {
         Ord::cmp(&**self, &**other)
     }
@@ -234,13 +189,11 @@ impl<A: Allocator> Borrow<str> for RcStr<A> {
     }
 }
 
-
 #[test]
-fn rc_test()
-{
+fn rc_test() {
     use crate::localalloc::*;
     let mut m = lhashmap();
-    let x = RcStr::from_str_in( "George", Local::new() );
+    let x = RcStr::from_str_in("George", Local::new());
     m.insert(x.clone(), 99);
-    assert!( m.get("George").is_some() )
+    assert!(m.get("George").is_some())
 }

@@ -11,7 +11,7 @@
 use crate::alloc::{AllocError, Allocator, Global};
 use crate::collections::{BTreeMap, btree_map::CustomTuning};
 use crate::collections::{DefaultHashBuilder, HashMap};
-use crate::{Box, Rc, String, RcStr};
+use crate::{Box, Rc, RcStr, String};
 
 use std::cell::RefCell;
 use std::marker::PhantomData;
@@ -54,9 +54,8 @@ pub fn lrc<T>(t: T) -> LRc<T> {
 }
 
 ///  Create a `LRcStr`
-pub fn lrcstr(s: &str) -> LRcStr
-{
-    LRcStr::from_str_in( s, Local::new() )
+pub fn lrcstr(s: &str) -> LRcStr {
+    LRcStr::from_str_in(s, Local::new())
 }
 
 /// `Vec` allocated from `Local`
