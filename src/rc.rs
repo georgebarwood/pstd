@@ -36,9 +36,7 @@ impl<T, A: Allocator> Rc<T, A> {
             Self { nn }
         }
     }
-}
 
-impl<T, A: Allocator> Rc<T, A> {
     /// Returns a reference to the underlying allocator.
     pub fn allocator(this: &Self) -> &A {
         let p = this.nn.as_ptr();
@@ -49,14 +47,6 @@ impl<T, A: Allocator> Rc<T, A> {
     pub fn as_ptr(this: &Self) -> *const T {
         let ptr: *mut Inner<T, A> = this.nn.as_ptr();
         unsafe { &raw mut (*ptr).v }
-    }
-}
-
-impl<T, A: Allocator> Deref for Rc<T, A> {
-    type Target = T;
-    fn deref(&self) -> &T {
-        let p = self.nn.as_ptr();
-        unsafe { &(*p).v }
     }
 }
 
@@ -87,9 +77,18 @@ impl<T, A: Allocator> Drop for Rc<T, A> {
     }
 }
 
-impl<T: Hash, A: Allocator> Hash for Rc<T, A> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (**self).hash(state);
+impl<T, A: Allocator> Deref for Rc<T, A> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        let p = self.nn.as_ptr();
+        unsafe { &(*p).v }
+    }
+}
+
+use std::borrow::Borrow;
+impl<T, A: Allocator> Borrow<T> for Rc<T, A> {
+    fn borrow(&self) -> &T {
+        self.deref()
     }
 }
 
@@ -97,19 +96,25 @@ impl<T: Eq, A: Allocator> Eq for Rc<T, A> {}
 
 impl<T: PartialEq, A: Allocator> PartialEq for Rc<T, A> {
     fn eq(&self, other: &Self) -> bool {
-        PartialEq::eq(&**self, &**other)
+        PartialEq::eq(self.deref(), other.deref())
     }
 }
 
 impl<T: Ord, A: Allocator> Ord for Rc<T, A> {
     fn cmp(&self, other: &Self) -> Ordering {
-        Ord::cmp(&**self, &**other)
+        Ord::cmp(self.deref(), other.deref())
     }
 }
 
 impl<T: PartialOrd, A: Allocator> PartialOrd for Rc<T, A> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        PartialOrd::partial_cmp(&**self, &**other)
+        PartialOrd::partial_cmp(self.deref(), other.deref())
+    }
+}
+
+impl<T: Hash, A: Allocator> Hash for Rc<T, A> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.deref().hash(state);
     }
 }
 
@@ -122,13 +127,6 @@ impl<T: fmt::Display, A: Allocator> fmt::Display for Rc<T, A> {
 impl<T: fmt::Debug, A: Allocator> fmt::Debug for Rc<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.deref(), f)
-    }
-}
-
-use std::borrow::Borrow;
-impl<T, A: Allocator> Borrow<T> for Rc<T, A> {
-    fn borrow(&self) -> &T {
-        self.deref()
     }
 }
 
