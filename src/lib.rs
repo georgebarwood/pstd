@@ -10,7 +10,7 @@
 //!
 //! HashMap and HashSet are imported from the hashbrown crate.
 //!
-//! [`RcStr`] is a reference-counted string.
+//! [`RcStr`] is a reference-counted string based on [`RcSlice`].
 //!
 //! The [`localalloc`] module has fast thread-local bump allocators.
 //!
@@ -47,7 +47,7 @@ pub use boxed::Box;
 
 /// [`Rc`] similar to [`std::rc::Rc`].
 pub mod rc;
-pub use rc::{Rc, RcStr};
+pub use rc::{Rc, RcSlice, RcStr};
 
 #[cfg(test)]
 mod testing {
