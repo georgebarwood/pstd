@@ -197,8 +197,7 @@ impl<T, A: Allocator> Deref for RcSlice<T, A> {
     type Target = [T];
     fn deref(&self) -> &[T] {
         unsafe {
-            let snn = self.slice();
-            &*snn.as_ptr()
+            self.slice().as_ref()
         }
     }
 }
@@ -221,12 +220,12 @@ impl<T, A: Allocator> Drop for RcSlice<T, A> {
         unsafe {
             let p = self.nn.as_ptr();
             let x = &mut (*p);
+            let slen = x.slen;
+            
             if x.n == 0 {
-
                 let snn = self.slice();
                 snn.drop_in_place();
                 
-                let slen = x.slen;
                 let layout = Layout::new::<RcSliceInner<A>>();
                 let (layout, _off) = layout
                     .extend(Layout::array::<T>(slen).unwrap_unchecked())
