@@ -1966,53 +1966,5 @@ pub fn from_elem<T: Clone>(elem: T, n: usize) -> Vec<T> {
     v
 }
 
-#[test]
-fn test() {
-    let mut v = Vec::new();
-    v.push(99);
-    v.push(314);
-    println!("v={:?}", &v);
-    assert!(v[0] == 99);
-    assert!(v[1] == 314);
-    assert!(v.len() == 2);
-    v[1] = 316;
-    assert!(v[1] == 316);
-    for x in &v {
-        println!("x={}", x);
-    }
-    for x in &mut v {
-        *x += 1;
-        println!("x={}", x);
-    }
-    for x in v {
-        println!("x={}", x);
-    }
-    //assert!(v.pop() == Some(316));
-    //assert!(v.pop() == Some(99));
-    //assert!(v.pop() == None);
-
-    let mut v = vec![199, 200, 200, 201, 201];
-    println!("v={:?}", &v);
-    v.dedup();
-    println!("v={:?}", &v);
-
-    let mut numbers = vec![1, 2, 3, 4, 5, 6, 8, 9, 11, 13, 14, 15];
-    let extr: Vec<_> = numbers.extract_if(3..9, |x| *x % 2 == 0).collect();
-
-    println!("numbers={:?} extr={:?}", &numbers, &extr);
-
-    let mut a = vec![1, 2, 0, 5]; // Vec::from(&[1, 2, 0, 5][..]);
-    let b = vec![3, 4];
-    a.splice(2..3, b);
-    println!("a={:?}", &a);
-    assert_eq!(a, [1, 2, 3, 4, 5]);
-
-    let v = vec![99; 5];
-    println!("v={:?}", &v);
-
-    let v: Vec<_> = Vec::from_iter([1, 2, 3, 4].into_iter());
-    println!("v={:?}", &v);
-}
-
 #[cfg(test)]
 mod test;

@@ -136,12 +136,10 @@ impl Temp {
 
 unsafe impl Allocator for Temp {
     fn allocate(&self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        // println!("Temp allocating");
         TA.with_borrow_mut(|a| a.allocate(lay))
     }
 
     unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
-        // println!("Temp deallocating");
         TA.with_borrow_mut(|a| a.deallocate(p, lay));
     }
 }
@@ -176,12 +174,10 @@ impl Local {
 
 unsafe impl Allocator for Local {
     fn allocate(&self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        //println!("Local allocating");
         LA.with_borrow_mut(|a| a.allocate(lay))
     }
 
     unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
-        //println!("Local deallocating");
         LA.with_borrow_mut(|a| a.deallocate(p, lay));
     }
 }
@@ -223,7 +219,7 @@ struct BumpAllocator {
     idx: usize,                     // Current bytes allocated from cur
     cur: Block,                     // Current block for allocation
     overflow: std::vec::Vec<Block>, // List of used up blocks
-    _alloc_bytes: usize,            // Only for diagnostic purposes.
+    _alloc_bytes: usize,            // Rest are only for diagnostic purposes.
     _max_alloc: usize,
     _reset_count: usize,
     _total_count: usize,
