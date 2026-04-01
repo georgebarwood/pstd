@@ -1,11 +1,13 @@
 use crate::alloc::{Allocator, Global};
 use std::{
     alloc::Layout,
+    borrow::Borrow,
     cmp::Ordering,
     fmt,
     hash::{Hash, Hasher},
     marker::PhantomData,
     ops::Deref,
+    ptr,
     ptr::NonNull,
 };
 
@@ -14,25 +16,25 @@ use std::{
 /// Note: does not currently support DSTs as this would require various unstable library features
 /// but [`RcSlice`] and [`RcStr`] may be used instead. Dyn values must be boxed.
 pub struct Rc<T, A: Allocator = Global> {
-    nn: NonNull<Inner<T, A>>,
+    nn: NonNull<RcInner<T, A>>,
 }
 
-struct Inner<T, A: Allocator> {
-    n: usize, // Clone count
+struct RcInner<T, A: Allocator> {
+    cc: usize, // Clone count
     a: A,
     v: T,
 }
 
 impl<T, A: Allocator> Rc<T, A> {
     /// Allocate a new Rc in specified allocator and move v into it.
-    pub fn new_in(v: T, a: A) -> Rc<T, A> {
+    pub fn new_in(v: T, a: A) -> Self {
         unsafe {
-            let layout = Layout::new::<Inner<T, A>>();
+            let layout = Layout::new::<RcInner<T, A>>();
             let nn = a.allocate(layout).unwrap();
-            let p = nn.as_ptr().cast::<Inner<T, A>>();
+            let p = nn.as_ptr().cast::<RcInner<T, A>>();
 
-            let inner = Inner { n: 0, a, v };
-            std::ptr::write(p, inner);
+            let inner = RcInner { cc: 0, a, v };
+            ptr::write(p, inner);
             let nn = NonNull::new_unchecked(p);
             Self { nn }
         }
@@ -46,8 +48,8 @@ impl<T, A: Allocator> Rc<T, A> {
 
     /// Provides a raw pointer to the data.
     pub fn as_ptr(this: &Self) -> *const T {
-        let ptr: *mut Inner<T, A> = this.nn.as_ptr();
-        unsafe { &raw mut (*ptr).v }
+        let p = this.nn.as_ptr();
+        unsafe { &(*p).v }
     }
 }
 
@@ -55,7 +57,7 @@ impl<T, A: Allocator> Clone for Rc<T, A> {
     fn clone(&self) -> Rc<T, A> {
         unsafe {
             let p = self.nn.as_ptr();
-            (*p).n += 1;
+            (*p).cc += 1;
             let nn = NonNull::new_unchecked(p);
             Self { nn }
         }
@@ -66,13 +68,15 @@ impl<T, A: Allocator> Drop for Rc<T, A> {
     fn drop(&mut self) {
         unsafe {
             let p = self.nn.as_ptr();
-            if (*p).n == 0 {
-                self.nn.drop_in_place();
-                let layout = Layout::for_value(&*self.nn.as_ptr());
-                let dp = NonNull::new_unchecked(p.cast::<u8>());
-                (*p).a.deallocate(dp, layout)
+            if (*p).cc == 0 {
+                ptr::drop_in_place(&mut (*p).v);
+                let a = ptr::read(&(*p).a);
+                // let layout = Layout::for_value(&*p); // Would need this if T was ?Sized
+                let layout = Layout::new::<RcInner<T, A>>();
+                let nn = NonNull::new_unchecked(p.cast::<u8>());
+                a.deallocate(nn, layout)
             } else {
-                (*p).n -= 1;
+                (*p).cc -= 1;
             }
         }
     }
@@ -86,7 +90,6 @@ impl<T, A: Allocator> Deref for Rc<T, A> {
     }
 }
 
-use std::borrow::Borrow;
 impl<T, A: Allocator> Borrow<T> for Rc<T, A> {
     fn borrow(&self) -> &T {
         self.deref()
@@ -140,7 +143,7 @@ pub struct RcSlice<T, A: Allocator> {
 }
 
 struct RcSliceInner<A: Allocator> {
-    n: usize,    // Clone count
+    cc: usize,   // Clone count
     slen: usize, // Length of slice
     a: A,
 }
@@ -158,25 +161,21 @@ impl<T, A: Allocator> RcSlice<T, A> {
             let nn = a.allocate(layout).unwrap();
             let p = nn.as_ptr().cast::<RcSliceInner<A>>();
 
-            let inner = RcSliceInner { n: 0, slen, a };
-            std::ptr::write(p, inner);
+            let inner = RcSliceInner { cc: 0, slen, a };
+            ptr::write(p, inner);
 
             // Copy the slice into the allocated storage.
-            let to = p as *mut u8;
-            let to = to.add(off) as *mut T;
-            let from: *const T = s.as_ptr();
-            std::ptr::copy_nonoverlapping(from, to, slen);
+            let to = (p as *mut u8).add(off) as *mut T;
+            ptr::copy_nonoverlapping(s.as_ptr(), to, slen);
 
-            let nn = NonNull::new_unchecked(p);
             Self {
-                nn,
+                nn: NonNull::new_unchecked(p),
                 pd: PhantomData,
             }
         }
     }
 
-    fn slice(&self) -> NonNull<[T]>
-    {
+    fn slice(&self) -> NonNull<[T]> {
         unsafe {
             let p = self.nn.as_ptr();
             let slen = (*p).slen;
@@ -196,17 +195,15 @@ impl<T, A: Allocator> RcSlice<T, A> {
 impl<T, A: Allocator> Deref for RcSlice<T, A> {
     type Target = [T];
     fn deref(&self) -> &[T] {
-        unsafe {
-            self.slice().as_ref()
-        }
+        unsafe { self.slice().as_ref() }
     }
 }
 
 impl<T, A: Allocator> Clone for RcSlice<T, A> {
-    fn clone(&self) -> RcSlice<T, A> {
+    fn clone(&self) -> Self {
         unsafe {
             let p = self.nn.as_ptr();
-            (*p).n += 1;
+            (*p).cc += 1;
         }
         Self {
             nn: self.nn,
@@ -219,21 +216,18 @@ impl<T, A: Allocator> Drop for RcSlice<T, A> {
     fn drop(&mut self) {
         unsafe {
             let p = self.nn.as_ptr();
-            let x = &mut (*p);
-            let slen = x.slen;
-            
-            if x.n == 0 {
-                let snn = self.slice();
-                snn.drop_in_place();
-                
+            if (*p).cc == 0 {
+                self.slice().drop_in_place();
+                let slen = (*p).slen;
+                let a = ptr::read(&(*p).a);
                 let layout = Layout::new::<RcSliceInner<A>>();
                 let (layout, _off) = layout
                     .extend(Layout::array::<T>(slen).unwrap_unchecked())
                     .unwrap_unchecked();
                 let nn = NonNull::new_unchecked(p as *mut u8);
-                x.a.deallocate(nn, layout)
+                a.deallocate(nn, layout)
             } else {
-                x.n -= 1;
+                (*p).cc -= 1;
             }
         }
     }
@@ -322,10 +316,12 @@ fn rc_test() {
     assert!(rs1.deref() == b"George");
 
     struct D;
-    impl Drop for D{ fn drop(&mut self){ println!("Dropped D"); } }
+    impl Drop for D {
+        fn drop(&mut self) {
+            println!("Dropped D");
+        }
+    }
 
-
-    let data = [ D, D, D ];
-    let _rs = RcSlice::from_slice_in( &data, Local::new() );
-    
+    let data = [D, D, D];
+    let _rs = RcSlice::from_slice_in(&data, Local::new());
 }
