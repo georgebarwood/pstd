@@ -4,7 +4,7 @@ Box, Rc and String currently only have minimal methods/traits implemented.
 
 HashMap and HashSet are imported from the hashbrown crate.
 
-RcStr is a reference-counted string.
+RcStr is a reference-counted string based on RcSlice.
 
 The localalloc module has fast thread-local bump allocators.
 
