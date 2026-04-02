@@ -137,7 +137,7 @@ impl<T: fmt::Debug, A: Allocator> fmt::Debug for Rc<T, A> {
 ////////////////////////////////////////////
 
 /// Reference-counted slice.
-pub struct RcSlice<T, A: Allocator> {
+pub struct RcSlice<T, A: Allocator = Global> {
     nn: NonNull<RcSliceInner<A>>,
     pd: PhantomData<T>,
 }
@@ -236,13 +236,20 @@ impl<T, A: Allocator> Drop for RcSlice<T, A> {
 ////////////////////////////////////////////////////////////
 /// Reference-counted String.
 #[derive(Clone)]
-pub struct RcStr<A: Allocator> {
+pub struct RcStr<A: Allocator = Global> {
     inner: RcSlice<u8, A>,
+}
+
+impl RcStr {  
+    /// Create a RcStr from s
+    pub fn new(s: &str) -> RcStr {
+        Self::new_in(s, Global)
+    }
 }
 
 impl<A: Allocator + Clone> RcStr<A> {
     /// Create a RcStr from s in specified allocator.
-    pub fn from_str_in(s: &str, a: A) -> RcStr<A> {
+    pub fn new_in(s: &str, a: A) -> RcStr<A> {
         let inner = RcSlice::from_slice_in(s.as_bytes(), a);
         Self { inner }
     }
@@ -304,7 +311,7 @@ impl<A: Allocator> fmt::Debug for RcStr<A> {
 fn rc_test() {
     use crate::localalloc::*;
     let mut m = lhashmap();
-    let x = RcStr::from_str_in("George", Local::new());
+    let x = RcStr::new("George");
     m.insert(x.clone(), 99);
     assert!(m.get("George").is_some());
     println!("x={}", x);

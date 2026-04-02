@@ -55,7 +55,7 @@ pub fn lrc<T>(t: T) -> LRc<T> {
 
 ///  Create a `LRcStr`
 pub fn lrcstr(s: &str) -> LRcStr {
-    LRcStr::from_str_in(s, Local::new())
+    LRcStr::new_in(s, Local::new())
 }
 
 /// `Vec` allocated from `Local`
