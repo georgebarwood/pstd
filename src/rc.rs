@@ -247,7 +247,7 @@ impl RcStr {
     }
 }
 
-impl<A: Allocator + Clone> RcStr<A> {
+impl<A: Allocator> RcStr<A> {
     /// Create a RcStr from s in specified allocator.
     pub fn new_in(s: &str, a: A) -> RcStr<A> {
         let inner = RcSlice::new_in(s.as_bytes(), a);
