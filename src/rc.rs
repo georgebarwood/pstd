@@ -150,7 +150,7 @@ struct RcSliceInner<A: Allocator> {
 
 impl<T, A: Allocator> RcSlice<T, A> {
     /// Create a RcSlice from s in specified allocator.
-    pub fn from_slice_in(s: &[T], a: A) -> Self {
+    pub fn new_in(s: &[T], a: A) -> Self {
         let slen = s.len();
         unsafe {
             let layout = Layout::new::<RcSliceInner<A>>();
@@ -250,7 +250,7 @@ impl RcStr {
 impl<A: Allocator + Clone> RcStr<A> {
     /// Create a RcStr from s in specified allocator.
     pub fn new_in(s: &str, a: A) -> RcStr<A> {
-        let inner = RcSlice::from_slice_in(s.as_bytes(), a);
+        let inner = RcSlice::new_in(s.as_bytes(), a);
         Self { inner }
     }
 }
@@ -316,7 +316,7 @@ fn rc_test() {
     assert!(m.get("George").is_some());
     println!("x={}", x);
 
-    let rs = RcSlice::from_slice_in(b"George", Local::new());
+    let rs = RcSlice::new_in(b"George", Local::new());
     let rs1 = rs.clone();
 
     assert!(rs.deref() == b"George");
@@ -330,5 +330,5 @@ fn rc_test() {
     }
 
     let data = [D, D, D];
-    let _rs = RcSlice::from_slice_in(&data, Local::new());
+    let _rs = RcSlice::new_in(&data, Local::new());
 }
