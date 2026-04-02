@@ -240,16 +240,16 @@ pub struct RcStr<A: Allocator = Global> {
     inner: RcSlice<u8, A>,
 }
 
-impl RcStr {  
+impl RcStr {
     /// Create a RcStr from s
-    pub fn new(s: &str) -> RcStr {
+    pub fn new(s: &str) -> Self {
         Self::new_in(s, Global)
     }
 }
 
 impl<A: Allocator> RcStr<A> {
     /// Create a RcStr from s in specified allocator.
-    pub fn new_in(s: &str, a: A) -> RcStr<A> {
+    pub fn new_in(s: &str, a: A) -> Self {
         let inner = RcSlice::new_in(s.as_bytes(), a);
         Self { inner }
     }

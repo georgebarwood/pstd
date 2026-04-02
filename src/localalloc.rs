@@ -66,6 +66,11 @@ pub fn lvec<T>() -> LVec<T> {
     LVec::new_in(Local::new())
 }
 
+/// Create a `LVec` with specified capacity.
+pub fn lvec_with_capacity<T>(capacity: usize) -> LVec<T> {
+    LVec::with_capacity_in(capacity, Local::new())
+}
+
 /// `BTreeMap` allocated from `Local`
 pub type LBTreeMap<K, V> = BTreeMap<K, V, CustomTuning<Local>>;
 
