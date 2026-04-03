@@ -136,7 +136,9 @@ impl<T> BTreeSet<T> {
             map: map::BTreeMap::new(),
         }
     }
+}
 
+impl<T, A: Tuning> BTreeSet<T, A> {
     /// Returns new set with specified allocator
     ///
     /// # Example
@@ -157,9 +159,7 @@ impl<T> BTreeSet<T> {
             map: map::BTreeMap::with_tuning(CustomTuning::new_in_def(a)),
         }
     }
-}
-
-impl<T, A: Tuning> BTreeSet<T, A> {
+    
     /// Returns a new, empty set with specified tuning.
     ///
     /// # Example
@@ -1919,7 +1919,7 @@ where
 {
 }
 
-/// A lazy iterator producing elements in the intersection of `BTreeSet`s.
+/// An iterator producing elements in the intersection of `BTreeSet`s.
 ///
 /// This `struct` is created by the [`intersection`] method on [`BTreeSet`].
 /// See its documentation for more.
@@ -2057,7 +2057,7 @@ impl<T> Default for Range<'_, T> {
     }
 }
 
-/// A lazy iterator producing elements in the symmetric difference of `BTreeSet`s.
+/// An iterator producing elements in the symmetric difference of `BTreeSet`s.
 ///
 /// This `struct` is created by the [`symmetric_difference`] method on
 /// [`BTreeSet`]. See its documentation for more.
@@ -2106,7 +2106,7 @@ impl<'a, T: Ord> Iterator for SymmetricDifference<'a, T> {
 
 impl<T: Ord> FusedIterator for SymmetricDifference<'_, T> {}
 
-/// A lazy iterator producing elements in the union of `BTreeSet`s.
+/// An iterator producing elements in the union of `BTreeSet`s.
 ///
 /// This `struct` is created by the [`union`] method on [`BTreeSet`].
 /// See its documentation for more.
@@ -2149,7 +2149,7 @@ impl<'a, T: Ord> Iterator for Union<'a, T> {
 
 impl<T: Ord> FusedIterator for Union<'_, T> {}
 
-/// A lazy iterator producing elements in the difference of `BTreeSet`s.
+/// An iterator producing elements in the difference of `BTreeSet`s.
 ///
 /// This `struct` is created by the [`difference`] method on [`BTreeSet`].
 /// See its documentation for more.
