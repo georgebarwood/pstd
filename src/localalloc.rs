@@ -1,129 +1,26 @@
 //!
 //! Values allocated from Temp and Local Allocators must be freed by the same thread that allocated them, or the program will abort.
 //!
+//! Temp is for heap allocations that last a short time.
+//!
+//! Local is for heap allocations that last a longer time ( but not longer than the thread ).
+//!
 //! #Example
 //! ```
-//! use pstd::localalloc::{TBox,tbox};
-//! let b : TBox<u32> = tbox(99);
+//! use pstd::{Box,localalloc::Local};
+//! Local::enable_bump();
+//! let b = Box::new_in(99, Local::new());
 //! assert!( *b == 99 );
 //! ```
 
 use crate::alloc::{AllocError, Allocator, Global};
-use crate::collections::{BTreeMap, btree_map::CustomTuning};
-use crate::collections::{DefaultHashBuilder, HashMap};
-use crate::{Box, Rc, RcStr, String};
 
-use std::cell::RefCell;
-use std::marker::PhantomData;
-use std::ptr::slice_from_raw_parts_mut;
-use std::{alloc::Layout, ptr::NonNull};
-
-/// `Box` allocated from `Temp`
-pub type TBox<T> = Box<T, Temp>;
-
-/// Allocate a `TBox`.
-pub fn tbox<T>(t: T) -> TBox<T> {
-    TBox::new_in(t, Temp::new())
-}
-
-/// `Vec` allocated from `Temp`
-pub type TVec<T> = crate::Vec<T, Temp>;
-
-/// Create a `TVec`.
-pub fn tvec<T>() -> TVec<T> {
-    TVec::new_in(Temp::new())
-}
-
-/// `Box` allocated from `Local`
-pub type LBox<T> = Box<T, Local>;
-
-/// Allocate a `LBox`.
-pub fn lbox<T>(t: T) -> LBox<T> {
-    LBox::new_in(t, Local::new())
-}
-
-/// `Rc` allocated from `Local`
-pub type LRc<T> = Rc<T, Local>;
-
-/// `RcStr` allocated from `Local`
-pub type LRcStr = RcStr<Local>;
-
-/// Allocate a `LRc`.
-pub fn lrc<T>(t: T) -> LRc<T> {
-    LRc::new_in(t, Local::new())
-}
-
-///  Create a `LRcStr`
-pub fn lrcstr(s: &str) -> LRcStr {
-    LRcStr::new_in(s, Local::new())
-}
-
-/// `Vec` allocated from `Local`
-pub type LVec<T> = crate::Vec<T, Local>;
-
-/// Create a `LVec`.
-pub fn lvec<T>() -> LVec<T> {
-    LVec::new_in(Local::new())
-}
-
-/// Create a `LVec` with specified capacity.
-pub fn lvec_with_capacity<T>(capacity: usize) -> LVec<T> {
-    LVec::with_capacity_in(capacity, Local::new())
-}
-
-/// `BTreeMap` allocated from `Local`
-pub type LBTreeMap<K, V> = BTreeMap<K, V, CustomTuning<Local>>;
-
-/// Create a `LBTreeMap`.
-pub fn lbtreemap<K, V>() -> LBTreeMap<K, V> {
-    LBTreeMap::with_tuning(CustomTuning::default())
-}
-
-/// `HashMap` allocated from `Local`
-pub type LHashMap<K, V> = HashMap<K, V, DefaultHashBuilder, Local>;
-
-/// Create a `LHashMap`.
-pub fn lhashmap<K, V>() -> LHashMap<K, V> {
-    LHashMap::new_in(Local::new())
-}
-
-/// `std::boxed::Box` or `LBox` depending on whether dynbox feature is selected.
-#[cfg(feature = "dynbox")]
-pub type DBox<T> = LBox<T>;
-
-/// `std::boxed::Box` or `LBox` depending on whether dynbox feature is selected.
-#[cfg(not(feature = "dynbox"))]
-pub type DBox<T> = std::boxed::Box<T>;
-
-/// Allocate a `std::boxed::Box` or `LBox` depending on whether dynbox feature is selected.
-#[cfg(feature = "dynbox")]
-pub fn dbox<T>(t: T) -> LBox<T> {
-    LBox::new_in(t, Local::new())
-}
-
-/// Allocate a `std::boxed::Box` or `LBox` depending on whether dynbox feature is selected.
-#[cfg(not(feature = "dynbox"))]
-pub fn dbox<T>(t: T) -> std::boxed::Box<T> {
-    std::boxed::Box::new(t)
-}
-
-/// `String` allocated from `Local`
-pub type LString = String<Local>;
-
-/// Convert `str` to `LString`.
-pub fn lstring(s: &str) -> LString {
-    crate::String::from_str_in(s, Local::new())
-}
-
-/// Convert `str` to `LBox<str>`.
-pub fn lboxstr(s: &str) -> LBox<str> {
-    LBox::<str>::from_str_in(s, Local::new())
-}
-
-/// Convert `str` to `TBox<str>`.
-pub fn tboxstr(s: &str) -> TBox<str> {
-    TBox::<str>::from_str_in(s, Temp::new())
-}
+use std::{
+    alloc::Layout,
+    cell::RefCell,
+    marker::PhantomData,
+    ptr::{NonNull, slice_from_raw_parts_mut},
+};
 
 thread_local! {
     static TA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new(true,256*K));
@@ -170,11 +67,15 @@ impl Local {
     }
 
     /// Enable Local bump allocation for current thread with default size (256KB).
+    ///
+    /// Note: this cannot be called while there are outstanding allocations.
     pub fn enable_bump() {
         Self::enable_bump_with(256 * K);
     }
 
     /// Enable Local bump allocation for current thread with specified size.
+    ///
+    /// Note: this cannot be called while there are outstanding allocations.
     pub fn enable_bump_with(mut size: usize) {
         if USE_BUMP {
             if size < 16 * K {
@@ -263,11 +164,9 @@ impl BumpAllocator {
             println!("BumpAllocator enable_with alloc_count not zero, aborting");
             std::process::abort();
         }
-        if self.bsize == 0 {
-            self.bsize = bsize;
-            self.max_size = bsize / 4;
-            self.cur = Block::new(bsize);
-        }
+        self.bsize = bsize;
+        self.max_size = bsize / 4;
+        self.cur = Block::new(bsize);
     }
 
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
@@ -341,19 +240,5 @@ impl Drop for BumpAllocator {
 
         self.cur.drop(self.bsize);
         self.reset_overflow();
-    }
-}
-
-#[test]
-fn alloc_test() {
-    {
-        let b = tbox(99);
-        assert_eq!(*b, 99);
-    }
-    for _i in 0..50 {
-        let b = tbox(99);
-        assert_eq!(*b, 99);
-        let b = tbox(99);
-        assert_eq!(*b, 99);
     }
 }

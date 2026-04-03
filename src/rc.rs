@@ -314,7 +314,8 @@ impl<A: Allocator> fmt::Debug for RcStr<A> {
 #[test]
 fn rc_test() {
     use crate::localalloc::*;
-    let mut m = lhashmap();
+    use crate::*;
+    let mut m = collections::HashMap::new_in(Local::new());
     let x = RcStr::new("George");
     m.insert(x.clone(), 99);
     assert!(m.get("George").is_some());
