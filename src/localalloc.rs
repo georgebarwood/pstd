@@ -87,6 +87,14 @@ pub fn lhashmap<K, V>() -> LHashMap<K, V> {
     LHashMap::new_in(Local::new())
 }
 
+/// `std::boxed::Box` or `LBox` depending on whether dynbox feature is selected.
+#[cfg(feature = "dynbox")]
+pub type DBox<T> = LBox<T>;
+
+/// `std::boxed::Box` or `LBox` depending on whether dynbox feature is selected.
+#[cfg(not(feature = "dynbox"))]
+pub type DBox<T> = std::boxed::Box<T>;
+
 /// Allocate a `std::boxed::Box` or `LBox` depending on whether dynbox feature is selected.
 #[cfg(feature = "dynbox")]
 pub fn dbox<T>(t: T) -> LBox<T> {
