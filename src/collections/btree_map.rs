@@ -98,6 +98,11 @@ impl<K, V> BTreeMap<K, V> {
     pub const fn new() -> Self {
         Self::new_in(Global)
     }
+}
+
+impl<K, V, A: Tuning> BTreeMap<K, V, A> {
+    #[cfg(all(test, feature = "stdtests"))]
+    pub(crate) fn check(&self) {}
 
     /// Returns a new, empty map with specified allocator.
     ///
@@ -116,11 +121,6 @@ impl<K, V> BTreeMap<K, V> {
     {
         BTreeMap::with_tuning(CustomTuning::new_in_def(a))
     }
-}
-
-impl<K, V, A: Tuning> BTreeMap<K, V, A> {
-    #[cfg(all(test, feature = "stdtests"))]
-    pub(crate) fn check(&self) {}
 
     /// Returns a new, empty map with specified allocation tuning.
     ///
@@ -3372,13 +3372,8 @@ impl<K: Debug, V: Debug, A: Tuning> Debug for Cursor<'_, K, V, A> {
 
 // Tests.
 
-#[cfg(all(test, not(miri), feature = "cap"))]
-#[global_allocator]
-static ALLOCATOR: cap::Cap<std::alloc::System> =
-    cap::Cap::new(std::alloc::System, usize::max_value());
-
 /* mimalloc cannot be used with miri */
-#[cfg(all(test, not(miri), not(feature = "cap")))]
+#[cfg(all(test, not(miri)))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
