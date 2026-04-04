@@ -145,10 +145,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     ///
     /// ```
     /// # #![allow(unused_mut)]
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::{BTreeSet,btree_set::CustomTuning};
     /// use pstd::alloc::Global;
     ///
-    /// let mut set: BTreeSet<i32> = BTreeSet::new_in(Global);
+    /// let mut set = BTreeSet::<i32,CustomTuning<Global>>::new_in(Global);
     /// ```
     #[must_use]
     pub const fn new_in<AL>(a: AL) -> BTreeSet<T, CustomTuning<AL>>

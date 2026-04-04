@@ -110,8 +110,7 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     ///
     /// ```
     /// use pstd::{ alloc::Global, collections::btree_map::{BTreeMap,CustomTuning} };
-    /// let a = Global;
-    /// let mut map = BTreeMap::new_in(a);
+    /// let mut map = BTreeMap::<&str,&str,CustomTuning<Global>>::new_in(Global);
     /// map.insert("England", "London");
     /// ```
     #[must_use]
