@@ -8,7 +8,6 @@
 //! #Example
 //! ```
 //! use pstd::{Box,localalloc::Local};
-//! Local::enable_bump();
 //! let b = Box::new_in(99, Local::new());
 //! assert!( *b == 99 );
 //! ```
@@ -358,7 +357,6 @@ impl Drop for ChainAllocator {
 #[test]
 fn test_alloc()
 {
-    Local::enable_bump();
     let x = crate::Box::new_in(99, Local::new());
     assert!( *x == 99 );
     {
