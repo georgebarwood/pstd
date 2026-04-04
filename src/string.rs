@@ -7,6 +7,20 @@ use std::ops;
 pub struct String<A: Allocator = Global>(Vec<u8, A>);
 
 impl<A: Allocator> String<A> {
+
+    /// Create an empty string.
+    pub fn new() -> Self where A:Default
+    {
+        Self( Vec::new_in( A::default() ) )
+    }
+
+    /// Creates a String from a str.
+    pub fn from_str(s: &str) -> Self where A:Default {
+        let mut v = Vec::with_capacity_in(s.len(), A::default() );
+        v.extend_from_slice(s.as_bytes());
+        Self(v)
+    }
+    
     /// Creates a String from a str in the specified allocator.
     pub fn from_str_in(s: &str, alloc: A) -> Self {
         let mut v = Vec::with_capacity_in(s.len(), alloc);
@@ -89,4 +103,15 @@ impl<A: Allocator> Ord for String<A> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         std::cmp::Ord::cmp(&**self, &**other)
     }
+}
+
+#[test]
+fn test_string()
+{
+    use crate::localalloc::Local;
+    use std::ops::Deref;
+    
+    let mut s : String::<Local> = String::new();
+    s.push_str("George");
+    assert!( s.deref() == "George" );
 }

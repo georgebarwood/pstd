@@ -41,8 +41,11 @@ pub struct Vec<T, A: Allocator = Global> {
     alloc: A,
 }
 
-/// # Construct with default allocator
-impl<T> Vec<T> {
+/// # Basic methods
+///
+/// Properties / methods that operate on one element at a time.
+impl<T, A: Allocator> Vec<T, A> {
+
     /// Create a new Vec.
     ///
     /// # Example
@@ -56,15 +59,10 @@ impl<T> Vec<T> {
     /// for s in &v { println!("s={}",s); }
     /// ```
     #[must_use]
-    pub const fn new() -> Vec<T> {
-        Vec::new_in(Global)
+    pub fn new() -> Self where A:Default {
+        Self::new_in(A::default())
     }
-}
 
-/// # Basic methods
-///
-/// Properties / methods that operate on one element at a time.
-impl<T, A: Allocator> Vec<T, A> {
     /// Returns the number of elements.
     pub const fn len(&self) -> usize {
         self.len
@@ -667,9 +665,7 @@ impl<T, A: Allocator> Vec<T, A> {
             let _ = self.set_capacity(cmp::max(self.len, capacity));
         }
     }
-}
 
-impl<T> Vec<T> {
     /// Constructs a new, empty `Vec<T>` with at least the specified capacity..
     ///
     /// # Example
@@ -683,8 +679,8 @@ impl<T> Vec<T> {
     /// for s in &v { println!("s={}",s); }
     /// ```
     #[must_use]
-    pub fn with_capacity(capacity: usize) -> Vec<T> {
-        let mut v = Vec::<T>::new();
+    pub fn with_capacity(capacity: usize) -> Self where A:Default {
+        let mut v = Self::new();
         v.set_capacity(capacity).unwrap();
         v
     }

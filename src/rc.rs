@@ -27,6 +27,11 @@ struct RcInner<T, A: Allocator> {
 }
 
 impl<T, A: Allocator> Rc<T, A> {
+    /// Allocate a new Rc and move v into it.
+    pub fn new(v: T) -> Self where A:Default {
+        Self::new_in(v, A::default())
+    }
+        
     /// Allocate a new Rc in specified allocator and move v into it.
     pub fn new_in(v: T, a: A) -> Self {
         unsafe {
@@ -244,14 +249,12 @@ pub struct RcStr<A: Allocator = Global> {
     inner: RcSlice<u8, A>,
 }
 
-impl RcStr {
-    /// Create a RcStr from s
-    pub fn new(s: &str) -> Self {
-        Self::new_in(s, Global)
-    }
-}
-
 impl<A: Allocator> RcStr<A> {
+    /// Create a RcStr from s
+    pub fn new(s: &str) -> Self where A:Default {
+        Self::new_in(s, A::default())
+    }
+    
     /// Create a RcStr from s in specified allocator.
     pub fn new_in(s: &str, a: A) -> Self {
         let inner = RcSlice::new_in(s.as_bytes(), a);

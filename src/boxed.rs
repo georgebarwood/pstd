@@ -17,7 +17,7 @@ pub struct Box<T: ?Sized, A: Allocator = Global> {
     pub(crate) a: A,
 }
 
-impl<T> Box<T> {
+impl<T, A: Allocator> Box<T, A> {
     /// Allocates memory on the heap and then places x into it.
     ///
     /// ```
@@ -25,12 +25,10 @@ impl<T> Box<T> {
     /// let b = Box::new(99);
     /// assert_eq!( *b, 99 );
     /// ```
-    pub fn new(t: T) -> Self {
-        Self::new_in(t, Global)
+    pub fn new(t: T) -> Self where A:Default {
+        Self::new_in(t, A::default())
     }
-}
 
-impl<T, A: Allocator> Box<T, A> {
     /// Allocates memory in the given allocator then places x into it.
     pub fn new_in(t: T, a: A) -> Self {
         let layout = Layout::new::<T>();
@@ -63,6 +61,11 @@ impl<T, A: Allocator> Box<T, A> {
 }
 
 impl<T: ?Sized, A: Allocator> Box<T, A> {
+    /// Allocates memory then copies s into it.
+    pub fn from_str(s: &str) -> Box<str, A> where A:Default {
+        Box::<str,A>::from_str_in(s,A::default())
+    }
+    
     /// Allocates memory in the given allocator then copies s into it.
     ///
     /// Note: there is currently no equivalent in the standard library.
