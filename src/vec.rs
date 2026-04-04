@@ -44,7 +44,7 @@ pub struct Vec<T, A: Allocator = Global> {
 /// # Basic methods
 ///
 /// Properties / methods that operate on one element at a time.
-impl<T, A: Allocator> Vec<T, A> {
+impl<T> Vec<T> {
 
     /// Create a new Vec.
     ///
@@ -59,10 +59,12 @@ impl<T, A: Allocator> Vec<T, A> {
     /// for s in &v { println!("s={}",s); }
     /// ```
     #[must_use]
-    pub fn new() -> Self where A:Default {
-        Self::new_in(A::default())
+    pub fn new() -> Self {
+        Self::new_in(Global)
     }
+}
 
+impl<T, A: Allocator> Vec<T, A> {
     /// Returns the number of elements.
     pub const fn len(&self) -> usize {
         self.len
@@ -613,6 +615,12 @@ impl<T, A: Allocator> Vec<T, A> {
         }
     }
 
+    /// Create a new Vec with default allocator.
+    #[must_use]
+    pub fn auto() -> Vec<T, A> where A:Default {
+       Self::new_in( A::default() )
+    }
+
     /// Returns a reference to the underlying allocator.
     pub fn allocator(&self) -> &A {
         &self.alloc
@@ -631,6 +639,13 @@ impl<T, A: Allocator> Vec<T, A> {
     /// with the provided allocator.
     pub fn with_capacity_in(capacity: usize, alloc: A) -> Vec<T, A> {
         let mut v = Self::new_in(alloc);
+        v.set_capacity(capacity).unwrap();
+        v
+    }
+
+    /// Constructs a new, empty `Vec<T, A>` with at least the specified capacity.
+    pub fn with_capacity_auto(capacity: usize) -> Vec<T, A> where A:Default {
+        let mut v = Self::new_in(A::default());
         v.set_capacity(capacity).unwrap();
         v
     }
@@ -665,7 +680,9 @@ impl<T, A: Allocator> Vec<T, A> {
             let _ = self.set_capacity(cmp::max(self.len, capacity));
         }
     }
+}
 
+impl<T> Vec<T> {
     /// Constructs a new, empty `Vec<T>` with at least the specified capacity..
     ///
     /// # Example
@@ -679,7 +696,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// for s in &v { println!("s={}",s); }
     /// ```
     #[must_use]
-    pub fn with_capacity(capacity: usize) -> Self where A:Default {
+    pub fn with_capacity(capacity: usize) -> Self {
         let mut v = Self::new();
         v.set_capacity(capacity).unwrap();
         v

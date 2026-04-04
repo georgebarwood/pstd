@@ -319,7 +319,7 @@ fn rc_test() {
     use crate::localalloc::*;
     use crate::*;
     let mut m = collections::HashMap::new_in(Local::new());
-    let x = RcStr::new("George");
+    let x = RcStr::<Global>::new("George");
     m.insert(x.clone(), 99);
     assert!(m.get("George").is_some());
     println!("x={}", x);

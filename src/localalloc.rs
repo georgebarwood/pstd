@@ -41,7 +41,7 @@ pub struct Temp {
 
 impl Temp {
     /// Create a Temp allocator
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { pd: PhantomData }
     }
 }
@@ -64,7 +64,7 @@ pub struct Local {
 
 impl Local {
     /// Create a Local allocator
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { pd: PhantomData }
     }
 }
@@ -105,7 +105,6 @@ impl Block {
     }
 }
 
-#[allow(dead_code)]
 struct BumpAllocator {
     alloc_count: u64,               // Number of current allocations
     idx: usize,                     // Current bytes allocated from cur
@@ -261,7 +260,7 @@ impl ChainAllocator {
             }
 ;
             if m < 8 { m = 8; } // Always align to at least 8 bytes.
-            let mut xn = n; if xn < 8 { xn = 8; } // Always reserve at least 8 bytes.
+            let mut xn = n; if xn < 8 { xn = 8; } // Allocations are always at least 8 bytes.
             let size_class : usize = Self::sc( xn );
             let xn = 2 << (size_class+3); // Amount to reserve,
             
@@ -293,7 +292,6 @@ impl ChainAllocator {
     }
 
     fn deallocate(&mut self, p: NonNull<u8>, lay: Layout) {
-        // println!("ChainAllocator::deallocate size={}", lay.size() );
         self.alloc_count -= 1;
         if NOT_MIRI && lay.size() <= MAX_SIZE {
             if self.alloc_count == 0 {
@@ -311,7 +309,7 @@ impl ChainAllocator {
             {
                 // Put freed storage on free list.
                 let (mut n, _m) = (lay.size(), lay.align());
-                if n < 8 { n = 8; } // Always allocate at least 16 bytes.
+                if n < 8 { n = 8; } // Allocations are always at least 8 bytes.
                 let size_class : usize = Self::sc(n);
                 let p = p.as_ptr() as * mut FreeMem;
                 let f = self.free[size_class];

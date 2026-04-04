@@ -17,7 +17,7 @@ pub struct Box<T: ?Sized, A: Allocator = Global> {
     pub(crate) a: A,
 }
 
-impl<T, A: Allocator> Box<T, A> {
+impl<T> Box<T> {
     /// Allocates memory on the heap and then places x into it.
     ///
     /// ```
@@ -25,10 +25,19 @@ impl<T, A: Allocator> Box<T, A> {
     /// let b = Box::new(99);
     /// assert_eq!( *b, 99 );
     /// ```
-    pub fn new(t: T) -> Self where A:Default {
-        Self::new_in(t, A::default())
+    #[must_use]
+    pub fn new(t: T) -> Self {
+        Self::new_in(t, Global)
     }
+}
 
+impl<T, A: Allocator> Box<T, A> {
+    /// Allocates memory and then places x into it.
+    #[must_use]
+    pub fn auto(t: T) -> Self where A:Default {
+       Self::new_in(t, A::default() )
+    }
+    
     /// Allocates memory in the given allocator then places x into it.
     pub fn new_in(t: T, a: A) -> Self {
         let layout = Layout::new::<T>();
