@@ -19,17 +19,20 @@ use std::{
     alloc::Layout,
     cell::RefCell,
     marker::PhantomData,
-    ptr::{NonNull, slice_from_raw_parts_mut},
+    ptr::{null, NonNull, slice_from_raw_parts_mut},
 };
 
 thread_local! {
-    static TA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new(true,256*K));
-    static LA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new(false,0));
+    static TA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new());
+    static LA: RefCell<ChainAllocator> = RefCell::new(ChainAllocator::new());
 }
 
-const USE_BUMP: bool = !cfg!(miri);
+const NOT_MIRI: bool = !cfg!(miri);
 const K: usize = 1024;
 const MAX_ALIGN: usize = 128;
+const BSIZE : usize = 1024 * K; // 20 bits
+const MAX_SIZE : usize = BSIZE / 16; // 16 bits
+const MAX_SC: usize = 13; // 13 = 16 - 3
 
 /// Temp [`Allocator`].
 #[derive(Default, Clone)]
@@ -65,25 +68,6 @@ impl Local {
     pub fn new() -> Self {
         Self { pd: PhantomData }
     }
-
-    /// Enable Local bump allocation for current thread with default size (256KB).
-    ///
-    /// Note: this cannot be called while there are outstanding allocations.
-    pub fn enable_bump() {
-        Self::enable_bump_with(256 * K);
-    }
-
-    /// Enable Local bump allocation for current thread with specified size.
-    ///
-    /// Note: this cannot be called while there are outstanding allocations.
-    pub fn enable_bump_with(mut size: usize) {
-        if USE_BUMP {
-            if size < 16 * K {
-                size = 16 * K;
-            }
-            LA.with_borrow_mut(|a| a.enable_with(size));
-        }
-    }
 }
 
 unsafe impl Allocator for Local {
@@ -99,16 +83,12 @@ unsafe impl Allocator for Local {
 struct Block(NonNull<u8>);
 
 impl Block {
-    fn new(size: usize) -> Self {
-        let p = if size > 0 {
-            let lay = Layout::from_size_align(size, MAX_ALIGN).unwrap();
-            let p = Global::allocate(&Global, lay).unwrap();
-            let p = p.as_ptr().cast::<u8>();
-            unsafe { NonNull::new_unchecked(p) }
-        } else {
-            NonNull::dangling()
-        };
-        Self(p)
+    fn new() -> Self {
+        let lay = Layout::from_size_align(BSIZE, MAX_ALIGN).unwrap();
+        let p = Global::allocate(&Global, lay).unwrap();
+        let p = p.as_ptr().cast::<u8>();
+        let nn = unsafe { NonNull::new_unchecked(p) };
+        Self(nn)
     }
 
     fn alloc(&self, i: usize, n: usize) -> NonNull<[u8]> {
@@ -117,18 +97,17 @@ impl Block {
         unsafe { NonNull::new_unchecked(p) }
     }
 
-    fn drop(&mut self, bsize: usize) {
+    fn drop(&mut self) {
         if self.0 != NonNull::dangling() {
-            let lay = Layout::from_size_align(bsize, MAX_ALIGN).unwrap();
+            let lay = Layout::from_size_align(BSIZE, MAX_ALIGN).unwrap();
             unsafe { Global::deallocate(&Global, self.0, lay) }
             self.0 = NonNull::dangling();
         }
     }
 }
 
+#[allow(dead_code)]
 struct BumpAllocator {
-    bsize: usize,                   // Block size
-    max_size: usize,                // Limit on sizes that can be bump allocated
     alloc_count: u64,               // Number of current allocations
     idx: usize,                     // Current bytes allocated from cur
     cur: Block,                     // Current block for allocation
@@ -138,41 +117,27 @@ struct BumpAllocator {
     _reset_count: usize,
     _total_count: usize,
     _total_alloc: usize,
-    _temp: bool,
 }
 
 impl BumpAllocator {
-    fn new(_temp: bool, bsize: usize) -> Self {
+    fn new() -> Self {
         Self {
-            bsize,
-            max_size: bsize / 4,
             alloc_count: 0,
             idx: 0,
-            cur: Block::new(bsize),
+            cur: Block::new(),
             overflow: Vec::new(),
             _alloc_bytes: 0,
             _max_alloc: 0,
             _reset_count: 0,
             _total_count: 0,
             _total_alloc: 0,
-            _temp,
         }
-    }
-
-    fn enable_with(&mut self, bsize: usize) {
-        if self.alloc_count != 0 {
-            println!("BumpAllocator enable_with alloc_count not zero, aborting");
-            std::process::abort();
-        }
-        self.bsize = bsize;
-        self.max_size = bsize / 4;
-        self.cur = Block::new(bsize);
     }
 
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
         self.alloc_count += 1;
         let (n, m) = (lay.size(), lay.align());
-        if USE_BUMP && n < self.max_size {
+        if NOT_MIRI && n < MAX_SIZE {
             #[cfg(feature = "log-bump")]
             {
                 self._alloc_bytes += n;
@@ -182,9 +147,8 @@ impl BumpAllocator {
             let mut i = self.idx.checked_next_multiple_of(m).unwrap();
             let e = i + n;
             // Make a new block if necessary.
-            let bsize = self.bsize;
-            if e >= bsize && (e > bsize || n == 0) {
-                let old = std::mem::replace(&mut self.cur, Block::new(bsize));
+            if e >= BSIZE && (e > BSIZE || n == 0) {
+                let old = std::mem::replace(&mut self.cur, Block::new());
                 self.overflow.push(old);
                 i = 0;
             }
@@ -197,7 +161,7 @@ impl BumpAllocator {
 
     fn deallocate(&mut self, p: NonNull<u8>, lay: Layout) {
         self.alloc_count -= 1;
-        if USE_BUMP && lay.size() < self.max_size {
+        if NOT_MIRI && lay.size() < MAX_SIZE {
             if self.alloc_count == 0 {
                 #[cfg(feature = "log-bump")]
                 {
@@ -217,7 +181,7 @@ impl BumpAllocator {
 
     fn reset_overflow(&mut self) {
         while let Some(mut b) = self.overflow.pop() {
-            b.drop(self.bsize);
+            b.drop();
         }
     }
 }
@@ -226,8 +190,8 @@ impl Drop for BumpAllocator {
     fn drop(&mut self) {
         #[cfg(feature = "log-bump")]
         println!(
-            "Bump Allocator Dropped temp={} total_count={} total_alloc={} max_alloc={} reset_count={}",
-            self._temp, self._total_count, self._total_alloc, self._max_alloc, self._reset_count
+            "Bump Allocator Dropped total_count={} total_alloc={} max_alloc={} reset_count={}",
+            self._total_count, self._total_alloc, self._max_alloc, self._reset_count
         );
 
         if self.alloc_count != 0 {
@@ -238,7 +202,169 @@ impl Drop for BumpAllocator {
             std::process::abort();
         }
 
-        self.cur.drop(self.bsize);
+        self.cur.drop();
         self.reset_overflow();
     }
+}
+
+struct FreeMem
+{
+    next: * const FreeMem, // May be null
+}
+
+struct ChainAllocator
+{
+    free : [ * const FreeMem; MAX_SC ],       // Address of first free allocation for each size class.
+    alloc_count: u64,               // Number of current allocations
+    idx: usize,                     // Current bytes allocated from cur
+    cur: Block,                     // Current block for allocation
+    overflow: std::vec::Vec<Block>, // List of used up blocks
+    _alloc_bytes: usize,            // Rest are only for diagnostic purposes.
+    _max_alloc: usize,
+    _reset_count: usize,
+    _total_count: usize,
+    _total_alloc: usize,
+}
+
+impl ChainAllocator {
+    fn new() -> Self {
+        Self {
+            free : [ null(); MAX_SC ],
+            alloc_count: 0,
+            idx: 0,
+            cur: Block::new(),
+            overflow: Vec::new(),
+            _alloc_bytes: 0,
+            _max_alloc: 0,
+            _reset_count: 0,
+            _total_count: 0,
+            _total_alloc: 0,
+        }
+    }
+
+    const fn sc(n: usize) -> usize
+    {
+        ( ( (n-1).ilog2() + 1 ) as usize ) - 3
+    }
+
+    
+    fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        // println!("ChainAllocator::allocate size={}", lay.size() );
+        
+        self.alloc_count += 1;
+        let (n, mut m) = (lay.size(), lay.align());
+        if NOT_MIRI && n <= MAX_SIZE {
+            #[cfg(feature = "log-bump")]
+            {
+                self._alloc_bytes += n;
+                self._total_count += 1;
+                self._total_alloc += n;
+            }
+;
+            if m < 8 { m = 8; } // Always align to at least 8 bytes.
+            let mut xn = n; if xn < 8 { xn = 8; } // Always reserve at least 8 bytes.
+            let size_class : usize = Self::sc( xn );
+            let xn = 2 << (size_class+3); // Amount to reserve,
+            
+            let p = self.free[size_class];
+            if false && !p.is_null()
+            {
+                let next = unsafe{ (*p).next };
+                self.free[size_class] = next;
+                let p = p as * mut u8;
+                let p = slice_from_raw_parts_mut(p, n);
+                Ok( unsafe { NonNull::new_unchecked(p) } )
+            }
+            else
+            {
+                let mut i = self.idx.checked_next_multiple_of(m).unwrap();
+                let e = i + xn;
+                // Make a new block if necessary.
+                if e > BSIZE {
+                    let old = std::mem::replace(&mut self.cur, Block::new());
+                    self.overflow.push(old);
+                    i = 0;
+                }
+                self.idx = i + xn;
+                Ok(self.cur.alloc(i, n))
+            }
+        } else {
+            Global::allocate(&Global, lay)
+        }
+    }
+
+    fn deallocate(&mut self, p: NonNull<u8>, lay: Layout) {
+        // println!("ChainAllocator::deallocate size={}", lay.size() );
+        self.alloc_count -= 1;
+        if NOT_MIRI && lay.size() <= MAX_SIZE {
+            if self.alloc_count == 0 {
+                #[cfg(feature = "log-bump")]
+                {
+                    self._reset_count += 1;
+                    self._max_alloc = std::cmp::max(self._max_alloc, self._alloc_bytes);
+                    self._alloc_bytes = 0;
+                }
+                self.idx = 0;
+                self.reset_overflow();
+                self.free = [ null(); MAX_SC ];
+            }
+            else if true
+            {
+                // Put freed storage on free list.
+                let (mut n, _m) = (lay.size(), lay.align());
+                if n < 8 { n = 8; } // Always allocate at least 16 bytes.
+                let size_class : usize = Self::sc(n);
+                let p = p.as_ptr() as * mut FreeMem;
+                let f = self.free[size_class];
+                unsafe{ (*p).next = f; }
+                self.free[size_class] = p;
+            }   
+            
+        } else {
+            unsafe {
+                Global::deallocate(&Global, p, lay);
+            }
+        }
+    }
+
+    fn reset_overflow(&mut self) {
+        while let Some(mut b) = self.overflow.pop() {
+            b.drop();
+        }
+    }
+}
+
+impl Drop for ChainAllocator {
+    fn drop(&mut self) {
+        #[cfg(feature = "log-bump")]
+        println!(
+            "Chain Allocator Dropped total_count={} total_alloc={} max_alloc={} reset_count={}",
+            self._total_count, self._total_alloc, self._max_alloc, self._reset_count
+        );
+
+        if self.alloc_count != 0 {
+            println!(
+                "ChainAllocator has {} outstanding allocations, aborting",
+                self.alloc_count,
+            );
+            std::process::abort();
+        }
+
+        self.cur.drop();
+        self.reset_overflow();
+    }
+}
+
+#[test]
+fn test_alloc()
+{
+    Local::enable_bump();
+    let x = crate::Box::new_in(99, Local::new());
+    assert!( *x == 99 );
+    {
+        let x = crate::Box::new_in(99, Local::new());
+        assert!( *x == 99 );
+    }   
+    let x = crate::Box::new_in(99, Local::new());
+    assert!( *x == 99 );
 }

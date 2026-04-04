@@ -12,7 +12,7 @@
 //!
 //! [`RcStr`] is a reference-counted string based on [`RcSlice`].
 //!
-//! The [`localalloc`] module has fast thread-local bump allocators.
+//! The [`localalloc`] module has fast thread-local allocators.
 //!
 //!# Features
 //!
@@ -20,14 +20,14 @@
 //! - `serde` : enables serialisation of [`BTreeMap`](collections::BTreeMap) and [`BTreeSet`](collections::BTreeSet) via serde crate.
 //! - `unsafe-optim` : Enable unsafe optimisations in release mode.
 //! - `dynbox` : enables Boxing of dyn values, requires nightly toolchain.
-//! - `log-bump` : prints details of bump allocation when thread terminates.
+//! - `log-bump` : prints details of local allocation when thread terminates.
 
 /// Memory allocation.
 pub mod alloc {
     pub use allocator_api2::alloc::*;
 }
 
-/// Thread-local bump allocators.
+/// Thread-local allocators.
 pub mod localalloc;
 
 /// Containers: BTreeMap, BTreeSet, HashMap and HashSet.
