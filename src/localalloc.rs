@@ -31,7 +31,7 @@ const K: usize = 1024;
 const MAX_ALIGN: usize = 128;
 const BSIZE : usize = 1024 * K; // 20 bits
 const MAX_SIZE : usize = BSIZE / 16; // 16 bits
-const MAX_SC: usize = 13; // 13 = 16 - 3
+const MAX_SC: usize = 14; // Note sure what this needs to be.
 
 /// Temp [`Allocator`].
 #[derive(Default, Clone)]
@@ -266,7 +266,7 @@ impl ChainAllocator {
             let xn = 2 << (size_class+3); // Amount to reserve,
             
             let p = self.free[size_class];
-            if false && !p.is_null()
+            if !p.is_null()
             {
                 let next = unsafe{ (*p).next };
                 self.free[size_class] = next;
@@ -307,7 +307,7 @@ impl ChainAllocator {
                 self.reset_overflow();
                 self.free = [ null(); MAX_SC ];
             }
-            else if true
+            else
             {
                 // Put freed storage on free list.
                 let (mut n, _m) = (lay.size(), lay.align());
