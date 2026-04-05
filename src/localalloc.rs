@@ -277,7 +277,7 @@ impl ChainAllocator {
                 let p = slice_from_raw_parts_mut(p, n);
                 Ok(unsafe { NonNull::new_unchecked(p) })
             } else {
-                let mut i = self.idx;
+                let mut i = self.idx.checked_next_multiple_of(MIN_SIZE).unwrap();
                 let e = i + xn;
                 // Make a new block if necessary.
                 if e > BSIZE {
