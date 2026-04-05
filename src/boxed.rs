@@ -34,10 +34,13 @@ impl<T> Box<T> {
 impl<T, A: Allocator> Box<T, A> {
     /// Allocates memory and then places x into it.
     #[must_use]
-    pub fn auto(t: T) -> Self where A:Default {
-       Self::new_in(t, A::default() )
+    pub fn auto(t: T) -> Self
+    where
+        A: Default,
+    {
+        Self::new_in(t, A::default())
     }
-    
+
     /// Allocates memory in the given allocator then places x into it.
     pub fn new_in(t: T, a: A) -> Self {
         let layout = Layout::new::<T>();
@@ -71,10 +74,15 @@ impl<T, A: Allocator> Box<T, A> {
 
 impl<T: ?Sized, A: Allocator> Box<T, A> {
     /// Allocates memory then copies s into it.
-    pub fn from_str(s: &str) -> Box<str, A> where A:Default {
-        Box::<str,A>::from_str_in(s,A::default())
+    pub fn from_str_auto(s: &str) -> Box<str, A>
+    where
+        A: Default,
+    {
+        Box::<str, A>::from_str_in(s, A::default())
     }
-    
+}
+
+impl<T: ?Sized, A: Allocator> Box<T, A> {
     /// Allocates memory in the given allocator then copies s into it.
     ///
     /// Note: there is currently no equivalent in the standard library.

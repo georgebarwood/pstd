@@ -8,15 +8,15 @@
 //! Example
 //! ```
 //! use pstd::{Box,Vec,localalloc::Local};
-//! let b = Box::new_in(99, Local::new());
-//! assert!( *b == 99 );
+//! let b = Box::new_in(98, Local::new());
+//! assert!(*b == 98);
 //! type LBox<T> = Box::<T,Local>; // Locally allocated Box.
 //! let b = LBox::auto(99); // Alternative to using new_in.
-//! assert!( *b == 99 );
+//! assert!(*b == 99);
 //! type LVec<T> = Vec<T,Local>; // Locally allocated Vec.
-//! let mut v = LVec::auto();
-//! v.push( "Hello");
-//! assert!( v.pop() == Some("Hello") );
+//! let mut v = LVec::with_capacity_auto(4); // Pre-allocate space for 4 values.
+//! v.push("Hello");
+//! assert!(v.pop() == Some("Hello"));
 //! ```
 
 use crate::alloc::{AllocError, Allocator, Global};
@@ -198,7 +198,7 @@ impl Drop for BumpAllocator {
     fn drop(&mut self) {
         #[cfg(feature = "log-bump")]
         println!(
-            "Bump Allocator Dropped total_count={} total_alloc={} max_alloc={} reset_count={}",
+            "BumpAllocator Dropping total_count={} total_alloc={} max_alloc={} reset_count={}",
             self._total_count, self._total_alloc, self._max_alloc, self._reset_count
         );
 
@@ -220,10 +220,10 @@ struct FreeMem {
 }
 
 struct ChainAllocator {
-    free: [*const FreeMem; MAX_SC], // Address of first free allocation for each size class.
     alloc_count: u64,               // Number of current allocations
     idx: usize,                     // Current bytes allocated from cur
     cur: Block,                     // Current block for allocation
+    free: [*const FreeMem; MAX_SC], // Address of first free allocation for each size class.
     overflow: std::vec::Vec<Block>, // List of used up blocks
     _alloc_bytes: usize,            // Rest are only for diagnostic purposes.
     _max_alloc: usize,
@@ -248,17 +248,16 @@ impl ChainAllocator {
         }
     }
 
-    /// Calculates size class index and size to reserve.
+    /// Calculates size class index and size for that class.
     const fn sc(mut n: usize) -> (usize, usize) {
-        if n < MIN_SIZE {  n = MIN_SIZE; }
-        let sc = (((n - 1).ilog2() + 1) as usize) - L2_MIN_SIZE;
-        let xn = 2 << (sc + L2_MIN_SIZE);
-        (sc,xn)
+        if n < MIN_SIZE {
+            n = MIN_SIZE;
+        }
+        let sc = ((n - 1).ilog2() + 1) as usize;
+        (sc - L2_MIN_SIZE, 2 << sc)
     }
 
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        // println!("ChainAllocator::allocate size={}", lay.size() );
-
         self.alloc_count += 1;
         let n = lay.size();
         if NOT_MIRI && n <= MAX_SIZE {
@@ -268,7 +267,7 @@ impl ChainAllocator {
                 self._total_count += 1;
                 self._total_alloc += n;
             };
-            let (sc,xn) = Self::sc(n);
+            let (sc, xn) = Self::sc(n);
             let p = self.free[sc];
             if !p.is_null() {
                 let next = unsafe { (*p).next };
@@ -287,7 +286,7 @@ impl ChainAllocator {
                     i = 0;
                 }
                 self.idx = i + xn;
-                Ok(self.cur.alloc(i, n))
+                Ok(self.cur.alloc(i, n)) // Ought to be able to return xn, but that causes problems!
             }
         } else {
             Global::allocate(&Global, lay)
@@ -334,7 +333,7 @@ impl Drop for ChainAllocator {
     fn drop(&mut self) {
         #[cfg(feature = "log-bump")]
         println!(
-            "Chain Allocator Dropped total_count={} total_alloc={} max_alloc={} reset_count={}",
+            "ChainAllocator Dropping total_count={} total_alloc={} max_alloc={} reset_count={}",
             self._total_count, self._total_alloc, self._max_alloc, self._reset_count
         );
 

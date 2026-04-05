@@ -45,7 +45,6 @@ pub struct Vec<T, A: Allocator = Global> {
 ///
 /// Properties / methods that operate on one element at a time.
 impl<T> Vec<T> {
-
     /// Create a new Vec.
     ///
     /// # Example
@@ -617,8 +616,11 @@ impl<T, A: Allocator> Vec<T, A> {
 
     /// Create a new Vec with default allocator.
     #[must_use]
-    pub fn auto() -> Vec<T, A> where A:Default {
-       Self::new_in( A::default() )
+    pub fn auto() -> Vec<T, A>
+    where
+        A: Default,
+    {
+        Self::new_in(A::default())
     }
 
     /// Returns a reference to the underlying allocator.
@@ -644,7 +646,10 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     /// Constructs a new, empty `Vec<T, A>` with at least the specified capacity.
-    pub fn with_capacity_auto(capacity: usize) -> Vec<T, A> where A:Default {
+    pub fn with_capacity_auto(capacity: usize) -> Vec<T, A>
+    where
+        A: Default,
+    {
         let mut v = Self::new_in(A::default());
         v.set_capacity(capacity).unwrap();
         v
