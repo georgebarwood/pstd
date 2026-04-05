@@ -40,7 +40,7 @@ const MAX_ALIGN: usize = 128;
 const BSIZE: usize = 1024 * K; // 20 bits
 const MAX_SIZE: usize = BSIZE / 16; // 16 bits
 const MAX_SC: usize = 14;
-const MIN_SIZE: usize = mem::size_of::<FreeMem>();
+const MIN_SIZE: usize = 2 * mem::size_of::<FreeMem>(); // 16 for 64-bit system.
 const L2_MIN_SIZE: usize = MIN_SIZE.ilog2() as usize;
 
 /// Temp [`Allocator`].
@@ -145,7 +145,7 @@ impl BumpAllocator {
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
         self.alloc_count += 1;
         let (n, m) = (lay.size(), lay.align());
-        if NOT_MIRI && n < MAX_SIZE {
+        if NOT_MIRI && n <= MAX_SIZE && m <= MAX_ALIGN {
             #[cfg(feature = "log-bump")]
             {
                 self._alloc_bytes += n;
@@ -169,7 +169,8 @@ impl BumpAllocator {
 
     fn deallocate(&mut self, p: NonNull<u8>, lay: Layout) {
         self.alloc_count -= 1;
-        if NOT_MIRI && lay.size() < MAX_SIZE {
+        let (n, m) = (lay.size(), lay.align());
+        if NOT_MIRI && n <= MAX_SIZE && m <= MAX_ALIGN {
             if self.alloc_count == 0 {
                 #[cfg(feature = "log-bump")]
                 {
@@ -259,8 +260,8 @@ impl ChainAllocator {
 
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
         self.alloc_count += 1;
-        let n = lay.size();
-        if NOT_MIRI && n <= MAX_SIZE {
+        let (n,m) = (lay.size(), lay.align());
+        if NOT_MIRI && n <= MAX_SIZE && m <= MIN_SIZE {
             #[cfg(feature = "log-bump")]
             {
                 self._alloc_bytes += n;
@@ -276,8 +277,7 @@ impl ChainAllocator {
                 let p = slice_from_raw_parts_mut(p, n);
                 Ok(unsafe { NonNull::new_unchecked(p) })
             } else {
-                let m = lay.align();
-                let mut i = self.idx.checked_next_multiple_of(m).unwrap();
+                let mut i = self.idx;
                 let e = i + xn;
                 // Make a new block if necessary.
                 if e > BSIZE {
@@ -289,13 +289,15 @@ impl ChainAllocator {
                 Ok(self.cur.alloc(i, n)) // Ought to be able to return xn, but that causes problems!
             }
         } else {
+            println!("Using Global n={n} m={m}");
             Global::allocate(&Global, lay)
         }
     }
 
     fn deallocate(&mut self, p: NonNull<u8>, lay: Layout) {
         self.alloc_count -= 1;
-        if NOT_MIRI && lay.size() <= MAX_SIZE {
+        let (n,m) = (lay.size(), lay.align());
+        if NOT_MIRI && n <= MAX_SIZE && m <= MIN_SIZE {
             if self.alloc_count == 0 {
                 #[cfg(feature = "log-bump")]
                 {
@@ -308,7 +310,7 @@ impl ChainAllocator {
                 self.free = [null(); MAX_SC];
             } else {
                 // Put freed storage on free list.
-                let sc = Self::sc(lay.size()).0;
+                let sc = Self::sc(n).0;
                 let p = p.as_ptr() as *mut FreeMem;
                 unsafe {
                     (*p).next = self.free[sc];
