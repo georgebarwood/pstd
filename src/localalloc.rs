@@ -5,11 +5,18 @@
 //!
 //! Local is for heap allocations that last a longer time ( but not longer than the thread ).
 //!
-//! #Example
+//! Example
 //! ```
-//! use pstd::{Box,localalloc::Local};
+//! use pstd::{Box,Vec,localalloc::Local};
 //! let b = Box::new_in(99, Local::new());
 //! assert!( *b == 99 );
+//! type LBox<T> = Box::<T,Local>; // Locally allocated Box.
+//! let b = LBox::auto(99); // Alternative to using new_in.
+//! assert!( *b == 99 );
+//! type LVec<T> = Vec<T,Local>; // Locally allocated Vec.
+//! let mut v = LVec::auto();
+//! v.push( "Hello");
+//! assert!( v.pop() == Some("Hello") );
 //! ```
 
 use crate::alloc::{AllocError, Allocator, Global};
@@ -18,7 +25,8 @@ use std::{
     alloc::Layout,
     cell::RefCell,
     marker::PhantomData,
-    ptr::{null, NonNull, slice_from_raw_parts_mut},
+    mem,
+    ptr::{NonNull, null, slice_from_raw_parts_mut},
 };
 
 thread_local! {
@@ -29,9 +37,11 @@ thread_local! {
 const NOT_MIRI: bool = !cfg!(miri);
 const K: usize = 1024;
 const MAX_ALIGN: usize = 128;
-const BSIZE : usize = 1024 * K; // 20 bits
-const MAX_SIZE : usize = BSIZE / 16; // 16 bits
-const MAX_SC: usize = 14; // Note sure what this needs to be.
+const BSIZE: usize = 1024 * K; // 20 bits
+const MAX_SIZE: usize = BSIZE / 16; // 16 bits
+const MAX_SC: usize = 14;
+const MIN_SIZE: usize = mem::size_of::<FreeMem>();
+const L2_MIN_SIZE: usize = MIN_SIZE.ilog2() as usize;
 
 /// Temp [`Allocator`].
 #[derive(Default, Clone)]
@@ -146,7 +156,7 @@ impl BumpAllocator {
             let e = i + n;
             // Make a new block if necessary.
             if e >= BSIZE && (e > BSIZE || n == 0) {
-                let old = std::mem::replace(&mut self.cur, Block::new());
+                let old = mem::replace(&mut self.cur, Block::new());
                 self.overflow.push(old);
                 i = 0;
             }
@@ -205,14 +215,12 @@ impl Drop for BumpAllocator {
     }
 }
 
-struct FreeMem
-{
-    next: * const FreeMem, // May be null
+struct FreeMem {
+    next: *const FreeMem, // May be null
 }
 
-struct ChainAllocator
-{
-    free : [ * const FreeMem; MAX_SC ],       // Address of first free allocation for each size class.
+struct ChainAllocator {
+    free: [*const FreeMem; MAX_SC], // Address of first free allocation for each size class.
     alloc_count: u64,               // Number of current allocations
     idx: usize,                     // Current bytes allocated from cur
     cur: Block,                     // Current block for allocation
@@ -227,7 +235,7 @@ struct ChainAllocator
 impl ChainAllocator {
     fn new() -> Self {
         Self {
-            free : [ null(); MAX_SC ],
+            free: [null(); MAX_SC],
             alloc_count: 0,
             idx: 0,
             cur: Block::new(),
@@ -240,46 +248,41 @@ impl ChainAllocator {
         }
     }
 
-    const fn sc(n: usize) -> usize
-    {
-        ( ( (n-1).ilog2() + 1 ) as usize ) - 3
+    /// Calculates size class index and size to reserve.
+    const fn sc(mut n: usize) -> (usize, usize) {
+        if n < MIN_SIZE {  n = MIN_SIZE; }
+        let sc = (((n - 1).ilog2() + 1) as usize) - L2_MIN_SIZE;
+        let xn = 2 << (sc + L2_MIN_SIZE);
+        (sc,xn)
     }
 
-    
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
         // println!("ChainAllocator::allocate size={}", lay.size() );
-        
+
         self.alloc_count += 1;
-        let (n, mut m) = (lay.size(), lay.align());
+        let n = lay.size();
         if NOT_MIRI && n <= MAX_SIZE {
             #[cfg(feature = "log-bump")]
             {
                 self._alloc_bytes += n;
                 self._total_count += 1;
                 self._total_alloc += n;
-            }
-;
-            if m < 8 { m = 8; } // Always align to at least 8 bytes.
-            let mut xn = n; if xn < 8 { xn = 8; } // Allocations are always at least 8 bytes.
-            let size_class : usize = Self::sc( xn );
-            let xn = 2 << (size_class+3); // Amount to reserve,
-            
-            let p = self.free[size_class];
-            if !p.is_null()
-            {
-                let next = unsafe{ (*p).next };
-                self.free[size_class] = next;
-                let p = p as * mut u8;
+            };
+            let (sc,xn) = Self::sc(n);
+            let p = self.free[sc];
+            if !p.is_null() {
+                let next = unsafe { (*p).next };
+                self.free[sc] = next;
+                let p = p as *mut u8;
                 let p = slice_from_raw_parts_mut(p, n);
-                Ok( unsafe { NonNull::new_unchecked(p) } )
-            }
-            else
-            {
+                Ok(unsafe { NonNull::new_unchecked(p) })
+            } else {
+                let m = lay.align();
                 let mut i = self.idx.checked_next_multiple_of(m).unwrap();
                 let e = i + xn;
                 // Make a new block if necessary.
                 if e > BSIZE {
-                    let old = std::mem::replace(&mut self.cur, Block::new());
+                    let old = mem::replace(&mut self.cur, Block::new());
                     self.overflow.push(old);
                     i = 0;
                 }
@@ -303,20 +306,16 @@ impl ChainAllocator {
                 }
                 self.idx = 0;
                 self.reset_overflow();
-                self.free = [ null(); MAX_SC ];
-            }
-            else
-            {
+                self.free = [null(); MAX_SC];
+            } else {
                 // Put freed storage on free list.
-                let (mut n, _m) = (lay.size(), lay.align());
-                if n < 8 { n = 8; } // Allocations are always at least 8 bytes.
-                let size_class : usize = Self::sc(n);
-                let p = p.as_ptr() as * mut FreeMem;
-                let f = self.free[size_class];
-                unsafe{ (*p).next = f; }
-                self.free[size_class] = p;
-            }   
-            
+                let sc = Self::sc(lay.size()).0;
+                let p = p.as_ptr() as *mut FreeMem;
+                unsafe {
+                    (*p).next = self.free[sc];
+                }
+                self.free[sc] = p;
+            }
         } else {
             unsafe {
                 Global::deallocate(&Global, p, lay);
@@ -353,14 +352,13 @@ impl Drop for ChainAllocator {
 }
 
 #[test]
-fn test_alloc()
-{
+fn test_alloc() {
     let x = crate::Box::new_in(99, Local::new());
-    assert!( *x == 99 );
+    assert!(*x == 99);
     {
         let x = crate::Box::new_in(99, Local::new());
-        assert!( *x == 99 );
-    }   
+        assert!(*x == 99);
+    }
     let x = crate::Box::new_in(99, Local::new());
-    assert!( *x == 99 );
+    assert!(*x == 99);
 }
