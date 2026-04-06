@@ -159,7 +159,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
             map: map::BTreeMap::with_tuning(CustomTuning::new_in_def(a)),
         }
     }
-    
+
     /// Returns a new, empty set with specified tuning.
     ///
     /// # Example
