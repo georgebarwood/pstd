@@ -20,8 +20,8 @@ pub struct BoxA<T: ?Sized, A: Allocator = Global> {
 /// Box allocated from Global.
 pub type Box<T> = BoxA<T, Global>;
 
-impl<T, A:Allocator> BoxA<T, A> {
-    /// Allocates memory and then places x into it.
+impl<T, A: Allocator> BoxA<T, A> {
+    /// Allocates memory then places t into it.
     #[must_use]
     pub fn new(t: T) -> Self
     where
@@ -30,7 +30,7 @@ impl<T, A:Allocator> BoxA<T, A> {
         Self::new_in(t, A::default())
     }
 
-    /// Allocates memory in the given allocator then places x into it.
+    /// Allocates memory in the given allocator then places t into it.
     pub fn new_in(t: T, a: A) -> Self {
         let layout = Layout::new::<T>();
         let nn = a.allocate(layout).unwrap();

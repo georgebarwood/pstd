@@ -26,11 +26,13 @@ use std::{
 };
 
 /// A vector that grows as elements are pushed onto it similar to similar to [`std::vec::Vec`].
-pub type Vec<T> = VecA<T,Global>;
+///
+/// See [`VecA`] for documentation organised into implementation sections.
+pub type Vec<T> = VecA<T, Global>;
 
 /// A vector that grows as elements are pushed onto it.
 ///
-/// Implementation sections: [Construct](#construct-with-default-allocator)
+/// Implementation sections:
 /// [Basic](#basic-methods)
 /// [Advanced](#advanced-methods)
 /// [Allocation](#allocation-methods)
@@ -47,7 +49,7 @@ pub struct VecA<T, A: Allocator = Global> {
 /// # Basic methods
 ///
 /// Properties / methods that operate on one element at a time.
-impl<T, A:Allocator> VecA<T,A> {
+impl<T, A: Allocator> VecA<T, A> {
     /// Create a new Vec.
     ///
     /// # Example
@@ -61,7 +63,10 @@ impl<T, A:Allocator> VecA<T,A> {
     /// for s in &v { println!("s={}",s); }
     /// ```
     #[must_use]
-    pub fn new() -> Self where A: Default {
+    pub fn new() -> Self
+    where
+        A: Default,
+    {
         Self::new_in(A::default())
     }
 

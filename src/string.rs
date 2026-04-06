@@ -110,7 +110,10 @@ impl<A: Allocator> Ord for String<A> {
     }
 }
 
-impl<A: Allocator> Default for String<A> where A: Default {
+impl<A: Allocator> Default for String<A>
+where
+    A: Default,
+{
     fn default() -> Self {
         Self::new()
     }

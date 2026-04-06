@@ -6,7 +6,7 @@
 //! Temp and Local are not Send or Sync, so values allocated from them cannot be accssed by other threads.
 //!
 //! Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
-//! This means there is no minimum allocation internally. 
+//! This means there is no minimum allocation internally.
 //! Allocations larger than 64K bytes, or having more than 128 byte alignment, are routed to [`Global`](alloc::Global).
 //!
 //! Local has an array of free lists, one for each size class 16,32,64...64K.
@@ -42,12 +42,12 @@ thread_local! {
     static LA: RefCell<ChainAllocator> = RefCell::new(ChainAllocator::new());
 }
 
-const NOT_MIRI: bool = !cfg!(miri);
+const MIRI: bool = cfg!(miri);
 const K: usize = 1024;
 const MAX_ALIGN: usize = 128;
 const BSIZE: usize = 1024 * K; // 20 bits = 1MB
 const MAX_SIZE: usize = BSIZE / 16; // 16 bits = 64K
-const MAX_SC: usize = 1 + ( MAX_SIZE.ilog2() as usize ) - L2_MIN_SIZE;
+const MAX_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
 const MIN_SIZE: usize = 2 * mem::size_of::<FreeMem>(); // 16 for 64-bit system.
 const L2_MIN_SIZE: usize = MIN_SIZE.ilog2() as usize;
 
@@ -153,7 +153,9 @@ impl BumpAllocator {
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
         self.alloc_count += 1;
         let (n, m) = (lay.size(), lay.align());
-        if NOT_MIRI && n <= MAX_SIZE && m <= MAX_ALIGN {
+        if MIRI || n > MAX_SIZE || m > MAX_ALIGN {
+            Global::allocate(&Global, lay)
+        } else {
             #[cfg(feature = "log-bump")]
             {
                 self._alloc_bytes += n;
@@ -170,15 +172,17 @@ impl BumpAllocator {
             }
             self.idx = i + n;
             Ok(self.cur.alloc(i, n))
-        } else {
-            Global::allocate(&Global, lay)
         }
     }
 
     fn deallocate(&mut self, p: NonNull<u8>, lay: Layout) {
-        self.alloc_count -= 1;
         let (n, m) = (lay.size(), lay.align());
-        if NOT_MIRI && n <= MAX_SIZE && m <= MAX_ALIGN {
+        if MIRI || n > MAX_SIZE || m > MAX_ALIGN {
+            unsafe {
+                Global::deallocate(&Global, p, lay);
+            }
+        } else {
+            self.alloc_count -= 1;
             if self.alloc_count == 0 {
                 #[cfg(feature = "log-bump")]
                 {
@@ -188,10 +192,6 @@ impl BumpAllocator {
                 }
                 self.idx = 0;
                 self.reset_overflow();
-            }
-        } else {
-            unsafe {
-                Global::deallocate(&Global, p, lay);
             }
         }
     }
@@ -208,12 +208,16 @@ impl Drop for BumpAllocator {
         #[cfg(feature = "log-bump")]
         println!(
             "BumpAllocator Dropping alloc_count={} total_count={} total_alloc={} max_alloc={} reset_count={}",
-            self.alloc_count, self._total_count, self._total_alloc, self._max_alloc, self._reset_count
+            self.alloc_count,
+            self._total_count,
+            self._total_alloc,
+            self._max_alloc,
+            self._reset_count
         );
 
         /* Since Temp and Local are !Sync and !Send this check should no longer be necessary.
            Although it might be useful to detect leaks.
-           
+
         if self.alloc_count != 0 {
             println!(
                 "BumpAllocator has {} outstanding allocations, aborting",
@@ -267,14 +271,15 @@ impl ChainAllocator {
             n = MIN_SIZE;
         }
         let sc = ((n - 1).ilog2() + 1) as usize;
-        (sc - L2_MIN_SIZE, 2 << (sc-1))
+        (sc - L2_MIN_SIZE, 2 << (sc - 1))
     }
 
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        self.alloc_count += 1;
-        let (n,m) = (lay.size(), lay.align());
-        
-        if NOT_MIRI && n <= MAX_SIZE && m <= MIN_SIZE {
+        let (n, m) = (lay.size(), lay.align());
+        if MIRI || n > MAX_SIZE || m > MIN_SIZE {
+            Global::allocate(&Global, lay)
+        } else {
+            self.alloc_count += 1;
             #[cfg(feature = "log-bump")]
             {
                 self._alloc_bytes += n;
@@ -286,13 +291,13 @@ impl ChainAllocator {
             let p = self.free[sc];
 
             // println!("ChainAllocator::allocate n={n} m={m} sc={sc} xn={xn} ix={} p={}", self.idx, p as usize);
-     
+
             if !p.is_null() {
                 // Remove p from free list and return it.
                 let next = unsafe { (*p).next };
                 self.free[sc] = next;
                 let p = p as *mut u8;
-                let p : * mut [u8] = slice_from_raw_parts_mut(p, xn);
+                let p: *mut [u8] = slice_from_raw_parts_mut(p, xn);
                 Ok(unsafe { NonNull::new_unchecked(p) })
             } else {
                 let mut i = self.idx;
@@ -306,16 +311,17 @@ impl ChainAllocator {
                 self.idx = i + xn;
                 Ok(self.cur.alloc(i, xn))
             }
-        } else {
-            // println!("Using Global n={n} m={m}");
-            Global::allocate(&Global, lay)
         }
     }
 
     fn deallocate(&mut self, p: NonNull<u8>, lay: Layout) {
-        self.alloc_count -= 1;
-        let (n,m) = (lay.size(), lay.align());
-        if NOT_MIRI && n <= MAX_SIZE && m <= MIN_SIZE {
+        let (n, m) = (lay.size(), lay.align());
+        if MIRI || n > MAX_SIZE || m > MIN_SIZE {
+            unsafe {
+                Global::deallocate(&Global, p, lay);
+            }
+        } else {
+            self.alloc_count -= 1;
             if self.alloc_count == 0 {
                 #[cfg(feature = "log-bump")]
                 {
@@ -328,19 +334,15 @@ impl ChainAllocator {
                 self.free = [null(); MAX_SC];
             } else {
                 // Put freed storage on free list.
-                let (sc,_xn) = Self::size_class(n);
+                let (sc, _xn) = Self::size_class(n);
                 let p = p.as_ptr() as *mut FreeMem;
 
-                // println!("ChainAllocator::deallocate n={n} m={m} sc={sc} xn={_xn} ix={} p={}", self.idx, p as usize);   
+                // println!("ChainAllocator::deallocate n={n} m={m} sc={sc} xn={_xn} ix={} p={}", self.idx, p as usize);
 
                 unsafe {
                     (*p).next = self.free[sc];
                 }
                 self.free[sc] = p;
-            }
-        } else {
-            unsafe {
-                Global::deallocate(&Global, p, lay);
             }
         }
     }
@@ -357,10 +359,13 @@ impl Drop for ChainAllocator {
         #[cfg(feature = "log-bump")]
         println!(
             "ChainAllocator Dropping alloc_count={} total_count={} total_alloc={} max_alloc={} reset_count={}",
-            self.alloc_count, self._total_count, self._total_alloc, self._max_alloc, self._reset_count
+            self.alloc_count,
+            self._total_count,
+            self._total_alloc,
+            self._max_alloc,
+            self._reset_count
         );
 
-        
         /* Since Temp and Local are !Sync and !Send this check should no longer be necessary.
            Although it might be useful to detect leaks.
         if self.alloc_count != 0 {
