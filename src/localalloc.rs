@@ -250,17 +250,18 @@ impl ChainAllocator {
     }
 
     /// Calculates size class index and size for that class.
-    const fn sc(mut n: usize) -> (usize, usize) {
+    const fn size_class(mut n: usize) -> (usize, usize) {
         if n < MIN_SIZE {
             n = MIN_SIZE;
         }
         let sc = ((n - 1).ilog2() + 1) as usize;
-        (sc - L2_MIN_SIZE, 2 << sc)
+        (sc - L2_MIN_SIZE, 2 << (sc-1))
     }
 
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
         self.alloc_count += 1;
         let (n,m) = (lay.size(), lay.align());
+        
         if NOT_MIRI && n <= MAX_SIZE && m <= MIN_SIZE {
             #[cfg(feature = "log-bump")]
             {
@@ -268,16 +269,21 @@ impl ChainAllocator {
                 self._total_count += 1;
                 self._total_alloc += n;
             };
-            let (sc, xn) = Self::sc(n);
+            let (sc, xn) = Self::size_class(n);
+
             let p = self.free[sc];
+
+            // println!("ChainAllocator::allocate n={n} m={m} sc={sc} xn={xn} ix={} p={}", self.idx, p as usize);
+     
             if !p.is_null() {
+                // Remove p from free list and return it.
                 let next = unsafe { (*p).next };
                 self.free[sc] = next;
                 let p = p as *mut u8;
-                let p = slice_from_raw_parts_mut(p, n);
+                let p : * mut [u8] = slice_from_raw_parts_mut(p, xn);
                 Ok(unsafe { NonNull::new_unchecked(p) })
             } else {
-                let mut i = self.idx.checked_next_multiple_of(MIN_SIZE).unwrap();
+                let mut i = self.idx;
                 let e = i + xn;
                 // Make a new block if necessary.
                 if e > BSIZE {
@@ -286,10 +292,10 @@ impl ChainAllocator {
                     i = 0;
                 }
                 self.idx = i + xn;
-                Ok(self.cur.alloc(i, n)) // Ought to be able to return xn, but that causes problems!
+                Ok(self.cur.alloc(i, xn))
             }
         } else {
-            println!("Using Global n={n} m={m}");
+            // println!("Using Global n={n} m={m}");
             Global::allocate(&Global, lay)
         }
     }
@@ -310,8 +316,11 @@ impl ChainAllocator {
                 self.free = [null(); MAX_SC];
             } else {
                 // Put freed storage on free list.
-                let sc = Self::sc(n).0;
+                let (sc,_xn) = Self::size_class(n);
                 let p = p.as_ptr() as *mut FreeMem;
+
+                // println!("ChainAllocator::deallocate n={n} m={m} sc={sc} xn={_xn} ix={} p={}", self.idx, p as usize);   
+
                 unsafe {
                     (*p).next = self.free[sc];
                 }
