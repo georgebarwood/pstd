@@ -96,8 +96,12 @@ impl<T: ?Sized, A: Allocator> Box<T, A> {
             ptr::copy_nonoverlapping(s.as_ptr(), p, n);
         }
 
+        // Need to trim any over-allocation!
+        let p = unsafe{ std::slice::from_raw_parts_mut(p, n) };
+        let nn: NonNull<[u8]> = unsafe{ NonNull::new_unchecked(p) };
         let p: *mut str = nn.as_ptr() as *mut str;
         let nn: NonNull<str> = unsafe { NonNull::new_unchecked(p) };
+    
         Box::<str, A> { nn, a }
     }
 }
