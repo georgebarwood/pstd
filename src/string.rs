@@ -1,33 +1,34 @@
-use crate::Vec;
+use crate::VecA;
 use crate::alloc::{Allocator, Global};
 use std::ops;
 
 /// A UTF-8–encoded, growable string.
 #[derive(Clone, Debug)]
-pub struct String<A: Allocator = Global>(Vec<u8, A>);
+pub struct String<A: Allocator = Global>(VecA<u8, A>);
 
 impl<A: Allocator> String<A> {
     /// Create an empty string.
-    pub fn auto() -> Self
+    pub fn new() -> Self
     where
         A: Default,
     {
-        Self(Vec::new_in(A::default()))
+        Self(VecA::new_in(A::default()))
     }
 
     /// Creates a String from a str.
-    pub fn from_str_auto(s: &str) -> Self
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Self
     where
         A: Default,
     {
-        let mut v = Vec::with_capacity_in(s.len(), A::default());
+        let mut v = VecA::with_capacity_in(s.len(), A::default());
         v.extend_from_slice(s.as_bytes());
         Self(v)
     }
 
     /// Creates a String from a str in the specified allocator.
     pub fn from_str_in(s: &str, alloc: A) -> Self {
-        let mut v = Vec::with_capacity_in(s.len(), alloc);
+        let mut v = VecA::with_capacity_in(s.len(), alloc);
         v.extend_from_slice(s.as_bytes());
         Self(v)
     }
@@ -109,12 +110,18 @@ impl<A: Allocator> Ord for String<A> {
     }
 }
 
+impl<A: Allocator> Default for String<A> where A: Default {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[test]
 fn test_string() {
     use crate::localalloc::Local;
     use std::ops::Deref;
 
-    let mut s: String<Local> = String::auto();
+    let mut s: String<Local> = String::new();
     s.push_str("George");
     assert!(s.deref() == "George");
 }

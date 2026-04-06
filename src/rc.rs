@@ -28,7 +28,7 @@ struct RcInner<T, A: Allocator> {
 
 impl<T, A: Allocator> Rc<T, A> {
     /// Allocate a new Rc and move v into it.
-    pub fn auto(v: T) -> Self
+    pub fn new(v: T) -> Self
     where
         A: Default,
     {
@@ -254,7 +254,7 @@ pub struct RcStr<A: Allocator = Global> {
 
 impl<A: Allocator> RcStr<A> {
     /// Create a RcStr from s
-    pub fn auto(s: &str) -> Self
+    pub fn new(s: &str) -> Self
     where
         A: Default,
     {
@@ -325,7 +325,7 @@ fn rc_test() {
     use crate::localalloc::*;
     use crate::*;
     let mut m = collections::HashMap::new_in(Local::new());
-    let x = RcStr::<Global>::auto("George");
+    let x = RcStr::<Global>::new("George");
     m.insert(x.clone(), 99);
     assert!(m.get("George").is_some());
     println!("x={}", x);

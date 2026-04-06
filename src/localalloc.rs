@@ -15,14 +15,14 @@
 //!
 //! Example
 //! ```
-//! use pstd::{Box,Vec,localalloc::Local};
-//! let b = Box::new_in(98, Local::new());
+//! use pstd::{BoxA,VecA,localalloc::{Local,Temp}};
+//! let b = BoxA::new_in(98, Local::new());
 //! assert!(*b == 98);
-//! type TBox<T> = Box::<T,Temp>; // Temp allocated Box.
-//! let b = TBox::auto(99); // Alternative to using new_in.
+//! type TBox<T> = BoxA::<T,Temp>; // Temp allocated Box.
+//! let b = TBox::new(99);
 //! assert!(*b == 99);
-//! type LVec<T> = Vec<T,Local>; // Locally allocated Vec.
-//! let mut v = LVec::with_capacity_auto(4); // Pre-allocate space for 4 values.
+//! type LVec<T> = VecA<T,Local>; // Locally allocated Vec.
+//! let mut v = LVec::with_capacity(4); // Pre-allocate space for 4 values.
 //! v.push("Hello");
 //! assert!(v.pop() == Some("Hello"));
 //! ```
@@ -379,12 +379,12 @@ impl Drop for ChainAllocator {
 
 #[test]
 fn test_alloc() {
-    let x = crate::Box::new_in(99, Local::new());
+    let x = crate::BoxA::new_in(99, Local::new());
     assert!(*x == 99);
     {
-        let x = crate::Box::new_in(99, Local::new());
+        let x = crate::BoxA::new_in(99, Local::new());
         assert!(*x == 99);
     }
-    let x = crate::Box::new_in(99, Local::new());
+    let x = crate::BoxA::new_in(99, Local::new());
     assert!(*x == 99);
 }

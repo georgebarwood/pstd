@@ -1,7 +1,7 @@
 //!
 //! Known differences : element drop order, leak after panic in drop (also applies to BTreeMap/BTreeSet).
 //!
-//! Not possible under stable Rust: Vec::const_make_global.
+//! Not possible under stable Rust: VecA::const_make_global.
 
 use crate::alloc::{Allocator, Global};
 use crate::collections::{TryReserveError, TryReserveErrorKind};
@@ -26,6 +26,9 @@ use std::{
 };
 
 /// A vector that grows as elements are pushed onto it similar to similar to [`std::vec::Vec`].
+pub type Vec<T> = VecA<T,Global>;
+
+/// A vector that grows as elements are pushed onto it.
 ///
 /// Implementation sections: [Construct](#construct-with-default-allocator)
 /// [Basic](#basic-methods)
@@ -34,7 +37,7 @@ use std::{
 /// [Conversion](#conversion-methods)
 /// [Non-Panic](#non-panic-methods)
 /// [Traits](#trait-implementations)
-pub struct Vec<T, A: Allocator = Global> {
+pub struct VecA<T, A: Allocator = Global> {
     len: usize,
     cap: usize,
     nn: NonNull<T>,
@@ -44,7 +47,7 @@ pub struct Vec<T, A: Allocator = Global> {
 /// # Basic methods
 ///
 /// Properties / methods that operate on one element at a time.
-impl<T> Vec<T> {
+impl<T, A:Allocator> VecA<T,A> {
     /// Create a new Vec.
     ///
     /// # Example
@@ -58,12 +61,10 @@ impl<T> Vec<T> {
     /// for s in &v { println!("s={}",s); }
     /// ```
     #[must_use]
-    pub fn new() -> Self {
-        Self::new_in(Global)
+    pub fn new() -> Self where A: Default {
+        Self::new_in(A::default())
     }
-}
 
-impl<T, A: Allocator> Vec<T, A> {
     /// Returns the number of elements.
     pub const fn len(&self) -> usize {
         self.len
@@ -216,7 +217,7 @@ impl<T, A: Allocator> Vec<T, A> {
 /// # Advanced methods
 ///
 /// These operate on multiple elements.
-impl<T, A: Allocator> Vec<T, A> {
+impl<T, A: Allocator> VecA<T, A> {
     /// Move all the elements of `other` into `self`, leaving `other` empty.
     /// # Example
     ///
@@ -344,7 +345,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// If `new_len` is less than `len`, the `Vec` is simply truncated.
     ///
     /// This method uses a closure to create new values on every push. If
-    /// you'd rather [`Clone`] a given value, use [`Vec::resize`]. If you
+    /// you'd rather [`Clone`] a given value, use [`VecA::resize`]. If you
     /// want to use the [`Default`] trait to generate values, you can
     /// pass [`Default::default`] as the second argument.
     pub fn resize_with<F>(&mut self, new_len: usize, f: F)
@@ -369,7 +370,7 @@ impl<T, A: Allocator> Vec<T, A> {
         assert!(at <= self.len);
 
         let other_len = self.len - at;
-        let mut other = Vec::with_capacity_in(other_len, self.alloc.clone());
+        let mut other = VecA::with_capacity_in(other_len, self.alloc.clone());
 
         unsafe {
             self.len = at;
@@ -386,7 +387,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// (e.g. by reading from a file) before marking the data as initialized using
     /// the [`set_len`] method.
     ///
-    /// [`set_len`]: Vec::set_len
+    /// [`set_len`]: VecA::set_len
     ///
     pub fn split_at_spare_mut(&mut self) -> (&mut [T], &mut [MaybeUninit<T>]) {
         let ptr = self.as_mut_ptr();
@@ -602,25 +603,16 @@ impl<T, A: Allocator> Vec<T, A> {
 
 /// # Allocation methods.
 /// These are used to adjust the vector capacity and allocator.
-impl<T, A: Allocator> Vec<T, A> {
+impl<T, A: Allocator> VecA<T, A> {
     /// Create a new Vec in specified allocator.
     #[must_use]
-    pub const fn new_in(alloc: A) -> Vec<T, A> {
+    pub const fn new_in(alloc: A) -> VecA<T, A> {
         Self {
             len: 0,
             cap: 0,
             alloc,
             nn: NonNull::dangling(),
         }
-    }
-
-    /// Create a new Vec with default allocator.
-    #[must_use]
-    pub fn auto() -> Vec<T, A>
-    where
-        A: Default,
-    {
-        Self::new_in(A::default())
     }
 
     /// Returns a reference to the underlying allocator.
@@ -637,16 +629,28 @@ impl<T, A: Allocator> Vec<T, A> {
         }
     }
 
-    /// Constructs a new, empty `Vec<T, A>` with at least the specified capacity
+    /// Constructs a new, empty `VecA<T, A>` with at least the specified capacity
     /// with the provided allocator.
-    pub fn with_capacity_in(capacity: usize, alloc: A) -> Vec<T, A> {
+    pub fn with_capacity_in(capacity: usize, alloc: A) -> VecA<T, A> {
         let mut v = Self::new_in(alloc);
         v.set_capacity(capacity).unwrap();
         v
     }
 
-    /// Constructs a new, empty `Vec<T, A>` with at least the specified capacity.
-    pub fn with_capacity_auto(capacity: usize) -> Vec<T, A>
+    /// Constructs a new, empty `VecA<T>` with at least the specified capacity.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use pstd::Vec;
+    /// let mut v = Vec::with_capacity(10);
+    /// v.push("England");
+    /// v.push("France");
+    /// assert!( v.len() == 2 );
+    /// for s in &v { println!("s={}",s); }
+    /// ```
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> VecA<T, A>
     where
         A: Default,
     {
@@ -656,7 +660,7 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     /// Reserves capacity for at least `additional` more elements to be inserted
-    /// in the given `Vec<T>`.
+    /// in the given `VecA<T>`.
     pub fn reserve(&mut self, additional: usize) {
         let capacity = self.len + additional;
         // Could round up to power of 2 here.
@@ -666,7 +670,7 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     /// Reserves minimum capacity for at least `additional` more elements to be inserted
-    /// in the given `Vec<T>`.
+    /// in the given `VecA<T>`.
     pub fn reserve_exact(&mut self, additional: usize) {
         let capacity = self.len + additional;
         if capacity > self.cap {
@@ -687,37 +691,16 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 }
 
-impl<T> Vec<T> {
-    /// Constructs a new, empty `Vec<T>` with at least the specified capacity..
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use pstd::Vec;
-    /// let mut v = Vec::with_capacity(10);
-    /// v.push("England");
-    /// v.push("France");
-    /// assert!( v.len() == 2 );
-    /// for s in &v { println!("s={}",s); }
-    /// ```
-    #[must_use]
-    pub fn with_capacity(capacity: usize) -> Self {
-        let mut v = Self::new();
-        v.set_capacity(capacity).unwrap();
-        v
-    }
-}
-
 /// # Conversion methods.
 ///
 /// These convert a [`Vec`] to and from various types.
-impl<T, A: Allocator> Vec<T, A> {
+impl<T, A: Allocator> VecA<T, A> {
     /// Converts the vector into `Box<[T]>` owned slice.
-    pub fn into_boxed_slice(mut self) -> crate::Box<[T], A> {
+    pub fn into_boxed_slice(mut self) -> crate::BoxA<[T], A> {
         self.shrink_to_fit();
         let (p, len, _cap, a) = self.into_parts_with_alloc();
         let nn = NonNull::slice_from_raw_parts(p, len);
-        crate::Box { nn, a }
+        crate::BoxA { nn, a }
     }
 
     /// Extracts a slice containing the entire vector.
@@ -753,34 +736,34 @@ impl<T, A: Allocator> Vec<T, A> {
         self.nn.as_ptr()
     }
 
-    /// Decomposes a `Vec<T>` into its components: `(NonNull pointer, length, capacity)`.
+    /// Decomposes a `VecA<T>` into its components: `(NonNull pointer, length, capacity)`.
     pub fn into_parts(self) -> (NonNull<T>, usize, usize) {
         let (ptr, len, capacity) = self.into_raw_parts();
         // SAFETY: A `Vec` always has a non-null pointer.
         (unsafe { NonNull::new_unchecked(ptr) }, len, capacity)
     }
 
-    /// Decomposes a `Vec<T>` into its components: `(NonNull pointer, length, capacity, allocator)`.
+    /// Decomposes a `VecA<T>` into its components: `(NonNull pointer, length, capacity, allocator)`.
     pub fn into_parts_with_alloc(self) -> (NonNull<T>, usize, usize, A) {
         let (ptr, len, capacity, alloc) = self.into_raw_parts_with_alloc();
         // SAFETY: A `Vec` always has a non-null pointer.
         (unsafe { NonNull::new_unchecked(ptr) }, len, capacity, alloc)
     }
 
-    /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity)`.
+    /// Decomposes a `VecA<T>` into its raw components: `(pointer, length, capacity)`.
     pub fn into_raw_parts(self) -> (*mut T, usize, usize) {
         let mut me = ManuallyDrop::new(self);
         (me.as_mut_ptr(), me.len, me.cap)
     }
 
-    /// Decomposes a `Vec<T>` into its raw components: `(pointer, length, capacity, allocator)`.
+    /// Decomposes a `VecA<T>` into its raw components: `(pointer, length, capacity, allocator)`.
     pub fn into_raw_parts_with_alloc(self) -> (*mut T, usize, usize, A) {
         let mut me = ManuallyDrop::new(self);
         let alloc = unsafe { ptr::read(&me.alloc) };
         (me.as_mut_ptr(), me.len, me.cap, alloc)
     }
 
-    /// Creates a `Vec<T, A>` directly from a `NonNull` pointer, a length, a capacity,
+    /// Creates a `VecA<T, A>` directly from a `NonNull` pointer, a length, a capacity,
     /// and an allocator.
     ///
     /// # Safety
@@ -796,7 +779,7 @@ impl<T, A: Allocator> Vec<T, A> {
         }
     }
 
-    /// Creates a `Vec<T, A>` directly from a pointer, a length, a capacity,
+    /// Creates a `VecA<T, A>` directly from a pointer, a length, a capacity,
     /// and an allocator.
     ///
     /// # Safety
@@ -823,7 +806,7 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 
     /*
-        /// Interns the `Vec<T>`, making the underlying memory read-only. This method should be
+        /// Interns the `VecA<T>`, making the underlying memory read-only. This method should be
         /// called during compile time. (This is a no-op if called during runtime)
         ///
         /// This method must be called if the memory used by `Vec` needs to appear in the final
@@ -846,7 +829,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// reading from a file) before marking the data as initialized using the
     /// [`set_len`] method.
     ///
-    /// [`set_len`]: Vec::set_len
+    /// [`set_len`]: VecA::set_len
     ///
     /// # Examples
     ///
@@ -888,20 +871,20 @@ impl<T, A: Allocator> Vec<T, A> {
     /// - `new_len` must be less than or equal to [`capacity()`].
     /// - The elements at `old_len..new_len` must be initialized.
     ///
-    /// [`capacity()`]: Vec::capacity
+    /// [`capacity()`]: VecA::capacity
     ///
     pub unsafe fn set_len(&mut self, new_len: usize) {
         assert!(new_len <= self.cap);
         self.len = new_len;
     }
 
-    /// Groups every `N` elements in the `Vec<T>` into chunks to produce a `Vec<[T; N]>`, dropping
+    /// Groups every `N` elements in the `VecA<T>` into chunks to produce a `VecA<[T; N]>`, dropping
     /// elements in the remainder. `N` must be greater than zero.
     ///
     /// If the capacity is not a multiple of the chunk size, the buffer will shrink down to the
     /// nearest multiple with a reallocation or deallocation.
     ///
-    /// This function can be used to reverse [`Vec::into_flattened`].
+    /// This function can be used to reverse [`VecA::into_flattened`].
     ///
     /// # Examples
     ///
@@ -920,7 +903,7 @@ impl<T, A: Allocator> Vec<T, A> {
     /// let reshaped: Vec<[[[u8; 8]; 8]; 8]> = flat.into_chunks().into_chunks().into_chunks();
     /// assert_eq!(reshaped.len(), 1);
     /// ```
-    pub fn into_chunks<const N: usize>(mut self) -> Vec<[T; N], A> {
+    pub fn into_chunks<const N: usize>(mut self) -> VecA<[T; N], A> {
         const {
             assert!(N != 0, "chunk size must be greater than zero");
         }
@@ -946,12 +929,12 @@ impl<T, A: Allocator> Vec<T, A> {
         // - `len / N <= cap / N` because `len <= cap`
         // - the allocated memory consists of `len / N` valid values of type `[T; N]`
         // - `cap / N` fits the size of the allocated memory after shrinking
-        unsafe { Vec::from_raw_parts_in(ptr.cast(), len / N, cap / N, alloc) }
+        unsafe { VecA::from_raw_parts_in(ptr.cast(), len / N, cap / N, alloc) }
     }
 }
 
-impl<T, A: Allocator, const N: usize> Vec<[T; N], A> {
-    /// Takes a `Vec<[T; N]>` and flattens it into a `Vec<T>`.
+impl<T, A: Allocator, const N: usize> VecA<[T; N], A> {
+    /// Takes a `VecA<[T; N]>` and flattens it into a `VecA<T>`.
     ///
     /// # Panics
     ///
@@ -971,7 +954,7 @@ impl<T, A: Allocator, const N: usize> Vec<[T; N], A> {
     /// let mut flattened = vec.into_flattened();
     /// assert_eq!(flattened.pop(), Some(6));
     /// ```
-    pub fn into_flattened(self) -> Vec<T, A> {
+    pub fn into_flattened(self) -> VecA<T, A> {
         let (ptr, len, cap, alloc) = self.into_raw_parts_with_alloc();
         let (new_len, new_cap) = if mem::size_of::<T>() == 0 {
             (len.checked_mul(N).expect("vec len overflow"), usize::MAX)
@@ -989,13 +972,13 @@ impl<T, A: Allocator, const N: usize> Vec<[T; N], A> {
         // - `new_cap` refers to the same sized allocation as `cap` because
         // `new_cap * size_of::<T>()` == `cap * size_of::<[T; N]>()`
         // - `len` <= `cap`, so `len * N` <= `cap * N`.
-        unsafe { Vec::<T, A>::from_raw_parts_in(ptr.cast(), new_len, new_cap, alloc) }
+        unsafe { VecA::<T, A>::from_raw_parts_in(ptr.cast(), new_len, new_cap, alloc) }
     }
 }
 
-impl<T> Vec<T> {
-    /// Creates a `Vec<T>` where each element is produced by calling `f` with
-    /// that element's index while walking forward through the `Vec<T>`.
+impl<T> VecA<T> {
+    /// Creates a `VecA<T>` where each element is produced by calling `f` with
+    /// that element's index while walking forward through the `VecA<T>`.
     ///
     /// # Example
     ///
@@ -1003,19 +986,19 @@ impl<T> Vec<T> {
     /// use pstd::Vec;
     /// let v = Vec::from_fn(10, |i| i * 2);
     /// ```
-    pub fn from_fn<F>(length: usize, f: F) -> Vec<T>
+    pub fn from_fn<F>(length: usize, f: F) -> VecA<T>
     where
         F: FnMut(usize) -> T,
     {
         let mut f = f;
-        let mut m = Vec::with_capacity(length);
+        let mut m = VecA::with_capacity(length);
         for i in 0..length {
             m.push(f(i));
         }
         m
     }
 
-    /// Creates a `Vec<T>` directly from a `NonNull` pointer, a length, and a capacity.
+    /// Creates a `VecA<T>` directly from a `NonNull` pointer, a length, and a capacity.
     ///
     /// # Safety
     ///
@@ -1036,21 +1019,21 @@ impl<T> Vec<T> {
     ///     let rebuilt = Vec::from_parts(p, len, cap);
     /// }
     /// ```
-    pub unsafe fn from_parts(ptr: NonNull<T>, length: usize, capacity: usize) -> Vec<T> {
-        let mut v = Vec::new();
+    pub unsafe fn from_parts(ptr: NonNull<T>, length: usize, capacity: usize) -> VecA<T> {
+        let mut v = VecA::new();
         v.len = length;
         v.cap = capacity;
         v.nn = ptr;
         v
     }
 
-    /// Creates a `Vec<T>` directly from a pointer, a length, and a capacity.
+    /// Creates a `VecA<T>` directly from a pointer, a length, and a capacity.
     ///
     /// # Safety
     ///
     /// Parameters must all be correct, ptr must have been allocated from Global allocator.
-    pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize) -> Vec<T> {
-        let mut v = Vec::new();
+    pub unsafe fn from_raw_parts(ptr: *mut T, length: usize, capacity: usize) -> VecA<T> {
+        let mut v = VecA::new();
         v.len = length;
         v.cap = capacity;
         v.nn = unsafe { NonNull::new_unchecked(ptr) };
@@ -1060,8 +1043,8 @@ impl<T> Vec<T> {
 
 /// # Non-panic methods.
 /// These are panic-free alternatives for programs that must not panic.
-impl<T, A: Allocator> Vec<T, A> {
-    /// Constructs a new, empty Vec<T, A> with at least the specified capacity with the provided allocator.
+impl<T, A: Allocator> VecA<T, A> {
+    /// Constructs a new, empty VecA<T, A> with at least the specified capacity with the provided allocator.
     pub fn try_with_capacity_in(capacity: usize, alloc: A) -> Result<Self, TryReserveError> {
         let mut v = Self::new_in(alloc);
         v.set_capacity(capacity)?;
@@ -1116,10 +1099,10 @@ impl<T, A: Allocator> Vec<T, A> {
     }
 }
 
-impl<T> Vec<T> {
-    /// Constructs a new, empty `Vec<T>` with at least the specified capacity.
-    pub fn try_with_capacity(capacity: usize) -> Result<Vec<T>, TryReserveError> {
-        let mut v = Vec::<T>::new();
+impl<T> VecA<T> {
+    /// Constructs a new, empty `VecA<T>` with at least the specified capacity.
+    pub fn try_with_capacity(capacity: usize) -> Result<VecA<T>, TryReserveError> {
+        let mut v = VecA::<T>::new();
         v.set_capacity(capacity)?;
         Ok(v)
     }
@@ -1129,39 +1112,39 @@ impl<T> Vec<T> {
 // Trait Impls ##############################################################
 // ##########################################################################
 
-unsafe impl<T: Send, A: Allocator + Send> Send for Vec<T, A> {}
-unsafe impl<T: Sync, A: Allocator + Send> Sync for Vec<T, A> {}
+unsafe impl<T: Send, A: Allocator + Send> Send for VecA<T, A> {}
+unsafe impl<T: Sync, A: Allocator + Send> Sync for VecA<T, A> {}
 
-impl<T: Eq, A: Allocator> Eq for Vec<T, A> {}
+impl<T: Eq, A: Allocator> Eq for VecA<T, A> {}
 
-impl<T, A1, A2> PartialOrd<Vec<T, A2>> for Vec<T, A1>
+impl<T, A1, A2> PartialOrd<VecA<T, A2>> for VecA<T, A1>
 where
     T: PartialOrd,
     A1: Allocator,
     A2: Allocator,
 {
-    fn partial_cmp(&self, other: &Vec<T, A2>) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &VecA<T, A2>) -> Option<std::cmp::Ordering> {
         PartialOrd::partial_cmp(&**self, &**other)
     }
 }
 
 /// Implements ordering of vectors, [lexicographically](Ord#lexicographical-comparison).
-impl<T: Ord, A: Allocator> Ord for Vec<T, A> {
+impl<T: Ord, A: Allocator> Ord for VecA<T, A> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         std::cmp::Ord::cmp(&**self, &**other)
     }
 }
 
-impl<T, U, A1: Allocator, A2: Allocator> PartialEq<Vec<U, A2>> for Vec<T, A1>
+impl<T, U, A1: Allocator, A2: Allocator> PartialEq<VecA<U, A2>> for VecA<T, A1>
 where
     T: PartialEq<U>,
 {
-    fn eq(&self, other: &Vec<U, A2>) -> bool {
+    fn eq(&self, other: &VecA<U, A2>) -> bool {
         self[..] == other[..]
     }
 }
 
-impl<T, U, A: Allocator, const N: usize> PartialEq<[U; N]> for Vec<T, A>
+impl<T, U, A: Allocator, const N: usize> PartialEq<[U; N]> for VecA<T, A>
 where
     T: PartialEq<U>,
 {
@@ -1170,7 +1153,7 @@ where
     }
 }
 
-impl<T, U, A: Allocator, const N: usize> PartialEq<&[U; N]> for Vec<T, A>
+impl<T, U, A: Allocator, const N: usize> PartialEq<&[U; N]> for VecA<T, A>
 where
     T: PartialEq<U>,
 {
@@ -1179,39 +1162,39 @@ where
     }
 }
 
-impl<T: Hash, A: Allocator> Hash for Vec<T, A> {
+impl<T: Hash, A: Allocator> Hash for VecA<T, A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         Hash::hash(&**self, state)
     }
 }
 
-impl<T, I: SliceIndex<[T]>, A: Allocator> Index<I> for Vec<T, A> {
+impl<T, I: SliceIndex<[T]>, A: Allocator> Index<I> for VecA<T, A> {
     type Output = I::Output;
     fn index(&self, index: I) -> &Self::Output {
         Index::index(&**self, index)
     }
 }
 
-impl<T, I: SliceIndex<[T]>, A: Allocator> IndexMut<I> for Vec<T, A> {
+impl<T, I: SliceIndex<[T]>, A: Allocator> IndexMut<I> for VecA<T, A> {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
         IndexMut::index_mut(&mut **self, index)
     }
 }
 
-impl<T, A: Allocator> Deref for Vec<T, A> {
+impl<T, A: Allocator> Deref for VecA<T, A> {
     type Target = [T];
     fn deref(&self) -> &[T] {
         unsafe { std::slice::from_raw_parts(self.nn.as_ptr(), self.len) }
     }
 }
 
-impl<T, A: Allocator> DerefMut for Vec<T, A> {
+impl<T, A: Allocator> DerefMut for VecA<T, A> {
     fn deref_mut(&mut self) -> &mut [T] {
         unsafe { std::slice::from_raw_parts_mut(self.nn.as_ptr(), self.len) }
     }
 }
 
-impl<'a, T: 'a, A: Allocator> IntoIterator for &'a Vec<T, A> {
+impl<'a, T: 'a, A: Allocator> IntoIterator for &'a VecA<T, A> {
     type Item = &'a T;
     type IntoIter = slice::Iter<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
@@ -1219,7 +1202,7 @@ impl<'a, T: 'a, A: Allocator> IntoIterator for &'a Vec<T, A> {
     }
 }
 
-impl<'a, T: 'a, A: Allocator> IntoIterator for &'a mut Vec<T, A> {
+impl<'a, T: 'a, A: Allocator> IntoIterator for &'a mut VecA<T, A> {
     type Item = &'a mut T;
     type IntoIter = slice::IterMut<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
@@ -1227,7 +1210,7 @@ impl<'a, T: 'a, A: Allocator> IntoIterator for &'a mut Vec<T, A> {
     }
 }
 
-impl<T, A: Allocator> IntoIterator for Vec<T, A> {
+impl<T, A: Allocator> IntoIterator for VecA<T, A> {
     type Item = T;
     type IntoIter = IntoIter<T, A>;
     fn into_iter(self) -> Self::IntoIter {
@@ -1235,7 +1218,7 @@ impl<T, A: Allocator> IntoIterator for Vec<T, A> {
     }
 }
 
-impl<T, A: Allocator> Extend<T> for Vec<T, A> {
+impl<T, A: Allocator> Extend<T> for VecA<T, A> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for e in iter {
             self.push(e);
@@ -1243,7 +1226,7 @@ impl<T, A: Allocator> Extend<T> for Vec<T, A> {
     }
 }
 
-impl<'a, T: Copy + 'a, A: Allocator> Extend<&'a T> for Vec<T, A> {
+impl<'a, T: Copy + 'a, A: Allocator> Extend<&'a T> for VecA<T, A> {
     fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
         for e in iter {
             self.push(*e);
@@ -1251,9 +1234,9 @@ impl<'a, T: Copy + 'a, A: Allocator> Extend<&'a T> for Vec<T, A> {
     }
 }
 
-impl<T: Clone, A: Allocator + Clone> Clone for Vec<T, A> {
+impl<T: Clone, A: Allocator + Clone> Clone for VecA<T, A> {
     fn clone(&self) -> Self {
-        let mut v = Vec::with_capacity_in(self.len, self.alloc.clone());
+        let mut v = VecA::with_capacity_in(self.len, self.alloc.clone());
         for e in self.iter() {
             v.push(e.clone());
         }
@@ -1261,7 +1244,7 @@ impl<T: Clone, A: Allocator + Clone> Clone for Vec<T, A> {
     }
 }
 
-impl<T, A: Allocator> Drop for Vec<T, A> {
+impl<T, A: Allocator> Drop for VecA<T, A> {
     fn drop(&mut self) {
         while self.len != 0 {
             self.pop();
@@ -1270,29 +1253,29 @@ impl<T, A: Allocator> Drop for Vec<T, A> {
     }
 }
 
-impl<T> Default for Vec<T> {
+impl<T> Default for VecA<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Debug, A: Allocator> Debug for Vec<T, A> {
+impl<T: Debug, A: Allocator> Debug for VecA<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&**self, f)
     }
 }
 
 // From implementations
-impl<T: Clone> From<&[T]> for Vec<T> {
-    /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
+impl<T: Clone> From<&[T]> for VecA<T> {
+    /// Allocates a `VecA<T>` and fills it by cloning `s`'s items.
     ///
     /// # Examples
     ///
     /// ```
     /// assert_eq!(Vec::from(&[1, 2, 3][..]), vec![1, 2, 3]);
     /// ```
-    fn from(s: &[T]) -> Vec<T> {
-        let mut v = Vec::new();
+    fn from(s: &[T]) -> VecA<T> {
+        let mut v = VecA::new();
         for e in s {
             v.push(e.clone());
         }
@@ -1300,16 +1283,16 @@ impl<T: Clone> From<&[T]> for Vec<T> {
     }
 }
 
-impl<T: Clone> From<&mut [T]> for Vec<T> {
-    /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
+impl<T: Clone> From<&mut [T]> for VecA<T> {
+    /// Allocates a `VecA<T>` and fills it by cloning `s`'s items.
     ///
     /// # Examples
     ///
     /// ```
     /// assert_eq!(Vec::from(&[1, 2, 3][..]), vec![1, 2, 3]);
     /// ```
-    fn from(s: &mut [T]) -> Vec<T> {
-        let mut v = Vec::new();
+    fn from(s: &mut [T]) -> VecA<T> {
+        let mut v = VecA::new();
         for e in s {
             v.push(e.clone());
         }
@@ -1317,22 +1300,22 @@ impl<T: Clone> From<&mut [T]> for Vec<T> {
     }
 }
 
-impl<T, const N: usize> From<[T; N]> for Vec<T> {
-    /// Allocates a `Vec<T>` and moves `a`'s items into it.
+impl<T, const N: usize> From<[T; N]> for VecA<T> {
+    /// Allocates a `VecA<T>` and moves `a`'s items into it.
     ///
     /// # Examples
     ///
     /// ```
     /// assert_eq!(Vec::from([1, 2, 3]), vec![1, 2, 3]);
     /// ```
-    fn from(a: [T; N]) -> Vec<T> {
-        Vec::from_iter(a)
+    fn from(a: [T; N]) -> VecA<T> {
+        VecA::from_iter(a)
     }
 }
 
-impl<T> FromIterator<T> for Vec<T> {
-    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Vec<T> {
-        let mut v = Vec::new();
+impl<T> FromIterator<T> for VecA<T> {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> VecA<T> {
+        let mut v = VecA::new();
         for e in iter {
             v.push(e);
         }
@@ -1340,70 +1323,70 @@ impl<T> FromIterator<T> for Vec<T> {
     }
 }
 
-impl<T: Clone, const N: usize> From<&[T; N]> for Vec<T> {
-    /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
+impl<T: Clone, const N: usize> From<&[T; N]> for VecA<T> {
+    /// Allocates a `VecA<T>` and fills it by cloning `s`'s items.
     ///
     /// # Examples
     ///
     /// ```
     /// assert_eq!(Vec::from(&[1, 2, 3]), vec![1, 2, 3]);
     /// ```
-    fn from(s: &[T; N]) -> Vec<T> {
+    fn from(s: &[T; N]) -> VecA<T> {
         Self::from(s.as_slice())
     }
 }
 
-impl<T: Clone, const N: usize> From<&mut [T; N]> for Vec<T> {
-    /// Allocates a `Vec<T>` and fills it by cloning `s`'s items.
+impl<T: Clone, const N: usize> From<&mut [T; N]> for VecA<T> {
+    /// Allocates a `VecA<T>` and fills it by cloning `s`'s items.
     ///
     /// # Examples
     ///
     /// ```
     /// assert_eq!(Vec::from(&mut [1, 2, 3]), vec![1, 2, 3]);
     /// ```
-    fn from(s: &mut [T; N]) -> Vec<T> {
+    fn from(s: &mut [T; N]) -> VecA<T> {
         Self::from(s.as_mut_slice())
     }
 }
 
-impl<T, A: Allocator> AsRef<Vec<T, A>> for Vec<T, A> {
-    fn as_ref(&self) -> &Vec<T, A> {
+impl<T, A: Allocator> AsRef<VecA<T, A>> for VecA<T, A> {
+    fn as_ref(&self) -> &VecA<T, A> {
         self
     }
 }
 
-impl<T, A: Allocator> AsMut<Vec<T, A>> for Vec<T, A> {
-    fn as_mut(&mut self) -> &mut Vec<T, A> {
+impl<T, A: Allocator> AsMut<VecA<T, A>> for VecA<T, A> {
+    fn as_mut(&mut self) -> &mut VecA<T, A> {
         self
     }
 }
 
-impl<T, A: Allocator> AsRef<[T]> for Vec<T, A> {
+impl<T, A: Allocator> AsRef<[T]> for VecA<T, A> {
     fn as_ref(&self) -> &[T] {
         self
     }
 }
 
-impl<T, A: Allocator> AsMut<[T]> for Vec<T, A> {
+impl<T, A: Allocator> AsMut<[T]> for VecA<T, A> {
     fn as_mut(&mut self) -> &mut [T] {
         self
     }
 }
 
-impl<T, A: Allocator> Borrow<[T]> for Vec<T, A> {
+impl<T, A: Allocator> Borrow<[T]> for VecA<T, A> {
     fn borrow(&self) -> &[T] {
         &self[..]
     }
 }
 
-impl<T, A: Allocator> BorrowMut<[T]> for Vec<T, A> {
+impl<T, A: Allocator> BorrowMut<[T]> for VecA<T, A> {
     fn borrow_mut(&mut self) -> &mut [T] {
         &mut self[..]
     }
 }
 
-impl<T, A: Allocator, const N: usize> TryFrom<Vec<T, A>> for [T; N] {
-    type Error = Vec<T, A>;
+impl<T, A: Allocator, const N: usize> TryFrom<VecA<T, A>> for [T; N] {
+    type Error = VecA<T, A>;
 
     /// Gets the entire contents of the `Vec<T>` as an array,
     /// if its size exactly matches that of the requested array.
@@ -1421,8 +1404,8 @@ impl<T, A: Allocator, const N: usize> TryFrom<Vec<T, A>> for [T; N] {
     /// assert_eq!(r, Err(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
     /// ```
     ///
-    /// If you're fine with just getting a prefix of the `Vec<T>`,
-    /// you can call [`.truncate(N)`](Vec::truncate) first.
+    /// If you're fine with just getting a prefix of the `VecA<T>`,
+    /// you can call [`.truncate(N)`](VecA::truncate) first.
     /// ```
     /// let mut v = String::from("hello world").into_bytes();
     /// v.sort();
@@ -1431,7 +1414,7 @@ impl<T, A: Allocator, const N: usize> TryFrom<Vec<T, A>> for [T; N] {
     /// assert_eq!(a, b' ');
     /// assert_eq!(b, b'd');
     /// ```
-    fn try_from(mut vec: Vec<T, A>) -> Result<[T; N], Vec<T, A>> {
+    fn try_from(mut vec: VecA<T, A>) -> Result<[T; N], VecA<T, A>> {
         if vec.len() != N {
             return Err(vec);
         }
@@ -1458,11 +1441,11 @@ impl<T, A: Allocator, const N: usize> TryFrom<Vec<T, A>> for [T; N] {
 pub struct IntoIter<T, A: Allocator = Global> {
     start: usize,
     end: usize,
-    v: Vec<T, A>,
+    v: VecA<T, A>,
 }
 
 impl<T, A: Allocator> IntoIter<T, A> {
-    fn new(mut v: Vec<T, A>) -> Self {
+    fn new(mut v: VecA<T, A>) -> Self {
         let end = v.len;
         v.len = 0;
         Self { start: 0, end, v }
@@ -1488,9 +1471,9 @@ impl<T, A> Default for IntoIter<T, A>
 where
     A: Allocator + Default,
 {
-    /// Creates an empty `vec::IntoIter`.
+    /// Creates an empty `VecA::IntoIter`.
     fn default() -> Self {
-        Vec::new_in(Default::default()).into_iter()
+        VecA::new_in(Default::default()).into_iter()
     }
 }
 
@@ -1502,7 +1485,7 @@ impl<T, A: Allocator> AsRef<[T]> for IntoIter<T, A> {
 
 impl<T: Clone, A: Allocator + Clone> Clone for IntoIter<T, A> {
     fn clone(&self) -> Self {
-        let mut v = Vec::new_in(self.allocator().clone());
+        let mut v = VecA::new_in(self.allocator().clone());
         v.extend_from_slice(self.as_slice());
         v.into_iter()
     }
@@ -1554,11 +1537,11 @@ struct Gap<'a, T, A: Allocator> {
     r: usize,   // Read index
     w: usize,   // Write index
     len: usize, // Original len of v
-    v: &'a mut Vec<T, A>,
+    v: &'a mut VecA<T, A>,
 }
 
 impl<'a, T, A: Allocator> Gap<'a, T, A> {
-    fn new(v: &'a mut Vec<T, A>, b: usize) -> Self {
+    fn new(v: &'a mut VecA<T, A>, b: usize) -> Self {
         let len = v.len;
         v.len = 0; // Correct length will be calculated when Gap drops.
         Self { w: b, r: b, v, len }
@@ -1739,7 +1722,7 @@ impl<'a, T, A: Allocator> Drop for Gap<'a, T, A> {
 
 /// An iterator to remove a range.
 ///
-/// This struct is created by [`Vec::drain`].
+/// This struct is created by [`VecA::drain`].
 /// See its documentation for more.
 pub struct Drain<'a, T, A: Allocator = Global> {
     gap: Gap<'a, T, A>,
@@ -1748,7 +1731,7 @@ pub struct Drain<'a, T, A: Allocator = Global> {
 }
 
 impl<'a, T, A: Allocator> Drain<'a, T, A> {
-    fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, range: R) -> Self {
+    fn new<R: RangeBounds<usize>>(vec: &'a mut VecA<T, A>, range: R) -> Self {
         let (b, end) = vec.get_range(range);
         let gap = Gap::new(vec, b);
         Self { gap, end, br: end }
@@ -1827,7 +1810,7 @@ impl<T, A: Allocator> FusedIterator for Drain<'_, T, A> {}
 
 /// An iterator which uses a closure to determine if an element should be removed.
 ///
-/// This struct is created by [`Vec::extract_if`].
+/// This struct is created by [`VecA::extract_if`].
 /// See its documentation for more.
 pub struct ExtractIf<'a, T, F, A: Allocator = Global> {
     gap: Gap<'a, T, A>,
@@ -1836,7 +1819,7 @@ pub struct ExtractIf<'a, T, F, A: Allocator = Global> {
 }
 
 impl<'a, T, F, A: Allocator> ExtractIf<'a, T, F, A> {
-    pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut Vec<T, A>, pred: F, range: R) -> Self {
+    pub(super) fn new<R: RangeBounds<usize>>(vec: &'a mut VecA<T, A>, pred: F, range: R) -> Self {
         let (b, end) = vec.get_range(range);
         let gap = Gap::new(vec, b);
         Self { gap, pred, end }
@@ -1878,7 +1861,7 @@ where
 
 /// A splicing iterator for `Vec`.
 ///
-/// This struct is created by [`Vec::splice()`].
+/// This struct is created by [`VecA::splice()`].
 /// See its documentation for more.
 ///
 #[derive(Debug)]
@@ -1922,9 +1905,9 @@ impl<I: Iterator, A: Allocator + Clone> ExactSizeIterator for Splice<'_, I, A> {
 /// This `struct` is created by the [`peek_mut`] method on [`Vec`]. See
 /// its documentation for more.
 ///
-/// [`peek_mut`]: Vec::peek_mut
+/// [`peek_mut`]: VecA::peek_mut
 pub struct PeekMut<'a, T, A: Allocator = Global> {
-    vec: &'a mut Vec<T, A>,
+    vec: &'a mut VecA<T, A>,
 }
 
 impl<T: fmt::Debug, A: Allocator> fmt::Debug for PeekMut<'_, T, A> {
@@ -1976,8 +1959,8 @@ macro_rules! vec {
 }
 
 #[doc(hidden)]
-pub fn from_elem<T: Clone>(elem: T, n: usize) -> Vec<T> {
-    let mut v = Vec::with_capacity(n);
+pub fn from_elem<T: Clone>(elem: T, n: usize) -> VecA<T> {
+    let mut v = VecA::with_capacity(n);
     for _i in 0..n {
         v.push(elem.clone());
     }

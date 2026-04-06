@@ -35,7 +35,7 @@ pub mod collections;
 
 /// [`Vec`] similar to [`std::vec::Vec`].
 pub mod vec;
-pub use vec::Vec;
+pub use vec::{Vec,VecA};
 
 /// [`String`] similar to [`std::string::String`]
 pub mod string;
@@ -43,7 +43,7 @@ pub use string::String;
 
 /// [`Box`] similar to [`std::boxed::Box`].
 pub mod boxed;
-pub use boxed::Box;
+pub use boxed::{Box,BoxA};
 
 /// [`Rc`] similar to [`std::rc::Rc`].
 pub mod rc;
