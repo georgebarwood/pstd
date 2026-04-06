@@ -1,13 +1,13 @@
 use crate::alloc::{Allocator, Global};
-use std::alloc::Layout;
-use std::cmp::Ordering;
-use std::fmt;
-use std::hash::Hash;
-use std::hash::Hasher;
-use std::ops::Deref;
-use std::ops::DerefMut;
-use std::ptr;
-use std::ptr::NonNull;
+use std::{
+    alloc::Layout,
+    cmp::Ordering,
+    fmt,
+    hash::{Hash, Hasher},
+    ops::{Deref, DerefMut},
+    ptr,
+    ptr::NonNull,
+};
 
 /// A pointer type that uniquely owns a heap allocation of type `T`.
 ///
@@ -97,11 +97,11 @@ impl<T: ?Sized, A: Allocator> Box<T, A> {
         }
 
         // Need to trim any over-allocation!
-        let p = unsafe{ std::slice::from_raw_parts_mut(p, n) };
-        let nn: NonNull<[u8]> = unsafe{ NonNull::new_unchecked(p) };
+        let p = unsafe { std::slice::from_raw_parts_mut(p, n) };
+        let nn: NonNull<[u8]> = unsafe { NonNull::new_unchecked(p) };
         let p: *mut str = nn.as_ptr() as *mut str;
         let nn: NonNull<str> = unsafe { NonNull::new_unchecked(p) };
-    
+
         Box::<str, A> { nn, a }
     }
 }

@@ -1,17 +1,25 @@
 //!
-//! Values allocated from Temp and Local Allocators must be freed by the same thread that allocated them, or the program will abort.
+//! [`Temp`](localalloc::Temp) is for heap allocations that last a short time.
 //!
-//! Temp is for heap allocations that last a short time.
+//! [`Local`](localalloc::Local) is for heap allocations that last a longer time ( but not longer than the thread ).
 //!
-//! Local is for heap allocations that last a longer time ( but not longer than the thread ).
+//! Temp and Local are not Send or Sync, so values allocated from them cannot be accssed by other threads.
+//!
+//! Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
+//! This means there is no minimum allocation internally. 
+//! Allocations larger than 64K bytes, or having more than 128 byte alignment, are routed to [`Global`](alloc::Global).
+//!
+//! Local has an array of free lists, one for each size class 16,32,64...64K.
+//! The minimum internal allocation (on a 64-bit system) is 16 bytes, which is also the maximum alignment.
+//! Allocations larger than 64K bytes, or having more than 16 byte alignment, are routed to [`Global`](alloc::Global).
 //!
 //! Example
 //! ```
 //! use pstd::{Box,Vec,localalloc::Local};
 //! let b = Box::new_in(98, Local::new());
 //! assert!(*b == 98);
-//! type LBox<T> = Box::<T,Local>; // Locally allocated Box.
-//! let b = LBox::auto(99); // Alternative to using new_in.
+//! type TBox<T> = Box::<T,Temp>; // Temp allocated Box.
+//! let b = TBox::auto(99); // Alternative to using new_in.
 //! assert!(*b == 99);
 //! type LVec<T> = Vec<T,Local>; // Locally allocated Vec.
 //! let mut v = LVec::with_capacity_auto(4); // Pre-allocate space for 4 values.
@@ -37,9 +45,9 @@ thread_local! {
 const NOT_MIRI: bool = !cfg!(miri);
 const K: usize = 1024;
 const MAX_ALIGN: usize = 128;
-const BSIZE: usize = 1024 * K; // 20 bits
-const MAX_SIZE: usize = BSIZE / 16; // 16 bits
-const MAX_SC: usize = 14;
+const BSIZE: usize = 1024 * K; // 20 bits = 1MB
+const MAX_SIZE: usize = BSIZE / 16; // 16 bits = 64K
+const MAX_SC: usize = 1 + ( MAX_SIZE.ilog2() as usize ) - L2_MIN_SIZE;
 const MIN_SIZE: usize = 2 * mem::size_of::<FreeMem>(); // 16 for 64-bit system.
 const L2_MIN_SIZE: usize = MIN_SIZE.ilog2() as usize;
 
@@ -199,10 +207,13 @@ impl Drop for BumpAllocator {
     fn drop(&mut self) {
         #[cfg(feature = "log-bump")]
         println!(
-            "BumpAllocator Dropping total_count={} total_alloc={} max_alloc={} reset_count={}",
-            self._total_count, self._total_alloc, self._max_alloc, self._reset_count
+            "BumpAllocator Dropping alloc_count={} total_count={} total_alloc={} max_alloc={} reset_count={}",
+            self.alloc_count, self._total_count, self._total_alloc, self._max_alloc, self._reset_count
         );
 
+        /* Since Temp and Local are !Sync and !Send this check should no longer be necessary.
+           Although it might be useful to detect leaks.
+           
         if self.alloc_count != 0 {
             println!(
                 "BumpAllocator has {} outstanding allocations, aborting",
@@ -210,6 +221,7 @@ impl Drop for BumpAllocator {
             );
             std::process::abort();
         }
+        */
 
         self.cur.drop();
         self.reset_overflow();
@@ -236,10 +248,10 @@ struct ChainAllocator {
 impl ChainAllocator {
     fn new() -> Self {
         Self {
-            free: [null(); MAX_SC],
             alloc_count: 0,
             idx: 0,
             cur: Block::new(),
+            free: [null(); MAX_SC],
             overflow: Vec::new(),
             _alloc_bytes: 0,
             _max_alloc: 0,
@@ -249,7 +261,7 @@ impl ChainAllocator {
         }
     }
 
-    /// Calculates size class index and size for that class.
+    /// Calculate size class index and size for n-byte storage request.
     const fn size_class(mut n: usize) -> (usize, usize) {
         if n < MIN_SIZE {
             n = MIN_SIZE;
@@ -344,10 +356,13 @@ impl Drop for ChainAllocator {
     fn drop(&mut self) {
         #[cfg(feature = "log-bump")]
         println!(
-            "ChainAllocator Dropping total_count={} total_alloc={} max_alloc={} reset_count={}",
-            self._total_count, self._total_alloc, self._max_alloc, self._reset_count
+            "ChainAllocator Dropping alloc_count={} total_count={} total_alloc={} max_alloc={} reset_count={}",
+            self.alloc_count, self._total_count, self._total_alloc, self._max_alloc, self._reset_count
         );
 
+        
+        /* Since Temp and Local are !Sync and !Send this check should no longer be necessary.
+           Although it might be useful to detect leaks.
         if self.alloc_count != 0 {
             println!(
                 "ChainAllocator has {} outstanding allocations, aborting",
@@ -355,6 +370,7 @@ impl Drop for ChainAllocator {
             );
             std::process::abort();
         }
+        */
 
         self.cur.drop();
         self.reset_overflow();
