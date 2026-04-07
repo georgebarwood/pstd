@@ -12,7 +12,7 @@ use std::{
 /// A pointer type that uniquely owns a heap allocation of type `T`.
 ///
 /// Boxing dyn values requires the dynbox feature to be enabled ( which currently requires the nightly toolchain ).
-pub struct BoxA<T: ?Sized, A: Allocator = Global> {
+pub struct BoxA<T: ?Sized, A: Allocator> {
     pub(crate) nn: NonNull<T>,
     pub(crate) a: A,
 }

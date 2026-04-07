@@ -39,7 +39,7 @@ pub use vec::{Vec, VecA};
 
 /// [`String`] similar to [`std::string::String`]
 pub mod string;
-pub use string::String;
+pub use string::{String, StringA};
 
 /// [`Box`] similar to [`std::boxed::Box`].
 pub mod boxed;
@@ -47,7 +47,7 @@ pub use boxed::{Box, BoxA};
 
 /// [`Rc`] similar to [`std::rc::Rc`].
 pub mod rc;
-pub use rc::{Rc, RcSlice, RcStr};
+pub use rc::{Rc, RcA, RcSlice, RcSliceA, RcStr, RcStrA };
 
 #[cfg(test)]
 mod testing {

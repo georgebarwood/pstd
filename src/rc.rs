@@ -12,11 +12,14 @@ use std::{
     ptr::NonNull,
 };
 
+/// Rc allocated from Global.
+pub type Rc<T> = RcA<T, Global>;
+
 /// A single-threaded reference-counting pointer. ‘Rc’ stands for ‘Reference Counted’.
 ///
 /// Note: does not currently support DSTs as this would require various unstable library features
 /// but [`RcSlice`] and [`RcStr`] may be used instead. Dyn values must be boxed.
-pub struct Rc<T, A: Allocator = Global> {
+pub struct RcA<T, A: Allocator> {
     nn: NonNull<RcInner<T, A>>,
 }
 
@@ -26,7 +29,7 @@ struct RcInner<T, A: Allocator> {
     v: T,
 }
 
-impl<T, A: Allocator> Rc<T, A> {
+impl<T, A: Allocator> RcA<T, A> {
     /// Allocate a new Rc and move v into it.
     pub fn new(v: T) -> Self
     where
@@ -62,8 +65,8 @@ impl<T, A: Allocator> Rc<T, A> {
     }
 }
 
-impl<T, A: Allocator> Clone for Rc<T, A> {
-    fn clone(&self) -> Rc<T, A> {
+impl<T, A: Allocator> Clone for RcA<T, A> {
+    fn clone(&self) -> Self {
         unsafe {
             let p = self.nn.as_ptr();
             (*p).cc += 1;
@@ -73,7 +76,7 @@ impl<T, A: Allocator> Clone for Rc<T, A> {
     }
 }
 
-impl<T, A: Allocator> Drop for Rc<T, A> {
+impl<T, A: Allocator> Drop for RcA<T, A> {
     fn drop(&mut self) {
         unsafe {
             let p = self.nn.as_ptr();
@@ -91,7 +94,7 @@ impl<T, A: Allocator> Drop for Rc<T, A> {
     }
 }
 
-impl<T, A: Allocator> Deref for Rc<T, A> {
+impl<T, A: Allocator> Deref for RcA<T, A> {
     type Target = T;
     fn deref(&self) -> &T {
         let p = self.nn.as_ptr();
@@ -99,45 +102,45 @@ impl<T, A: Allocator> Deref for Rc<T, A> {
     }
 }
 
-impl<T, A: Allocator> Borrow<T> for Rc<T, A> {
+impl<T, A: Allocator> Borrow<T> for RcA<T, A> {
     fn borrow(&self) -> &T {
         self.deref()
     }
 }
 
-impl<T: Eq, A: Allocator> Eq for Rc<T, A> {}
+impl<T: Eq, A: Allocator> Eq for RcA<T, A> {}
 
-impl<T: PartialEq, A: Allocator> PartialEq for Rc<T, A> {
+impl<T: PartialEq, A: Allocator> PartialEq for RcA<T, A> {
     fn eq(&self, other: &Self) -> bool {
         PartialEq::eq(self.deref(), other.deref())
     }
 }
 
-impl<T: Ord, A: Allocator> Ord for Rc<T, A> {
+impl<T: Ord, A: Allocator> Ord for RcA<T, A> {
     fn cmp(&self, other: &Self) -> Ordering {
         Ord::cmp(self.deref(), other.deref())
     }
 }
 
-impl<T: PartialOrd, A: Allocator> PartialOrd for Rc<T, A> {
+impl<T: PartialOrd, A: Allocator> PartialOrd for RcA<T, A> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         PartialOrd::partial_cmp(self.deref(), other.deref())
     }
 }
 
-impl<T: Hash, A: Allocator> Hash for Rc<T, A> {
+impl<T: Hash, A: Allocator> Hash for RcA<T, A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.deref().hash(state);
     }
 }
 
-impl<T: fmt::Display, A: Allocator> fmt::Display for Rc<T, A> {
+impl<T: fmt::Display, A: Allocator> fmt::Display for RcA<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self.deref(), f)
     }
 }
 
-impl<T: fmt::Debug, A: Allocator> fmt::Debug for Rc<T, A> {
+impl<T: fmt::Debug, A: Allocator> fmt::Debug for RcA<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.deref(), f)
     }
@@ -145,8 +148,11 @@ impl<T: fmt::Debug, A: Allocator> fmt::Debug for Rc<T, A> {
 
 ////////////////////////////////////////////
 
+/// Reference-counted slice allocated from Global.
+pub type RcSlice<T> = RcSliceA<T, Global>;
+
 /// Reference-counted slice.
-pub struct RcSlice<T, A: Allocator = Global> {
+pub struct RcSliceA<T, A: Allocator> {
     nn: NonNull<RcSliceInner<A>>,
     pd: PhantomData<T>,
 }
@@ -157,7 +163,7 @@ struct RcSliceInner<A: Allocator> {
     a: A,
 }
 
-impl<T, A: Allocator> RcSlice<T, A> {
+impl<T, A: Allocator> RcSliceA<T, A> {
     /// Create a RcSlice from s in specified allocator.
     pub fn new_in(s: &[T], a: A) -> Self
     where
@@ -207,7 +213,7 @@ impl<T, A: Allocator> RcSlice<T, A> {
     }
 }
 
-impl<T, A: Allocator> Clone for RcSlice<T, A> {
+impl<T, A: Allocator> Clone for RcSliceA<T, A> {
     fn clone(&self) -> Self {
         unsafe {
             let p = self.nn.as_ptr();
@@ -220,7 +226,7 @@ impl<T, A: Allocator> Clone for RcSlice<T, A> {
     }
 }
 
-impl<T, A: Allocator> Drop for RcSlice<T, A> {
+impl<T, A: Allocator> Drop for RcSliceA<T, A> {
     fn drop(&mut self) {
         unsafe {
             let p = self.nn.as_ptr();
@@ -238,21 +244,24 @@ impl<T, A: Allocator> Drop for RcSlice<T, A> {
     }
 }
 
-impl<T, A: Allocator> Deref for RcSlice<T, A> {
+impl<T, A: Allocator> Deref for RcSliceA<T, A> {
     type Target = [T];
     fn deref(&self) -> &[T] {
         unsafe { self.slice().as_ref() }
     }
 }
 
+/// Reference-counted String allocated from Global.
+pub type RcStr = RcStrA<Global>;
+
 ////////////////////////////////////////////////////////////
 /// Reference-counted String.
 #[derive(Clone)]
-pub struct RcStr<A: Allocator = Global> {
-    inner: RcSlice<u8, A>,
+pub struct RcStrA<A: Allocator> {
+    inner: RcSliceA<u8, A>,
 }
 
-impl<A: Allocator> RcStr<A> {
+impl<A: Allocator> RcStrA<A> {
     /// Create a RcStr from s
     pub fn new(s: &str) -> Self
     where
@@ -263,12 +272,12 @@ impl<A: Allocator> RcStr<A> {
 
     /// Create a RcStr from s in specified allocator.
     pub fn new_in(s: &str, a: A) -> Self {
-        let inner = RcSlice::new_in(s.as_bytes(), a);
+        let inner = RcSliceA::new_in(s.as_bytes(), a);
         Self { inner }
     }
 }
 
-impl<A: Allocator> Deref for RcStr<A> {
+impl<A: Allocator> Deref for RcStrA<A> {
     type Target = str;
     fn deref(&self) -> &str {
         let b = self.inner.deref();
@@ -276,45 +285,45 @@ impl<A: Allocator> Deref for RcStr<A> {
     }
 }
 
-impl<A: Allocator> Borrow<str> for RcStr<A> {
+impl<A: Allocator> Borrow<str> for RcStrA<A> {
     fn borrow(&self) -> &str {
         self.deref()
     }
 }
 
-impl<A: Allocator> Ord for RcStr<A> {
+impl<A: Allocator> Ord for RcStrA<A> {
     fn cmp(&self, other: &Self) -> Ordering {
         Ord::cmp(self.deref(), other.deref())
     }
 }
 
-impl<A: Allocator> PartialOrd for RcStr<A> {
+impl<A: Allocator> PartialOrd for RcStrA<A> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<A: Allocator> Eq for RcStr<A> {}
+impl<A: Allocator> Eq for RcStrA<A> {}
 
-impl<A: Allocator> PartialEq for RcStr<A> {
+impl<A: Allocator> PartialEq for RcStrA<A> {
     fn eq(&self, other: &Self) -> bool {
         PartialEq::eq(self.deref(), other.deref())
     }
 }
 
-impl<A: Allocator> Hash for RcStr<A> {
+impl<A: Allocator> Hash for RcStrA<A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.deref().hash(state);
     }
 }
 
-impl<A: Allocator> fmt::Display for RcStr<A> {
+impl<A: Allocator> fmt::Display for RcStrA<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self.deref(), f)
     }
 }
 
-impl<A: Allocator> fmt::Debug for RcStr<A> {
+impl<A: Allocator> fmt::Debug for RcStrA<A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self.deref(), f)
     }
@@ -325,12 +334,12 @@ fn rc_test() {
     use crate::localalloc::*;
     use crate::*;
     let mut m = collections::HashMap::new_in(Local::new());
-    let x = RcStr::<Global>::new("George");
+    let x = RcStr::new("George");
     m.insert(x.clone(), 99);
     assert!(m.get("George").is_some());
     println!("x={}", x);
 
-    let rs = RcSlice::new_in(b"George", Local::new());
+    let rs = RcSliceA::new_in(b"George", Local::new());
     let rs1 = rs.clone();
 
     assert!(rs.deref() == b"George");
@@ -345,5 +354,5 @@ fn rc_test() {
     }
 
     let data = [D, D, D];
-    let _rs = RcSlice::new_in(&data, Local::new());
+    let _rs = RcSliceA::new_in(&data, Local::new());
 }
