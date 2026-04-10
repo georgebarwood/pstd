@@ -3,7 +3,9 @@
 //!
 //! [`Local`](localalloc::Local) is for heap allocations that last a longer time ( but not longer than the thread ).
 //!
-//! Temp and Local are not Send or Sync, so values allocated from them cannot be accssed by other threads.
+//! [`Perm`](localalloc::Perm) is for heap allocations that are expected to last longer than a thread.
+//!
+//! Temp and Local are not Send or Sync, so values allocated from them cannot be accessed by other threads.
 //!
 //! Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
 //! This means there is no minimum allocation internally.
@@ -12,6 +14,9 @@
 //! Local has an array of free lists, one for each size class 16,32,64...64K.
 //! The minimum internal allocation (on a 64-bit system) is 16 bytes, which is also the maximum alignment.
 //! Allocations larger than 64K bytes, or having more than 16 byte alignment, are routed to [`Global`](alloc::Global).
+//!
+//! Perm is similar to Local, except there is a single instance per process. It implements both Allocator and GlobalAlloc
+//! so can be used to set a Global Allocator using the `#[global_allocator]` attribute.
 //!
 //! Example
 //! ```
@@ -27,7 +32,7 @@
 //! assert!(v.pop() == Some("Hello"));
 //! ```
 
-use crate::alloc::{AllocError, Allocator, Global};
+use crate::alloc::{AllocError, Allocator, System, GlobalAlloc};
 
 use std::{
     alloc::Layout,
@@ -35,12 +40,15 @@ use std::{
     marker::PhantomData,
     mem,
     ptr::{NonNull, null, slice_from_raw_parts_mut},
+    sync::LazyLock,
 };
 
 thread_local! {
     static TA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new());
     static LA: RefCell<ChainAllocator> = RefCell::new(ChainAllocator::new());
 }
+
+static mut PA: LazyLock<ChainAllocator> = LazyLock::new(|| { ChainAllocator::new() } );
 
 const MIRI: bool = cfg!(miri);
 const K: usize = 1024;
@@ -97,12 +105,53 @@ unsafe impl Allocator for Local {
     }
 }
 
+/// Perm [`Allocator`].
+#[derive(Default, Clone)]
+pub struct Perm;
+
+impl Perm {
+    /// Create a Perm allocator
+    pub const fn new() -> Self {
+        Self { }
+    }
+}
+
+unsafe impl Allocator for Perm {
+    fn allocate(&self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        let a = &raw mut PA;
+        let a = unsafe{ LazyLock::<ChainAllocator>::force_mut(&mut (*a)) };
+        a.allocate(lay)
+    }
+
+    unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
+        let a = &raw mut PA;
+        let a = unsafe{ LazyLock::<ChainAllocator>::force_mut(&mut (*a)) };
+        a.deallocate(p, lay);
+    }
+}
+
+unsafe impl GlobalAlloc for Perm {
+    unsafe fn alloc(&self, lay: Layout) -> *mut u8 {
+        let nn =self.allocate(lay).unwrap();
+        let p : * mut [u8] = nn.as_ptr();
+        let p : * mut u8 = p.cast::<u8>();
+        p
+    }
+
+    unsafe fn dealloc(&self, p: *mut u8, lay: Layout) {
+        unsafe {
+            let nn = NonNull::new_unchecked(p);
+            self.deallocate(nn, lay);
+        }
+    }
+}
+
 struct Block(NonNull<u8>);
 
 impl Block {
     fn new() -> Self {
         let lay = Layout::from_size_align(BSIZE, MAX_ALIGN).unwrap();
-        let p = Global::allocate(&Global, lay).unwrap();
+        let p = System::allocate(&System, lay).unwrap();
         let p = p.as_ptr().cast::<u8>();
         let nn = unsafe { NonNull::new_unchecked(p) };
         Self(nn)
@@ -117,7 +166,7 @@ impl Block {
     fn drop(&mut self) {
         if self.0 != NonNull::dangling() {
             let lay = Layout::from_size_align(BSIZE, MAX_ALIGN).unwrap();
-            unsafe { Global::deallocate(&Global, self.0, lay) }
+            unsafe { System::deallocate(&System, self.0, lay) }
             self.0 = NonNull::dangling();
         }
     }
@@ -154,7 +203,7 @@ impl BumpAllocator {
         self.alloc_count += 1;
         let (n, m) = (lay.size(), lay.align());
         if MIRI || n > MAX_SIZE || m > MAX_ALIGN {
-            Global::allocate(&Global, lay)
+            System::allocate(&System, lay)
         } else {
             #[cfg(feature = "log-bump")]
             {
@@ -179,7 +228,7 @@ impl BumpAllocator {
         let (n, m) = (lay.size(), lay.align());
         if MIRI || n > MAX_SIZE || m > MAX_ALIGN {
             unsafe {
-                Global::deallocate(&Global, p, lay);
+                System::deallocate(&System, p, lay);
             }
         } else {
             self.alloc_count -= 1;
@@ -214,19 +263,6 @@ impl Drop for BumpAllocator {
             self._max_alloc,
             self._reset_count
         );
-
-        /* Since Temp and Local are !Sync and !Send this check should no longer be necessary.
-           Although it might be useful to detect leaks.
-
-        if self.alloc_count != 0 {
-            println!(
-                "BumpAllocator has {} outstanding allocations, aborting",
-                self.alloc_count,
-            );
-            std::process::abort();
-        }
-        */
-
         self.cur.drop();
         self.reset_overflow();
     }
@@ -277,7 +313,7 @@ impl ChainAllocator {
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
         let (n, m) = (lay.size(), lay.align());
         if MIRI || n > MAX_SIZE || m > MIN_SIZE {
-            Global::allocate(&Global, lay)
+            System::allocate(&System, lay)
         } else {
             self.alloc_count += 1;
             #[cfg(feature = "log-bump")]
@@ -318,7 +354,7 @@ impl ChainAllocator {
         let (n, m) = (lay.size(), lay.align());
         if MIRI || n > MAX_SIZE || m > MIN_SIZE {
             unsafe {
-                Global::deallocate(&Global, p, lay);
+                System::deallocate(&System, p, lay);
             }
         } else {
             self.alloc_count -= 1;
@@ -365,22 +401,13 @@ impl Drop for ChainAllocator {
             self._max_alloc,
             self._reset_count
         );
-
-        /* Since Temp and Local are !Sync and !Send this check should no longer be necessary.
-           Although it might be useful to detect leaks.
-        if self.alloc_count != 0 {
-            println!(
-                "ChainAllocator has {} outstanding allocations, aborting",
-                self.alloc_count,
-            );
-            std::process::abort();
-        }
-        */
-
         self.cur.drop();
         self.reset_overflow();
     }
 }
+
+unsafe impl Send for ChainAllocator{}
+unsafe impl Sync for ChainAllocator{}
 
 #[test]
 fn test_alloc() {
@@ -392,4 +419,11 @@ fn test_alloc() {
     }
     let x = crate::BoxA::new_in(99, Local::new());
     assert!(*x == 99);
+}
+
+#[test]
+fn test_perm_alloc() {
+    type PBox<T> = crate::BoxA<T,Perm>;
+    let x = PBox::new(99);
+    assert!( *x == 99 );
 }
