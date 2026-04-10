@@ -33,6 +33,7 @@
 //! ```
 
 use crate::alloc::{AllocError, Allocator, System, GlobalAlloc};
+use crate::VecA;
 
 use std::{
     alloc::Layout,
@@ -40,15 +41,13 @@ use std::{
     marker::PhantomData,
     mem,
     ptr::{NonNull, null, slice_from_raw_parts_mut},
-    sync::LazyLock,
+    sync::Mutex,
 };
 
 thread_local! {
     static TA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new());
     static LA: RefCell<ChainAllocator> = RefCell::new(ChainAllocator::new());
 }
-
-static mut PA: LazyLock<ChainAllocator> = LazyLock::new(|| { ChainAllocator::new() } );
 
 const MIRI: bool = cfg!(miri);
 const K: usize = 1024;
@@ -105,6 +104,8 @@ unsafe impl Allocator for Local {
     }
 }
 
+static PA: Mutex<Option<ChainAllocator>> = Mutex::new(None);
+
 /// Perm [`Allocator`].
 #[derive(Default, Clone)]
 pub struct Perm;
@@ -114,18 +115,31 @@ impl Perm {
     pub const fn new() -> Self {
         Self { }
     }
+
+    /// Get the number of outstanding allocations.
+    pub fn alloc_count() -> u64
+    {
+        let a = PA.lock().unwrap();
+        if a.is_none() { return 0; }
+        let a = a.as_ref().unwrap();
+        a.alloc_count
+    }
 }
 
 unsafe impl Allocator for Perm {
     fn allocate(&self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        let a = &raw mut PA;
-        let a = unsafe{ LazyLock::<ChainAllocator>::force_mut(&mut (*a)) };
+        let mut a = PA.lock().unwrap();
+        if a.is_none()
+        {
+           *a = Some(ChainAllocator::new());
+        }
+        let a = a.as_mut().unwrap();
         a.allocate(lay)
     }
 
     unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
-        let a = &raw mut PA;
-        let a = unsafe{ LazyLock::<ChainAllocator>::force_mut(&mut (*a)) };
+        let mut a = PA.lock().unwrap();
+        let a = a.as_mut().unwrap();
         a.deallocate(p, lay);
     }
 }
@@ -172,12 +186,14 @@ impl Block {
     }
 }
 
+type SVec<T> = VecA<T,System>;
+
 struct BumpAllocator {
-    alloc_count: u64,               // Number of current allocations
-    idx: usize,                     // Current bytes allocated from cur
-    cur: Block,                     // Current block for allocation
-    overflow: std::vec::Vec<Block>, // List of used up blocks
-    _alloc_bytes: usize,            // Rest are only for diagnostic purposes.
+    alloc_count: u64,        // Number of current allocations
+    idx: usize,              // Current bytes allocated from cur
+    cur: Block,              // Current block for allocation
+    overflow: SVec<Block>,   // List of used up blocks
+    _alloc_bytes: usize,     // Rest are only for diagnostic purposes.
     _max_alloc: usize,
     _reset_count: usize,
     _total_count: usize,
@@ -190,7 +206,7 @@ impl BumpAllocator {
             alloc_count: 0,
             idx: 0,
             cur: Block::new(),
-            overflow: Vec::new(),
+            overflow: SVec::new(),
             _alloc_bytes: 0,
             _max_alloc: 0,
             _reset_count: 0,
@@ -277,7 +293,7 @@ struct ChainAllocator {
     idx: usize,                     // Current bytes allocated from cur
     cur: Block,                     // Current block for allocation
     free: [*const FreeMem; MAX_SC], // Address of first free allocation for each size class.
-    overflow: std::vec::Vec<Block>, // List of used up blocks
+    overflow: SVec<Block>,          // List of used up blocks
     _alloc_bytes: usize,            // Rest are only for diagnostic purposes.
     _max_alloc: usize,
     _reset_count: usize,
@@ -292,7 +308,7 @@ impl ChainAllocator {
             idx: 0,
             cur: Block::new(),
             free: [null(); MAX_SC],
-            overflow: Vec::new(),
+            overflow: SVec::new(),
             _alloc_bytes: 0,
             _max_alloc: 0,
             _reset_count: 0,
