@@ -26,6 +26,11 @@ impl<A: Allocator> StringA<A> {
         Self(VecA::with_capacity(cap))
     }
 
+    /// Create from Vec
+    pub fn from_vec(v: VecA<u8, A>) -> Self {
+        Self(v)
+    }
+
     /// Create from a str.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self
