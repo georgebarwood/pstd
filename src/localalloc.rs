@@ -32,8 +32,8 @@
 //! assert!(v.pop() == Some("Hello"));
 //! ```
 
-use crate::alloc::{AllocError, Allocator, System, GlobalAlloc};
 use crate::VecA;
+use crate::alloc::{AllocError, Allocator, GlobalAlloc, System};
 
 use std::{
     alloc::Layout,
@@ -59,7 +59,7 @@ const MIN_SIZE: usize = 2 * mem::size_of::<FreeMem>(); // 16 for 64-bit system.
 const L2_MIN_SIZE: usize = MIN_SIZE.ilog2() as usize;
 
 /// Temp [`Allocator`].
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct Temp {
     pd: PhantomData<NonNull<()>>, // To make Temp !Send and !Sync
 }
@@ -82,7 +82,7 @@ unsafe impl Allocator for Temp {
 }
 
 /// Local [`Allocator`].
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct Local {
     pd: PhantomData<NonNull<()>>, // To make Local !Send and !Sync
 }
@@ -107,20 +107,21 @@ unsafe impl Allocator for Local {
 static PA: Mutex<Option<ChainAllocator>> = Mutex::new(None);
 
 /// Perm [`Allocator`].
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct Perm;
 
 impl Perm {
     /// Create a Perm allocator
     pub const fn new() -> Self {
-        Self { }
+        Self {}
     }
 
     /// Get the number of outstanding allocations.
-    pub fn alloc_count() -> u64
-    {
+    pub fn alloc_count() -> u64 {
         let a = PA.lock().unwrap();
-        if a.is_none() { return 0; }
+        if a.is_none() {
+            return 0;
+        }
         let a = a.as_ref().unwrap();
         a.alloc_count
     }
@@ -129,9 +130,8 @@ impl Perm {
 unsafe impl Allocator for Perm {
     fn allocate(&self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
         let mut a = PA.lock().unwrap();
-        if a.is_none()
-        {
-           *a = Some(ChainAllocator::new());
+        if a.is_none() {
+            *a = Some(ChainAllocator::new());
         }
         let a = a.as_mut().unwrap();
         a.allocate(lay)
@@ -146,9 +146,9 @@ unsafe impl Allocator for Perm {
 
 unsafe impl GlobalAlloc for Perm {
     unsafe fn alloc(&self, lay: Layout) -> *mut u8 {
-        let nn =self.allocate(lay).unwrap();
-        let p : * mut [u8] = nn.as_ptr();
-        let p : * mut u8 = p.cast::<u8>();
+        let nn = self.allocate(lay).unwrap();
+        let p: *mut [u8] = nn.as_ptr();
+        let p: *mut u8 = p.cast::<u8>();
         p
     }
 
@@ -186,14 +186,14 @@ impl Block {
     }
 }
 
-type SVec<T> = VecA<T,System>;
+type SVec<T> = VecA<T, System>;
 
 struct BumpAllocator {
-    alloc_count: u64,        // Number of current allocations
-    idx: usize,              // Current bytes allocated from cur
-    cur: Block,              // Current block for allocation
-    overflow: SVec<Block>,   // List of used up blocks
-    _alloc_bytes: usize,     // Rest are only for diagnostic purposes.
+    alloc_count: u64,      // Number of current allocations
+    idx: usize,            // Current bytes allocated from cur
+    cur: Block,            // Current block for allocation
+    overflow: SVec<Block>, // List of used up blocks
+    _alloc_bytes: usize,   // Rest are only for diagnostic purposes.
     _max_alloc: usize,
     _reset_count: usize,
     _total_count: usize,
@@ -422,8 +422,8 @@ impl Drop for ChainAllocator {
     }
 }
 
-unsafe impl Send for ChainAllocator{}
-unsafe impl Sync for ChainAllocator{}
+unsafe impl Send for ChainAllocator {}
+unsafe impl Sync for ChainAllocator {}
 
 #[test]
 fn test_alloc() {
@@ -439,7 +439,7 @@ fn test_alloc() {
 
 #[test]
 fn test_perm_alloc() {
-    type PBox<T> = crate::BoxA<T,Perm>;
+    type PBox<T> = crate::BoxA<T, Perm>;
     let x = PBox::new(99);
-    assert!( *x == 99 );
+    assert!(*x == 99);
 }

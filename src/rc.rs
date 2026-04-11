@@ -63,6 +63,21 @@ impl<T, A: Allocator> RcA<T, A> {
         let p = this.nn.as_ptr();
         unsafe { &(*p).v }
     }
+
+    /// Returns a mutable reference to the contained value if data is not shared.
+    ///
+    /// Otherwise returns None.
+    ///
+    pub fn get_mut(rc: &mut Self) -> Option<&mut T> {
+        unsafe {
+            let p = rc.nn.as_ptr();
+            if (*p).cc == 0 {
+                Some(&mut (*p).v)
+            } else {
+                None
+            }
+        }
+    }
 }
 
 impl<T, A: Allocator> Clone for RcA<T, A> {

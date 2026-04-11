@@ -15,16 +15,24 @@ impl<A: Allocator> StringA<A> {
     where
         A: Default,
     {
-        Self(VecA::new_in(A::default()))
+        Self(VecA::new())
     }
 
-    /// Creates a String from a str.
+    /// Create an empty string with specified capacity.
+    pub fn with_capacity(cap: usize) -> Self
+    where
+        A: Default,
+    {
+        Self(VecA::with_capacity(cap))
+    }
+
+    /// Create from a str.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self
     where
         A: Default,
     {
-        let mut v = VecA::with_capacity_in(s.len(), A::default());
+        let mut v = VecA::with_capacity(s.len());
         v.extend_from_slice(s.as_bytes());
         Self(v)
     }
@@ -60,6 +68,22 @@ impl<A: Allocator> StringA<A> {
     pub fn as_mut_str(&mut self) -> &mut str {
         unsafe { str::from_utf8_unchecked_mut(self.0.as_mut_slice()) }
     }
+
+    /// Replaces all matches of a pattern with another string.
+    pub fn replace(&self, pat: &str, with: &str) -> Self
+    where
+        A: Default,
+    {
+        let mut result = Self::new();
+        let mut last_end = 0;
+        for (start, part) in self.match_indices(pat) {
+            result.push_str(unsafe { self.get_unchecked(last_end..start) });
+            result.push_str(with);
+            last_end = start + part.len();
+        }
+        result.push_str(unsafe { self.get_unchecked(last_end..self.len()) });
+        result
+    }
 }
 
 impl<A: Allocator> ops::Deref for StringA<A> {
@@ -77,7 +101,6 @@ impl<A: Allocator> ops::DerefMut for StringA<A> {
 }
 
 impl<A: Allocator> std::fmt::Display for StringA<A> {
-    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&**self, f)
     }
@@ -93,7 +116,7 @@ impl<A: Allocator> Eq for StringA<A> {}
 
 impl<A1: Allocator, A2: Allocator> PartialEq<StringA<A2>> for StringA<A1> {
     fn eq(&self, other: &StringA<A2>) -> bool {
-        self[..] == other[..]
+        **self == **other
     }
 }
 
@@ -122,12 +145,70 @@ where
     }
 }
 
+impl<A: Allocator> PartialEq<StringA<A>> for str {
+    fn eq(&self, s: &StringA<A>) -> bool {
+        self == &**s
+    }
+}
+
+impl<A: Allocator> PartialEq<str> for StringA<A> {
+    fn eq(&self, s: &str) -> bool {
+        s == &**self
+    }
+}
+
+impl<A: Allocator> PartialEq<&str> for StringA<A> {
+    fn eq(&self, s: &&str) -> bool {
+        &**self == *s
+    }
+}
+
+impl<A: Allocator> PartialEq<StringA<A>> for &str {
+    fn eq(&self, s: &StringA<A>) -> bool {
+        &**s == *self
+    }
+}
+
+impl<A: Allocator> std::fmt::Write for StringA<A> {
+    fn write_str(&mut self, s: &str) -> Result<(), std::fmt::Error> {
+        self.push_str(s);
+        Ok(())
+    }
+}
+
 #[test]
 fn test_string() {
     use crate::localalloc::Local;
-    use std::ops::Deref;
 
     let mut s: StringA<Local> = StringA::new();
     s.push_str("George");
-    assert!(s.deref() == "George");
+    assert!(s == "George");
+    assert!("George" == s);
+}
+
+#[test]
+fn test_string_replace() {
+    use crate::localalloc::Temp;
+
+    let mut s = StringA::<Temp>::from_str("George");
+    s = s.replace("eorge", "raham");
+    assert!(s == "Graham");
+    println!("s={}", s);
+}
+
+#[test]
+fn test_string_write() {
+    use crate::localalloc::Temp;
+
+    let mut output = StringA::<Temp>::new();
+
+    use std::fmt::Write;
+
+    let x: i64 = -319;
+
+    write!(&mut output, "Hello {}! {}", "world", x).unwrap();
+
+    assert_eq!(output, "Hello world! -319");
+
+    println!("output={}", output);
 }
