@@ -54,9 +54,11 @@ const K: usize = 1024;
 const MAX_ALIGN: usize = 128;
 const BSIZE: usize = 1024 * K; // 20 bits = 1MB
 const MAX_SIZE: usize = BSIZE / 16; // 16 bits = 64K
-const MAX_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
 const MIN_SIZE: usize = 2 * mem::size_of::<FreeMem>(); // 16 for 64-bit system.
 const L2_MIN_SIZE: usize = MIN_SIZE.ilog2() as usize;
+
+/// Number of size classes.
+pub const NUM_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
 
 /// Temp [`Allocator`].
 #[derive(Default, Clone, Debug)]
@@ -124,6 +126,36 @@ impl Perm {
         }
         let a = a.as_ref().unwrap();
         a.alloc_count
+    }
+
+    /// Get info : Current alloc index, number of overflow blocks, free chain lengths for each size class.
+    ///
+    /// #Example
+    /// ```
+    /// use pstd::localalloc::Perm;
+    /// println!( "Perm::info = {:?}", Perm::info() );
+    ///```
+    pub fn info() -> Option<(usize,usize,[usize; NUM_SC])>
+    {
+        let mut fclen = [0; NUM_SC];
+        let a = PA.lock().unwrap();
+        if !a.is_none()
+        {
+            let a = a.as_ref().unwrap();
+            for i in 0..NUM_SC
+            {
+                let mut n = 0;
+                let mut p = a.free[i];
+                while !p.is_null()
+                {
+                    n += 1;
+                    p = unsafe{ (*p).next };
+                }
+                fclen[i] = n;
+            }
+            Some((a.idx, a.overflow.len(), fclen))
+        }
+        else { None }
     }
 }
 
@@ -292,7 +324,7 @@ struct ChainAllocator {
     alloc_count: u64,               // Number of current allocations
     idx: usize,                     // Current bytes allocated from cur
     cur: Block,                     // Current block for allocation
-    free: [*const FreeMem; MAX_SC], // Address of first free allocation for each size class.
+    free: [*const FreeMem; NUM_SC], // Address of first free allocation for each size class.
     overflow: SVec<Block>,          // List of used up blocks
     _alloc_bytes: usize,            // Rest are only for diagnostic purposes.
     _max_alloc: usize,
@@ -307,7 +339,7 @@ impl ChainAllocator {
             alloc_count: 0,
             idx: 0,
             cur: Block::new(),
-            free: [null(); MAX_SC],
+            free: [null(); NUM_SC],
             overflow: SVec::new(),
             _alloc_bytes: 0,
             _max_alloc: 0,
@@ -383,7 +415,7 @@ impl ChainAllocator {
                 }
                 self.idx = 0;
                 self.reset_overflow();
-                self.free = [null(); MAX_SC];
+                self.free = [null(); NUM_SC];
             } else {
                 // Put freed storage on free list.
                 let (sc, _xn) = Self::size_class(n);
@@ -426,7 +458,7 @@ unsafe impl Send for ChainAllocator {}
 unsafe impl Sync for ChainAllocator {}
 
 #[test]
-fn test_alloc() {
+fn test_box_local_alloc() {
     let x = crate::BoxA::new_in(99, Local::new());
     assert!(*x == 99);
     {
@@ -442,4 +474,12 @@ fn test_perm_alloc() {
     type PBox<T> = crate::BoxA<T, Perm>;
     let x = PBox::new(99);
     assert!(*x == 99);
+}
+
+#[test]
+fn test_alloc_free() {
+    let mut v = VecA::<_,Perm>::new();
+    for _ in 0..1000 { v.push(0); }
+    println!( "v len={}", v.len() );
+    println!( "Perm::info = {:?}", Perm::info() );
 }
