@@ -1118,7 +1118,7 @@ impl<T> VecA<T> {
 // ##########################################################################
 
 unsafe impl<T: Send, A: Allocator + Send> Send for VecA<T, A> {}
-unsafe impl<T: Sync, A: Allocator + Send> Sync for VecA<T, A> {}
+unsafe impl<T: Sync, A: Allocator + Sync> Sync for VecA<T, A> {}
 
 impl<T: Eq, A: Allocator> Eq for VecA<T, A> {}
 

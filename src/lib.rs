@@ -12,7 +12,7 @@
 //!
 //! [`RcStr`] is a reference-counted string based on [`RcSlice`].
 //!
-//! The [`localalloc`] module has fast thread-local allocators.
+//! The [`localalloc`] module has allocator implementations.
 //!
 //!# Features
 //!
@@ -27,7 +27,7 @@ pub mod alloc {
     pub use allocator_api2::alloc::*;
 }
 
-/// Thread-local allocators.
+/// Allocator implementations.
 pub mod localalloc;
 
 /// Containers: BTreeMap, BTreeSet, HashMap and HashSet.

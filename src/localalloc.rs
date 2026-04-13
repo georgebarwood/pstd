@@ -3,20 +3,7 @@
 //!
 //! [`Local`](localalloc::Local) is for heap allocations that last a longer time ( but not longer than the thread ).
 //!
-//! [`Perm`](localalloc::Perm) is for heap allocations that are expected to last longer than a thread.
-//!
-//! Temp and Local are not Send or Sync, so values allocated from them cannot be accessed by other threads.
-//!
-//! Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
-//! This means there is no minimum allocation internally.
-//! Allocations larger than 64K bytes, or having more than 128 byte alignment, are routed to [`Global`](alloc::Global).
-//!
-//! Local has an array of free lists, one for each size class 16,32,64...64K.
-//! The minimum internal allocation (on a 64-bit system) is 16 bytes, which is also the maximum alignment.
-//! Allocations larger than 64K bytes, or having more than 16 byte alignment, are routed to [`Global`](alloc::Global).
-//!
-//! Perm is similar to Local, except there is a single instance per process. It implements both Allocator and GlobalAlloc
-//! so can be used to set a Global Allocator using the `#[global_allocator]` attribute.
+//! [`Perm`](localalloc::Perm) is for heap allocations unsuitable for Temp or Local.
 //!
 //! Example
 //! ```
@@ -51,16 +38,27 @@ thread_local! {
 
 const MIRI: bool = cfg!(miri);
 const K: usize = 1024;
-const MAX_ALIGN: usize = 128;
-const BSIZE: usize = 1024 * K; // 20 bits = 1MB
-const MAX_SIZE: usize = BSIZE / 16; // 16 bits = 64K
-const MIN_SIZE: usize = 2 * mem::size_of::<FreeMem>(); // 16 for 64-bit system.
 const L2_MIN_SIZE: usize = MIN_SIZE.ilog2() as usize;
+
+/// Maximum alignment for [`Temp`].
+pub const MAX_ALIGN: usize = 128;
+
+/// Maximum size allocation.
+pub const MAX_SIZE: usize = BLOCK_SIZE / 16;
+
+/// Minimum size allocation for [`Local`] and [`Perm`].
+pub const MIN_SIZE: usize = 2 * mem::size_of::<FreeMem>();
+
+/// Size of the blocks fetched from [`System`] allocator.
+pub const BLOCK_SIZE: usize = 2 * K * K; // 20 bits = 1MB
 
 /// Number of size classes.
 pub const NUM_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
 
-/// Temp [`Allocator`].
+/// Temp is for heap allocations that last a short time.
+/// Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
+/// This means there is no minimum allocation internally.
+/// Allocations larger than [`MAX_SIZE`] bytes, or having more than [`MAX_ALIGN`] alignment, are routed to [`System`].
 #[derive(Default, Clone, Debug)]
 pub struct Temp {
     pd: PhantomData<NonNull<()>>, // To make Temp !Send and !Sync
@@ -83,7 +81,10 @@ unsafe impl Allocator for Temp {
     }
 }
 
-/// Local [`Allocator`].
+/// Local is for heap allocations that last a longer time ( but not longer than the thread ).
+/// Local has an array of free lists, one for each size class [`MIN_SIZE`]=16, 32, 64...[`MAX_SIZE`].
+/// Allocations larger than [`MAX_SIZE`] bytes, or having more than [`MIN_SIZE`] alignment, are routed to [`System`].
+///
 #[derive(Default, Clone, Debug)]
 pub struct Local {
     pd: PhantomData<NonNull<()>>, // To make Local !Send and !Sync
@@ -108,7 +109,9 @@ unsafe impl Allocator for Local {
 
 static PA: Mutex<Option<ChainAllocator>> = Mutex::new(None);
 
-/// Perm [`Allocator`].
+/// Perm is for heap allocations unsuitable for Temp or Local.
+/// Perm is similar to [Local], except there is a single instance per process. It implements both [`Allocator`] and [`GlobalAlloc`]
+/// so can be used to set a Global Allocator using the `#[global_allocator]` attribute.
 #[derive(Default, Clone, Debug)]
 pub struct Perm;
 
@@ -130,32 +133,30 @@ impl Perm {
 
     /// Get info : Current alloc index, number of overflow blocks, free chain lengths for each size class.
     ///
-    /// #Example
+    /// # Example
     /// ```
-    /// use pstd::localalloc::Perm;
+    /// use pstd::{BoxA,localalloc::Perm};
+    /// let b = BoxA::<_,Perm>::new(99);
     /// println!( "Perm::info = {:?}", Perm::info() );
     ///```
-    pub fn info() -> Option<(usize,usize,[usize; NUM_SC])>
-    {
+    pub fn info() -> Option<(usize, usize, [usize; NUM_SC])> {
         let mut fclen = [0; NUM_SC];
         let a = PA.lock().unwrap();
-        if !a.is_none()
-        {
+        if !a.is_none() {
             let a = a.as_ref().unwrap();
-            for i in 0..NUM_SC
-            {
+            for (i, e) in fclen.iter_mut().enumerate() {
                 let mut n = 0;
                 let mut p = a.free[i];
-                while !p.is_null()
-                {
+                while !p.is_null() {
                     n += 1;
-                    p = unsafe{ (*p).next };
+                    p = unsafe { (*p).next };
                 }
-                fclen[i] = n;
+                *e = n;
             }
             Some((a.idx, a.overflow.len(), fclen))
+        } else {
+            None
         }
-        else { None }
     }
 }
 
@@ -196,7 +197,7 @@ struct Block(NonNull<u8>);
 
 impl Block {
     fn new() -> Self {
-        let lay = Layout::from_size_align(BSIZE, MAX_ALIGN).unwrap();
+        let lay = Layout::from_size_align(BLOCK_SIZE, MAX_ALIGN).unwrap();
         let p = System::allocate(&System, lay).unwrap();
         let p = p.as_ptr().cast::<u8>();
         let nn = unsafe { NonNull::new_unchecked(p) };
@@ -211,7 +212,7 @@ impl Block {
 
     fn drop(&mut self) {
         if self.0 != NonNull::dangling() {
-            let lay = Layout::from_size_align(BSIZE, MAX_ALIGN).unwrap();
+            let lay = Layout::from_size_align(BLOCK_SIZE, MAX_ALIGN).unwrap();
             unsafe { System::deallocate(&System, self.0, lay) }
             self.0 = NonNull::dangling();
         }
@@ -262,7 +263,7 @@ impl BumpAllocator {
             let mut i = self.idx.checked_next_multiple_of(m).unwrap();
             let e = i + n;
             // Make a new block if necessary.
-            if e >= BSIZE && (e > BSIZE || n == 0) {
+            if e >= BLOCK_SIZE && (e > BLOCK_SIZE || n == 0) {
                 let old = mem::replace(&mut self.cur, Block::new());
                 self.overflow.push(old);
                 i = 0;
@@ -387,7 +388,7 @@ impl ChainAllocator {
                 let mut i = self.idx;
                 let e = i + xn;
                 // Make a new block if necessary.
-                if e > BSIZE {
+                if e > BLOCK_SIZE {
                     let old = mem::replace(&mut self.cur, Block::new());
                     self.overflow.push(old);
                     i = 0;
@@ -478,8 +479,10 @@ fn test_perm_alloc() {
 
 #[test]
 fn test_alloc_free() {
-    let mut v = VecA::<_,Perm>::new();
-    for _ in 0..1000 { v.push(0); }
-    println!( "v len={}", v.len() );
-    println!( "Perm::info = {:?}", Perm::info() );
+    let mut v = VecA::<_, Perm>::new();
+    for _ in 0..1000 {
+        v.push(0);
+    }
+    println!("v len={}", v.len());
+    println!("Perm::info = {:?}", Perm::info());
 }

@@ -1,12 +1,13 @@
 use crate::VecA;
 use crate::alloc::{Allocator, Global};
+use std::fmt::Debug;
 use std::ops;
 
 /// A UTF-8–encoded, growable string allocated from Global.
 pub type String = StringA<Global>;
 
 /// A UTF-8–encoded, growable string.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct StringA<A: Allocator = Global>(VecA<u8, A>);
 
 impl<A: Allocator> StringA<A> {
@@ -108,6 +109,18 @@ impl<A: Allocator> ops::DerefMut for StringA<A> {
 impl<A: Allocator> std::fmt::Display for StringA<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&**self, f)
+    }
+}
+
+impl<A: Allocator> Debug for StringA<A> {
+    /*
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            std::fmt::Display::fmt(&**self, f)
+        }
+    */
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        std::fmt::Debug::fmt(&**self, f)
     }
 }
 
