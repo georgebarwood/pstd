@@ -70,6 +70,20 @@ impl<T: ?Sized, A: Allocator> BoxA<T, A> {
     {
         BoxA::<str, A>::from_str_in(s, A::default())
     }
+
+    /// ToDo
+    pub fn into_raw_with_allocator(b: Self) -> (*mut T, A) {
+        let mut b = std::mem::ManuallyDrop::new(b);
+        let p = &raw mut **b;
+        let a = unsafe { ptr::read(&b.a) };
+        (p, a)
+    }
+
+    /// ToDo
+    pub unsafe fn from_raw_in(p: *mut T, a: A) -> Self {
+        let nn = unsafe { NonNull::new_unchecked(p) };
+        Self { nn, a }
+    }
 }
 
 impl<T: ?Sized, A: Allocator> BoxA<T, A> {
@@ -134,7 +148,7 @@ impl<T: ?Sized + PartialOrd, A: Allocator> PartialOrd for BoxA<T, A> {
     }
 }
 
-unsafe impl<T: Send, A: Allocator + Send> Send for BoxA<T, A> {} 
+unsafe impl<T: Send, A: Allocator + Send> Send for BoxA<T, A> {}
 unsafe impl<T: Sync, A: Allocator + Sync> Sync for BoxA<T, A> {}
 
 impl<T: ?Sized, A: Allocator> Drop for BoxA<T, A> {
@@ -193,3 +207,13 @@ use std::{marker::Unsize, ops::CoerceUnsized};
 
 #[cfg(feature = "dynbox")]
 impl<T: ?Sized + Unsize<U>, U: ?Sized, A: Allocator> CoerceUnsized<BoxA<U, A>> for BoxA<T, A> {}
+
+/// Macro to unsize a box.
+#[macro_export]
+macro_rules! unsize_box {
+    ( $boxed:expr ) => {{
+        let (ptr, allocator) = ::pstd::boxed::BoxA::into_raw_with_allocator($boxed);
+        let ptr: *mut _ = ptr;
+        unsafe { ::pstd::boxed::BoxA::from_raw_in(ptr, allocator) }
+    }};
+}
