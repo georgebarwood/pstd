@@ -11,7 +11,7 @@ use std::{
 
 /// A pointer type that uniquely owns a heap allocation of type `T`.
 ///
-/// Boxing dyn values requires the dynbox feature to be enabled ( which currently requires the nightly toolchain ).
+/// dyn values can be boxed using the [`unsize_box`](crate::unsize_box) macro. 
 pub struct BoxA<T: ?Sized, A: Allocator> {
     pub(crate) nn: NonNull<T>,
     pub(crate) a: A,
@@ -21,6 +21,7 @@ pub struct BoxA<T: ?Sized, A: Allocator> {
 pub type Box<T> = BoxA<T, Global>;
 
 impl<T, A: Allocator> BoxA<T, A> {
+
     /// Allocates memory then places t into it.
     #[must_use]
     pub fn new(t: T) -> Self
@@ -62,6 +63,7 @@ impl<T, A: Allocator> BoxA<T, A> {
 }
 
 impl<T: ?Sized, A: Allocator> BoxA<T, A> {
+
     /// Allocates memory then copies s into it.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> BoxA<str, A>
@@ -71,22 +73,6 @@ impl<T: ?Sized, A: Allocator> BoxA<T, A> {
         BoxA::<str, A>::from_str_in(s, A::default())
     }
 
-    /// ToDo
-    pub fn into_raw_with_allocator(b: Self) -> (*mut T, A) {
-        let mut b = std::mem::ManuallyDrop::new(b);
-        let p = &raw mut **b;
-        let a = unsafe { ptr::read(&b.a) };
-        (p, a)
-    }
-
-    /// ToDo
-    pub unsafe fn from_raw_in(p: *mut T, a: A) -> Self {
-        let nn = unsafe { NonNull::new_unchecked(p) };
-        Self { nn, a }
-    }
-}
-
-impl<T: ?Sized, A: Allocator> BoxA<T, A> {
     /// Allocates memory in the given allocator then copies s into it.
     ///
     /// Note: there is currently no equivalent in the standard library.
@@ -108,9 +94,21 @@ impl<T: ?Sized, A: Allocator> BoxA<T, A> {
 
         BoxA::<str, A> { nn, a }
     }
-}
 
-impl<T: ?Sized, A: Allocator> BoxA<T, A> {
+    /// Convert into raw pointer and allocator.
+    pub fn into_raw_with_allocator(b: Self) -> (*mut T, A) {
+        let mut b = std::mem::ManuallyDrop::new(b);
+        let p = &raw mut **b;
+        let a = unsafe { ptr::read(&b.a) };
+        (p, a)
+    }
+
+    /// Create from raw pointer in specified allocator.
+    pub unsafe fn from_raw_in(p: *mut T, a: A) -> Self {
+        let nn = unsafe { NonNull::new_unchecked(p) };
+        Self { nn, a }
+    }
+
     fn r(&self) -> &T {
         unsafe { &*self.nn.as_ptr() }
     }
@@ -118,7 +116,7 @@ impl<T: ?Sized, A: Allocator> BoxA<T, A> {
 
 impl<A: Allocator + Clone> Clone for BoxA<str, A> {
     fn clone(&self) -> BoxA<str, A> {
-        BoxA::<str, A>::from_str_in(self.r(), self.a.clone())
+        BoxA::<str, A>::from_str_in(&**self, self.a.clone())
     }
 }
 
@@ -209,6 +207,15 @@ use std::{marker::Unsize, ops::CoerceUnsized};
 impl<T: ?Sized + Unsize<U>, U: ?Sized, A: Allocator> CoerceUnsized<BoxA<U, A>> for BoxA<T, A> {}
 
 /// Macro to unsize a box.
+///
+/// # Example
+/// ```
+/// use pstd::{BoxA, unsize_box, localalloc::Local};
+/// trait MyTrait {}
+/// struct MyStruct; impl MyTrait for MyStruct{}
+/// type LBox<T> = BoxA<T, Local>;
+/// let b : LBox<dyn MyTrait> = unsize_box!( LBox::new(MyStruct{}) );
+/// ```
 #[macro_export]
 macro_rules! unsize_box {
     ( $boxed:expr ) => {{
