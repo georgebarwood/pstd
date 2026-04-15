@@ -1,9 +1,9 @@
 //!
-//! [`Temp`](localalloc::Temp) is for heap allocations that last a short time.
-//!
-//! [`Local`](localalloc::Local) is for heap allocations that last a longer time ( but not longer than the thread ).
+//! [`Local`](localalloc::Local) is for heap allocations that are thread-local.
 //!
 //! [`Perm`](localalloc::Perm) is for heap allocations unsuitable for Temp or Local.
+//!
+//! [`Temp`](localalloc::Temp) is for heap thread-local allocations that last a short time.
 //!
 //! Example
 //! ```
@@ -37,25 +37,25 @@ thread_local! {
 }
 
 const MIRI: bool = cfg!(miri);
-const K: usize = 1024;
-const L2_MIN_SIZE: usize = MIN_SIZE.ilog2() as usize;
+
+const L2_MIN_SIZE: usize = 1 + mem::size_of::<FreeMem>().ilog2() as usize;
 
 /// Maximum alignment for [`Temp`].
 pub const MAX_ALIGN: usize = 128;
 
-/// Maximum size allocation.
-pub const MAX_SIZE: usize = BLOCK_SIZE / 16;
+/// Size of the blocks fetched from [`System`] allocator ( 2 MiB ).
+pub const BLOCK_SIZE: usize = 1 << 21;
 
-/// Minimum size allocation for [`Local`] and [`Perm`].
-pub const MIN_SIZE: usize = 2 * mem::size_of::<FreeMem>();
+/// Minimum size allocation for [`Local`] and [`Perm`] = 16 for a 64-bit system.
+pub const MIN_SIZE: usize = 1 << L2_MIN_SIZE;
 
-/// Size of the blocks fetched from [`System`] allocator.
-pub const BLOCK_SIZE: usize = 2 * K * K; // 20 bits = 1MB
+/// Maximum size allocation ( 64 KiB ).
+pub const MAX_SIZE: usize = BLOCK_SIZE / 32;
 
 /// Number of size classes.
 pub const NUM_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
 
-/// Temp is for heap allocations that last a short time.
+/// Temp is for heap thread-local allocations that last a short time.
 /// Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
 /// This means there is no minimum allocation internally.
 /// Allocations larger than [`MAX_SIZE`] bytes, or having more than [`MAX_ALIGN`] alignment, are routed to [`System`].
@@ -81,10 +81,9 @@ unsafe impl Allocator for Temp {
     }
 }
 
-/// Local is for heap allocations that last a longer time ( but not longer than the thread ).
-/// Local has an array of free lists, one for each size class [`MIN_SIZE`]=16, 32, 64...[`MAX_SIZE`].
+/// Local is for heap allocations that are thread-local.
+/// Local has an array of free lists, one for each size class [`MIN_SIZE`]..[`MAX_SIZE`].
 /// Allocations larger than [`MAX_SIZE`] bytes, or having more than [`MIN_SIZE`] alignment, are routed to [`System`].
-///
 #[derive(Default, Clone, Debug)]
 pub struct Local {
     pd: PhantomData<NonNull<()>>, // To make Local !Send and !Sync
@@ -254,7 +253,7 @@ impl BumpAllocator {
         if MIRI || n > MAX_SIZE || m > MAX_ALIGN {
             System::allocate(&System, lay)
         } else {
-            #[cfg(feature = "log-bump")]
+            #[cfg(feature = "log-alloc")]
             {
                 self._alloc_bytes += n;
                 self._total_count += 1;
@@ -282,7 +281,7 @@ impl BumpAllocator {
         } else {
             self.alloc_count -= 1;
             if self.alloc_count == 0 {
-                #[cfg(feature = "log-bump")]
+                #[cfg(feature = "log-alloc")]
                 {
                     self._reset_count += 1;
                     self._max_alloc = std::cmp::max(self._max_alloc, self._alloc_bytes);
@@ -303,7 +302,7 @@ impl BumpAllocator {
 
 impl Drop for BumpAllocator {
     fn drop(&mut self) {
-        #[cfg(feature = "log-bump")]
+        #[cfg(feature = "log-alloc")]
         println!(
             "BumpAllocator Dropping alloc_count={} total_count={} total_alloc={} max_alloc={} reset_count={}",
             self.alloc_count,
@@ -365,7 +364,7 @@ impl ChainAllocator {
             System::allocate(&System, lay)
         } else {
             self.alloc_count += 1;
-            #[cfg(feature = "log-bump")]
+            #[cfg(feature = "log-alloc")]
             {
                 self._alloc_bytes += n;
                 self._total_count += 1;
@@ -408,7 +407,7 @@ impl ChainAllocator {
         } else {
             self.alloc_count -= 1;
             if self.alloc_count == 0 {
-                #[cfg(feature = "log-bump")]
+                #[cfg(feature = "log-alloc")]
                 {
                     self._reset_count += 1;
                     self._max_alloc = std::cmp::max(self._max_alloc, self._alloc_bytes);
@@ -441,7 +440,7 @@ impl ChainAllocator {
 
 impl Drop for ChainAllocator {
     fn drop(&mut self) {
-        #[cfg(feature = "log-bump")]
+        #[cfg(feature = "log-alloc")]
         println!(
             "ChainAllocator Dropping alloc_count={} total_count={} total_alloc={} max_alloc={} reset_count={}",
             self.alloc_count,

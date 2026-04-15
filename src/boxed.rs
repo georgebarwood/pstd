@@ -11,7 +11,7 @@ use std::{
 
 /// A pointer type that uniquely owns a heap allocation of type `T`.
 ///
-/// dyn values can be boxed using the [`unsize_box`](crate::unsize_box) macro. 
+/// dyn values can be boxed using the [`unsize_box`](crate::unsize_box) macro.
 pub struct BoxA<T: ?Sized, A: Allocator> {
     pub(crate) nn: NonNull<T>,
     pub(crate) a: A,
@@ -21,7 +21,6 @@ pub struct BoxA<T: ?Sized, A: Allocator> {
 pub type Box<T> = BoxA<T, Global>;
 
 impl<T, A: Allocator> BoxA<T, A> {
-
     /// Allocates memory then places t into it.
     #[must_use]
     pub fn new(t: T) -> Self
@@ -63,7 +62,6 @@ impl<T, A: Allocator> BoxA<T, A> {
 }
 
 impl<T: ?Sized, A: Allocator> BoxA<T, A> {
-
     /// Allocates memory then copies s into it.
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> BoxA<str, A>
@@ -104,6 +102,14 @@ impl<T: ?Sized, A: Allocator> BoxA<T, A> {
     }
 
     /// Create from raw pointer in specified allocator.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because improper use may lead to
+    /// memory problems. For example, a double-free may occur if the
+    /// function is called twice on the same raw pointer.
+    ///
+    /// The non-null pointer must point to a block of memory allocated by `a`.
     pub unsafe fn from_raw_in(p: *mut T, a: A) -> Self {
         let nn = unsafe { NonNull::new_unchecked(p) };
         Self { nn, a }
@@ -116,7 +122,7 @@ impl<T: ?Sized, A: Allocator> BoxA<T, A> {
 
 impl<A: Allocator + Clone> Clone for BoxA<str, A> {
     fn clone(&self) -> BoxA<str, A> {
-        BoxA::<str, A>::from_str_in(&**self, self.a.clone())
+        BoxA::<str, A>::from_str_in(self, self.a.clone())
     }
 }
 

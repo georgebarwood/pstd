@@ -1,7 +1,6 @@
 #![deny(missing_docs)]
 #![cfg_attr(feature = "dynbox", feature(unsize))]
 #![cfg_attr(feature = "dynbox", feature(coerce_unsized))]
-//#![cfg_attr(feature = "dynbox", feature(core_intrinsics))]
 
 //! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ),
 //! in particular [`Box`], [`Vec`], [`Rc`], [`String`] and [collections]::{ [`BTreeMap`](collections::BTreeMap), [`BTreeSet`](collections::BTreeSet), [`HashMap`](collections::HashMap), [`HashSet`](collections::HashMap) }.
@@ -19,8 +18,8 @@
 //! This crate supports the following cargo features:
 //! - `serde` : enables serialisation of [`BTreeMap`](collections::BTreeMap) and [`BTreeSet`](collections::BTreeSet) via serde crate.
 //! - `unsafe-optim` : Enable unsafe optimisations in release mode.
-//! - `dynbox` : enables Boxing of dyn values, requires nightly toolchain.
-//! - `log-bump` : prints details of local allocation when thread terminates.
+//! - `dynbox` : enables Boxing of dyn values, requires nightly toolchain. An alternative is to use the [unsize_box] macro.
+//! - `log-alloc` : prints details of thread-local allocation when thread terminates.
 
 /// Memory allocation.
 pub mod alloc {
