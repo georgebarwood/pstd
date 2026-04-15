@@ -1,6 +1,6 @@
 //! [`BTreeSet`] similar to [`std::collections::BTreeSet`].
 
-use crate::alloc::Allocator;
+use crate::alloc::{Allocator, Global};
 use std::borrow::Borrow;
 use std::cmp::{Ordering, max, min};
 use std::fmt::{self, Debug};
@@ -17,6 +17,9 @@ mod entry;
 pub use entry::{Entry, OccupiedEntry, VacantEntry};
 
 const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
+
+/// BTreeSet allocated from Global.
+pub type BTreeSet<T> = BTreeSetA<T, CustomTuning<Global>>;
 
 /// An ordered set based on a B-Tree similar to [`std::collections::BTreeSet`].
 ///
@@ -40,52 +43,52 @@ const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 ///
 /// Cursors: [`lower_bound`], [`upper_bound`], [`lower_bound_mut`], [`upper_bound_mut`]
 ///
-/// [`new`]: BTreeSet::new
-/// [`new_in`]: BTreeSet::new_in
-/// [`with_tuning`]: BTreeSet::with_tuning
-/// [`len`]: BTreeSet::len
-/// [`is_empty`]: BTreeSet::is_empty
-/// [`contains`]: BTreeSet::contains
-/// [`is_subset`]: BTreeSet::is_subset
-/// [`is_superset`]: BTreeSet::is_superset
-/// [`is_disjoint`]: BTreeSet::is_disjoint
-/// [`insert`]: BTreeSet::insert
-/// [`get_or_insert`]: BTreeSet::get_or_insert
-/// [`get_or_insert_with`]: BTreeSet::get_or_insert_with
-/// [`entry`]: BTreeSet::entry
-/// [`get`]: BTreeSet::get
-/// [`first`]: BTreeSet::first
-/// [`last`]: BTreeSet::last
-/// [`remove`]: BTreeSet::remove
-/// [`take`]: BTreeSet::take
-/// [`pop_first`]: BTreeSet::pop_first
-/// [`pop_last`]: BTreeSet::pop_last
-/// [`append`]: BTreeSet::append
-/// [`split_off`]: BTreeSet::split_off
-/// [`retain`]: BTreeSet::retain
-/// [`clear`]: BTreeSet::clear
-/// [`iter`]: BTreeSet::iter
-/// [`range`]: BTreeSet::range
-/// [`extract_if`]: BTreeSet::extract_if
-/// [`union`]: BTreeSet::union
-/// [`intersection`]: BTreeSet::intersection
-/// [`difference`]: BTreeSet::difference
-/// [`symmetric_difference`]: BTreeSet::symmetric_difference
-/// [`lower_bound`]: BTreeSet::lower_bound
-/// [`upper_bound`]: BTreeSet::upper_bound
-/// [`lower_bound_mut`]: BTreeSet::lower_bound_mut
-/// [`upper_bound_mut`]: BTreeSet::upper_bound_mut
-/// [`tuning`]: BTreeSet::tuning
-/// [`tuning_mut`]: BTreeSet::tuning_mut
+/// [`new`]: BTreeSetA::new
+/// [`new_in`]: BTreeSetA::new_in
+/// [`with_tuning`]: BTreeSetA::with_tuning
+/// [`len`]: BTreeSetA::len
+/// [`is_empty`]: BTreeSetA::is_empty
+/// [`contains`]: BTreeSetA::contains
+/// [`is_subset`]: BTreeSetA::is_subset
+/// [`is_superset`]: BTreeSetA::is_superset
+/// [`is_disjoint`]: BTreeSetA::is_disjoint
+/// [`insert`]: BTreeSetA::insert
+/// [`get_or_insert`]: BTreeSetA::get_or_insert
+/// [`get_or_insert_with`]: BTreeSetA::get_or_insert_with
+/// [`entry`]: BTreeSetA::entry
+/// [`get`]: BTreeSetA::get
+/// [`first`]: BTreeSetA::first
+/// [`last`]: BTreeSetA::last
+/// [`remove`]: BTreeSetA::remove
+/// [`take`]: BTreeSetA::take
+/// [`pop_first`]: BTreeSetA::pop_first
+/// [`pop_last`]: BTreeSetA::pop_last
+/// [`append`]: BTreeSetA::append
+/// [`split_off`]: BTreeSetA::split_off
+/// [`retain`]: BTreeSetA::retain
+/// [`clear`]: BTreeSetA::clear
+/// [`iter`]: BTreeSetA::iter
+/// [`range`]: BTreeSetA::range
+/// [`extract_if`]: BTreeSetA::extract_if
+/// [`union`]: BTreeSetA::union
+/// [`intersection`]: BTreeSetA::intersection
+/// [`difference`]: BTreeSetA::difference
+/// [`symmetric_difference`]: BTreeSetA::symmetric_difference
+/// [`lower_bound`]: BTreeSetA::lower_bound
+/// [`upper_bound`]: BTreeSetA::upper_bound
+/// [`lower_bound_mut`]: BTreeSetA::lower_bound_mut
+/// [`upper_bound_mut`]: BTreeSetA::upper_bound_mut
+/// [`tuning`]: BTreeSetA::tuning
+/// [`tuning_mut`]: BTreeSetA::tuning_mut
 ///
 /// # Examples
 ///
 /// ```
-/// use pstd::collections::BTreeSet;
+/// use pstd::collections::BTreeSetA;
 ///
 /// // Type inference lets us omit an explicit type signature (which
-/// // would be `BTreeSet<&str>` in this example).
-/// let mut books = BTreeSet::new();
+/// // would be `BTreeSetA<&str>` in this example).
+/// let mut books = BTreeSetA::new();
 ///
 /// // Add some books.
 /// books.insert("A Dance With Dragons");
@@ -108,55 +111,55 @@ const ITER_PERFORMANCE_TIPPING_SIZE_DIFF: usize = 16;
 /// }
 /// ```
 ///
-/// A `BTreeSet` with a known list of items can be initialized from an array:
+/// A `BTreeSetA` with a known list of items can be initialized from an array:
 ///
 /// ```
-/// use pstd::collections::BTreeSet;
+/// use pstd::collections::BTreeSetA;
 ///
-/// let set = BTreeSet::from([1, 2, 3]);
+/// let set = BTreeSetA::from([1, 2, 3]);
 /// ```
-pub struct BTreeSet<T, A: Tuning = DefaultTuning> {
-    map: map::BTreeMap<T, (), A>,
+pub struct BTreeSetA<T, A: Tuning = DefaultTuning> {
+    map: map::BTreeMapA<T, (), A>,
 }
 
-impl<T> BTreeSet<T> {
-    /// Returns a new, empty `BTreeSet`.
+impl<T> BTreeSetA<T> {
+    /// Returns a new, empty `BTreeSetA`.
     ///
     /// # Example
     ///
     /// ```
     /// # #![allow(unused_mut)]
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set: BTreeSet<i32> = BTreeSet::new();
+    /// let mut set: BTreeSetA<i32> = BTreeSetA::new();
     /// ```
     #[must_use]
-    pub const fn new() -> BTreeSet<T> {
-        BTreeSet {
-            map: map::BTreeMap::new(),
+    pub fn new() -> BTreeSetA<T> {
+        BTreeSetA {
+            map: map::BTreeMapA::new(),
         }
     }
 }
 
-impl<T, A: Tuning> BTreeSet<T, A> {
+impl<T, A: Tuning> BTreeSetA<T, A> {
     /// Returns new set with specified allocator
     ///
     /// # Example
     ///
     /// ```
     /// # #![allow(unused_mut)]
-    /// use pstd::collections::{BTreeSet,btree_set::CustomTuning};
+    /// use pstd::collections::{BTreeSetA,btree_set::CustomTuning};
     /// use pstd::alloc::Global;
     ///
-    /// let mut set = BTreeSet::<i32,CustomTuning<Global>>::new_in(Global);
+    /// let mut set = BTreeSetA::<i32,CustomTuning<Global>>::new_in(Global);
     /// ```
     #[must_use]
-    pub const fn new_in<AL>(a: AL) -> BTreeSet<T, CustomTuning<AL>>
+    pub const fn new_in<AL>(a: AL) -> BTreeSetA<T, CustomTuning<AL>>
     where
         AL: Allocator + Clone,
     {
-        BTreeSet {
-            map: map::BTreeMap::with_tuning(CustomTuning::new_in_def(a)),
+        BTreeSetA {
+            map: map::BTreeMapA::with_tuning(CustomTuning::new_in_def(a)),
         }
     }
 
@@ -165,9 +168,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    ///     use pstd::collections::BTreeSet;
+    ///     use pstd::collections::BTreeSetA;
     ///     use pstd::collections::btree_set::DefaultTuning;
-    ///     let mut set = BTreeSet::with_tuning(DefaultTuning::new(8,2));
+    ///     let mut set = BTreeSetA::with_tuning(DefaultTuning::new(8,2));
     ///     set.insert("England");
     ///     set.insert("France");
     ///     assert!(set.contains("England"));
@@ -175,7 +178,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     #[must_use]
     pub const fn with_tuning(atune: A) -> Self {
         Self {
-            map: map::BTreeMap::with_tuning(atune),
+            map: map::BTreeMapA::with_tuning(atune),
         }
     }
 
@@ -189,8 +192,8 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::{BTreeSet,btree_set::Tuning};
-    /// let mut v = BTreeSet::new();
+    /// use pstd::collections::{BTreeSetA,btree_set::Tuning};
+    /// let mut v = BTreeSetA::new();
     /// v.tuning_mut().set_seq(true);
     /// for x in 0..100 { v.insert(x); }
     /// assert!(v.len() == 100);
@@ -204,9 +207,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut v = BTreeSet::new();
+    /// let mut v = BTreeSetA::new();
     /// assert_eq!(v.len(), 0);
     /// v.insert(1);
     /// assert_eq!(v.len(), 1);
@@ -220,9 +223,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut v = BTreeSet::new();
+    /// let mut v = BTreeSetA::new();
     /// assert!(v.is_empty());
     /// v.insert(1);
     /// assert!(!v.is_empty());
@@ -236,9 +239,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut v = BTreeSet::new();
+    /// let mut v = BTreeSetA::new();
     /// v.insert(1);
     /// v.clear();
     /// assert!(v.is_empty());
@@ -252,9 +255,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::new();
+    /// let mut set = BTreeSetA::new();
     /// set.insert(Vec::<i32>::new());
     ///
     /// assert_eq!(set.get(&[][..]).unwrap().capacity(), 0);
@@ -273,9 +276,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use std::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::new();
+    /// let mut set = BTreeSetA::new();
     ///
     /// set.insert(2);
     /// assert_eq!(set.remove(&2), true);
@@ -298,9 +301,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::from([1, 2, 3]);
+    /// let mut set = BTreeSetA::from([1, 2, 3]);
     /// assert_eq!(set.take(&2), Some(2));
     /// assert_eq!(set.take(&2), None);
     /// ```
@@ -318,9 +321,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::new();
+    /// let mut set = BTreeSetA::new();
     /// set.insert(Vec::<i32>::new());
     ///
     /// assert_eq!(set.get(&[][..]).unwrap().capacity(), 0);
@@ -346,9 +349,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let set = BTreeSet::from([1, 2, 3]);
+    /// let set = BTreeSetA::from([1, 2, 3]);
     /// assert_eq!(set.contains(&1), true);
     /// assert_eq!(set.contains(&4), false);
     /// ```
@@ -370,9 +373,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let set = BTreeSet::from([1, 2, 3]);
+    /// let set = BTreeSetA::from([1, 2, 3]);
     /// assert_eq!(set.get(&2), Some(&2));
     /// assert_eq!(set.get(&4), None);
     /// ```
@@ -391,9 +394,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::from([1, 2, 3]);
+    /// let mut set = BTreeSetA::from([1, 2, 3]);
     /// assert_eq!(set.len(), 3);
     /// assert_eq!(set.get_or_insert(2), &2);
     /// assert_eq!(set.get_or_insert(100), &100);
@@ -414,9 +417,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set: BTreeSet<String> = ["cat", "dog", "horse"]
+    /// let mut set: BTreeSetA<String> = ["cat", "dog", "horse"]
     ///     .iter().map(|&pet| pet.to_owned()).collect();
     ///
     /// assert_eq!(set.len(), 3);
@@ -455,9 +458,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::from([1, 2, 3, 4, 5, 6]);
+    /// let mut set = BTreeSetA::from([1, 2, 3, 4, 5, 6]);
     /// // Keep only the even numbers.
     /// set.retain(|&k| k % 2 == 0);
     /// assert!(set.iter().eq([2, 4, 6].iter()));
@@ -478,9 +481,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Basic usage:
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::new();
+    /// let mut set = BTreeSetA::new();
     /// assert_eq!(set.first(), None);
     /// set.insert(1);
     /// assert_eq!(set.first(), Some(&1));
@@ -503,9 +506,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Basic usage:
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::new();
+    /// let mut set = BTreeSetA::new();
     /// assert_eq!(set.last(), None);
     /// set.insert(1);
     /// assert_eq!(set.last(), Some(&1));
@@ -526,9 +529,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::new();
+    /// let mut set = BTreeSetA::new();
     ///
     /// set.insert(1);
     /// while let Some(n) = set.pop_first() {
@@ -549,9 +552,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut set = BTreeSet::new();
+    /// let mut set = BTreeSetA::new();
     ///
     /// set.insert(1);
     /// while let Some(n) = set.pop_last() {
@@ -578,26 +581,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Use `extract_if().for_each(drop)` if you do not need the returned iterator,
     /// or [`retain`] with a negated predicate if you also do not need to restrict the range.
     ///
-    /// [`retain`]: BTreeSet::retain
-    /// # Example
-    ///
-    /// ```
-    /// use std::collections::BTreeSet;
-    ///
-    /// // Splitting a set into even and odd values, reusing the original set:
-    /// let mut set: BTreeSet<i32> = (0..8).collect();
-    /// let evens: BTreeSet<_> = set.extract_if(.., |v| v % 2 == 0).collect();
-    /// let odds = set;
-    /// assert_eq!(evens.into_iter().collect::<Vec<_>>(), vec![0, 2, 4, 6]);
-    /// assert_eq!(odds.into_iter().collect::<Vec<_>>(), vec![1, 3, 5, 7]);
-    ///
-    /// // Splitting a set into low and high halves, reusing the original set:
-    /// let mut set: BTreeSet<i32> = (0..8).collect();
-    /// let low: BTreeSet<_> = set.extract_if(0..4, |_v| true).collect();
-    /// let high = set;
-    /// assert_eq!(low.into_iter().collect::<Vec<_>>(), [0, 1, 2, 3]);
-    /// assert_eq!(high.into_iter().collect::<Vec<_>>(), [4, 5, 6, 7]);
-    /// ```
+    /// [`retain`]: BTreeSetA::retain
     pub fn extract_if<F>(&mut self, pred: F) -> ExtractIf<'_, T, F, A>
     where
         T: Ord,
@@ -615,9 +599,9 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// Basic usage:
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut a = BTreeSet::new();
+    /// let mut a = BTreeSetA::new();
     /// a.insert(1);
     /// a.insert(2);
     /// a.insert(3);
@@ -641,7 +625,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         T: Borrow<Q> + Ord,
         A: Clone,
     {
-        BTreeSet {
+        BTreeSetA {
             map: self.map.split_off(value),
         }
     }
@@ -651,14 +635,14 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut a = BTreeSet::new();
+    /// let mut a = BTreeSetA::new();
     /// a.insert(1);
     /// a.insert(2);
     /// a.insert(3);
     ///
-    /// let mut b = BTreeSet::new();
+    /// let mut b = BTreeSetA::new();
     /// b.insert(3);
     /// b.insert(4);
     /// b.insert(5);
@@ -682,15 +666,15 @@ impl<T, A: Tuning> BTreeSet<T, A> {
         self.map.append(&mut other.map);
     }
 
-    /// Gets an iterator that visits the elements in the `BTreeSet` in ascending
+    /// Gets an iterator that visits the elements in the `BTreeSetA` in ascending
     /// order.
     ///
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let set = BTreeSet::from([3, 1, 2]);
+    /// let set = BTreeSetA::from([3, 1, 2]);
     /// let mut set_iter = set.iter();
     /// assert_eq!(set_iter.next(), Some(&1));
     /// assert_eq!(set_iter.next(), Some(&2));
@@ -719,10 +703,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     /// use std::ops::Bound::Included;
     ///
-    /// let mut set = BTreeSet::new();
+    /// let mut set = BTreeSetA::new();
     /// set.insert(3);
     /// set.insert(5);
     /// set.insert(8);
@@ -749,20 +733,20 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use std::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut a = BTreeSet::new();
+    /// let mut a = BTreeSetA::new();
     /// a.insert(1);
     /// a.insert(2);
     ///
-    /// let mut b = BTreeSet::new();
+    /// let mut b = BTreeSetA::new();
     /// b.insert(2);
     /// b.insert(3);
     ///
     /// let intersection: Vec<_> = a.intersection(&b).cloned().collect();
     /// assert_eq!(intersection, [2]);
     /// ```
-    pub fn intersection<'a>(&'a self, other: &'a BTreeSet<T, A>) -> Intersection<'a, T, A>
+    pub fn intersection<'a>(&'a self, other: &'a BTreeSetA<T, A>) -> Intersection<'a, T, A>
     where
         T: Ord,
     {
@@ -808,18 +792,18 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut a = BTreeSet::new();
+    /// let mut a = BTreeSetA::new();
     /// a.insert(1);
     ///
-    /// let mut b = BTreeSet::new();
+    /// let mut b = BTreeSetA::new();
     /// b.insert(2);
     ///
     /// let union: Vec<_> = a.union(&b).cloned().collect();
     /// assert_eq!(union, [1, 2]);
     /// ```
-    pub fn union<'a>(&'a self, other: &'a BTreeSet<T, A>) -> Union<'a, T>
+    pub fn union<'a>(&'a self, other: &'a BTreeSetA<T, A>) -> Union<'a, T>
     where
         T: Ord,
     {
@@ -833,20 +817,20 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut a = BTreeSet::new();
+    /// let mut a = BTreeSetA::new();
     /// a.insert(1);
     /// a.insert(2);
     ///
-    /// let mut b = BTreeSet::new();
+    /// let mut b = BTreeSetA::new();
     /// b.insert(2);
     /// b.insert(3);
     ///
     /// let diff: Vec<_> = a.difference(&b).cloned().collect();
     /// assert_eq!(diff, [1]);
     /// ```
-    pub fn difference<'a>(&'a self, other: &'a BTreeSet<T, A>) -> Difference<'a, T, A>
+    pub fn difference<'a>(&'a self, other: &'a BTreeSetA<T, A>) -> Difference<'a, T, A>
     where
         T: Ord,
     {
@@ -896,13 +880,13 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let mut a = BTreeSet::new();
+    /// let mut a = BTreeSetA::new();
     /// a.insert(1);
     /// a.insert(2);
     ///
-    /// let mut b = BTreeSet::new();
+    /// let mut b = BTreeSetA::new();
     /// b.insert(2);
     /// b.insert(3);
     ///
@@ -911,7 +895,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// ```
     pub fn symmetric_difference<'a>(
         &'a self,
-        other: &'a BTreeSet<T, A>,
+        other: &'a BTreeSetA<T, A>,
     ) -> SymmetricDifference<'a, T>
     where
         T: Ord,
@@ -925,10 +909,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let a = BTreeSet::from([1, 2, 3]);
-    /// let mut b = BTreeSet::new();
+    /// let a = BTreeSetA::from([1, 2, 3]);
+    /// let mut b = BTreeSetA::new();
     ///
     /// assert_eq!(a.is_disjoint(&b), true);
     /// b.insert(4);
@@ -937,7 +921,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// assert_eq!(a.is_disjoint(&b), false);
     /// ```
     #[must_use]
-    pub fn is_disjoint(&self, other: &BTreeSet<T, A>) -> bool
+    pub fn is_disjoint(&self, other: &BTreeSetA<T, A>) -> bool
     where
         T: Ord,
     {
@@ -950,10 +934,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let sub = BTreeSet::from([1, 2]);
-    /// let mut set = BTreeSet::new();
+    /// let sub = BTreeSetA::from([1, 2]);
+    /// let mut set = BTreeSetA::new();
     ///
     /// assert_eq!(set.is_superset(&sub), false);
     ///
@@ -965,7 +949,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// assert_eq!(set.is_superset(&sub), true);
     /// ```
     #[must_use]
-    pub fn is_superset(&self, other: &BTreeSet<T, A>) -> bool
+    pub fn is_superset(&self, other: &BTreeSetA<T, A>) -> bool
     where
         T: Ord,
     {
@@ -978,10 +962,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let sup = BTreeSet::from([1, 2, 3]);
-    /// let mut set = BTreeSet::new();
+    /// let sup = BTreeSetA::from([1, 2, 3]);
+    /// let mut set = BTreeSetA::new();
     ///
     /// assert_eq!(set.is_subset(&sup), true);
     /// set.insert(2);
@@ -990,7 +974,7 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// assert_eq!(set.is_subset(&sup), false);
     /// ```
     #[must_use]
-    pub fn is_subset(&self, other: &BTreeSet<T, A>) -> bool
+    pub fn is_subset(&self, other: &BTreeSetA<T, A>) -> bool
     where
         T: Ord,
     {
@@ -1065,10 +1049,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     /// use std::ops::Bound;
     ///
-    /// let set = BTreeSet::from([1, 2, 3, 4]);
+    /// let set = BTreeSetA::from([1, 2, 3, 4]);
     ///
     /// let cursor = set.lower_bound(Bound::Included(&2));
     /// assert_eq!(cursor.peek_prev(), Some(&1));
@@ -1107,10 +1091,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     /// use std::ops::Bound;
     ///
-    /// let set = BTreeSet::from([1, 2, 3, 4]);
+    /// let set = BTreeSetA::from([1, 2, 3, 4]);
     ///
     /// let cursor = set.upper_bound(Bound::Included(&3));
     /// assert_eq!(cursor.peek_prev(), Some(&3));
@@ -1149,10 +1133,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     /// use std::ops::Bound;
     ///
-    /// let mut set = BTreeSet::from([1, 2, 3, 4]);
+    /// let mut set = BTreeSetA::from([1, 2, 3, 4]);
     ///
     /// let mut cursor = set.lower_bound_mut(Bound::Included(&2));
     /// assert_eq!(cursor.peek_prev(), Some(&1));
@@ -1192,10 +1176,10 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     /// use std::ops::Bound;
     ///
-    /// let mut set = BTreeSet::from([1, 2, 3, 4]);
+    /// let mut set = BTreeSetA::from([1, 2, 3, 4]);
     ///
     /// let mut cursor = set.upper_bound_mut(Bound::Included(&3));
     /// assert_eq!(cursor.peek_prev(), Some(&3));
@@ -1220,11 +1204,11 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     }
 
     /// Create set from specified iterator and tuning.
-    fn from_sorted_iter<I: Iterator<Item = T>>(iter: I, tuning: A) -> BTreeSet<T, A>
+    fn from_sorted_iter<I: Iterator<Item = T>>(iter: I, tuning: A) -> BTreeSetA<T, A>
     where
         T: Ord,
     {
-        let mut set = BTreeSet::with_tuning(tuning);
+        let mut set = BTreeSetA::with_tuning(tuning);
         let save = set.map.tuning_mut().set_seq(true);
         {
             let mut cursor = set.lower_bound_mut(Bound::Unbounded);
@@ -1242,11 +1226,11 @@ impl<T, A: Tuning> BTreeSet<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     /// use pstd::collections::btree_set::Entry::*;
     ///
-    /// let mut singles = BTreeSet::new();
-    /// let mut dupes = BTreeSet::new();
+    /// let mut singles = BTreeSetA::new();
+    /// let mut dupes = BTreeSetA::new();
     ///
     /// for ch in "a short treatise on fungi".chars() {
     ///     if let Vacant(dupe_entry) = dupes.entry(ch) {
@@ -1280,12 +1264,12 @@ impl<T, A: Tuning> BTreeSet<T, A> {
             map::Entry::Vacant(entry) => Entry::Vacant(VacantEntry { inner: entry }),
         }
     }
-} // end impl BTreeSet
+} // end impl BTreeSetA
 
-// start impl for BTreeSet
+// start impl for BTreeSetA
 
-impl<T: Ord, const N: usize> From<[T; N]> for BTreeSet<T> {
-    /// Converts a `[T; N]` into a `BTreeSet<T>`.
+impl<T: Ord, const N: usize> From<[T; N]> for BTreeSetA<T> {
+    /// Converts a `[T; N]` into a `BTreeSetA<T>`.
     ///
     /// If the array contains any equal values,
     /// all but one will be dropped.
@@ -1293,14 +1277,14 @@ impl<T: Ord, const N: usize> From<[T; N]> for BTreeSet<T> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let set1 = BTreeSet::from([1, 2, 3, 4]);
-    /// let set2: BTreeSet<_> = [1, 2, 3, 4].into();
+    /// let set1 = BTreeSetA::from([1, 2, 3, 4]);
+    /// let set2: BTreeSetA<_> = [1, 2, 3, 4].into();
     /// assert_eq!(set1, set2);
     /// ```
     fn from(arr: [T; N]) -> Self {
-        let mut result = BTreeSet::new();
+        let mut result = BTreeSetA::new();
         for e in arr {
             result.insert(e);
         }
@@ -1308,42 +1292,42 @@ impl<T: Ord, const N: usize> From<[T; N]> for BTreeSet<T> {
     }
 }
 
-impl<T> Default for BTreeSet<T> {
-    /// Creates an empty `BTreeSet`.
-    fn default() -> BTreeSet<T> {
-        BTreeSet::new()
+impl<T> Default for BTreeSetA<T> {
+    /// Creates an empty `BTreeSetA`.
+    fn default() -> BTreeSetA<T> {
+        BTreeSetA::new()
     }
 }
 
-impl<T: Hash, A: Tuning> Hash for BTreeSet<T, A> {
+impl<T: Hash, A: Tuning> Hash for BTreeSetA<T, A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.map.hash(state)
     }
 }
 
-impl<T: PartialEq, A: Tuning> PartialEq for BTreeSet<T, A> {
-    fn eq(&self, other: &BTreeSet<T, A>) -> bool {
+impl<T: PartialEq, A: Tuning> PartialEq for BTreeSetA<T, A> {
+    fn eq(&self, other: &BTreeSetA<T, A>) -> bool {
         self.map.eq(&other.map)
     }
 }
 
-impl<T: Eq, A: Tuning> Eq for BTreeSet<T, A> {}
+impl<T: Eq, A: Tuning> Eq for BTreeSetA<T, A> {}
 
-impl<T: PartialOrd, A: Tuning> PartialOrd for BTreeSet<T, A> {
-    fn partial_cmp(&self, other: &BTreeSet<T, A>) -> Option<Ordering> {
+impl<T: PartialOrd, A: Tuning> PartialOrd for BTreeSetA<T, A> {
+    fn partial_cmp(&self, other: &BTreeSetA<T, A>) -> Option<Ordering> {
         self.map.partial_cmp(&other.map)
     }
 }
 
-impl<T: Ord, A: Tuning> Ord for BTreeSet<T, A> {
-    fn cmp(&self, other: &BTreeSet<T, A>) -> Ordering {
+impl<T: Ord, A: Tuning> Ord for BTreeSetA<T, A> {
+    fn cmp(&self, other: &BTreeSetA<T, A>) -> Ordering {
         self.map.cmp(&other.map)
     }
 }
 
-impl<T: Clone, A: Tuning> Clone for BTreeSet<T, A> {
+impl<T: Clone, A: Tuning> Clone for BTreeSetA<T, A> {
     fn clone(&self) -> Self {
-        BTreeSet {
+        BTreeSetA {
             map: self.map.clone(),
         }
     }
@@ -1353,15 +1337,15 @@ impl<T: Clone, A: Tuning> Clone for BTreeSet<T, A> {
     }
 }
 
-impl<T: Debug, A: Tuning> Debug for BTreeSet<T, A> {
+impl<T: Debug, A: Tuning> Debug for BTreeSetA<T, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_set().entries(self.iter()).finish()
     }
 }
 
-impl<T: Ord> FromIterator<T> for BTreeSet<T> {
-    fn from_iter<X: IntoIterator<Item = T>>(iter: X) -> BTreeSet<T> {
-        let mut result = BTreeSet::new();
+impl<T: Ord> FromIterator<T> for BTreeSetA<T> {
+    fn from_iter<X: IntoIterator<Item = T>>(iter: X) -> BTreeSetA<T> {
+        let mut result = BTreeSetA::new();
         for k in iter {
             result.insert(k);
         }
@@ -1369,18 +1353,18 @@ impl<T: Ord> FromIterator<T> for BTreeSet<T> {
     }
 }
 
-impl<T, A: Tuning> IntoIterator for BTreeSet<T, A> {
+impl<T, A: Tuning> IntoIterator for BTreeSetA<T, A> {
     type Item = T;
     type IntoIter = IntoIter<T, A>;
 
-    /// Gets an iterator for moving out the `BTreeSet`'s contents in ascending order.
+    /// Gets an iterator for moving out the `BTreeSetA`'s contents in ascending order.
     ///
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let set = BTreeSet::from([1, 2, 3, 4]);
+    /// let set = BTreeSetA::from([1, 2, 3, 4]);
     ///
     /// let v: Vec<_> = set.into_iter().collect();
     /// assert_eq!(v, [1, 2, 3, 4]);
@@ -1392,7 +1376,7 @@ impl<T, A: Tuning> IntoIterator for BTreeSet<T, A> {
     }
 }
 
-impl<'a, T, A: Tuning> IntoIterator for &'a BTreeSet<T, A> {
+impl<'a, T, A: Tuning> IntoIterator for &'a BTreeSetA<T, A> {
     type Item = &'a T;
     type IntoIter = Iter<'a, T>;
 
@@ -1402,14 +1386,14 @@ impl<'a, T, A: Tuning> IntoIterator for &'a BTreeSet<T, A> {
     }
 }
 
-// end impl for BTreeSet
+// end impl for BTreeSetA
 
-/// An iterator over the items of a `BTreeSet`.
+/// An iterator over the items of a `BTreeSetA`.
 ///
-/// This `struct` is created by the [`iter`] method on [`BTreeSet`].
+/// This `struct` is created by the [`iter`] method on [`BTreeSetA`].
 /// See its documentation for more.
 ///
-/// [`iter`]: BTreeSet::iter
+/// [`iter`]: BTreeSetA::iter
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Iter<'a, T: 'a> {
     iter: map::Keys<'a, T, ()>,
@@ -1487,12 +1471,12 @@ impl<T, A: Tuning> Iterator for IntoIter<T, A> {
 
 // end impl for Iter
 
-/// An owning iterator over the items of a `BTreeSet` in ascending order.
+/// An owning iterator over the items of a `BTreeSetA` in ascending order.
 ///
-/// This `struct` is created by the [`into_iter`] method on [`BTreeSet`]
+/// This `struct` is created by the [`into_iter`] method on [`BTreeSetA`]
 /// (provided by the [`IntoIterator`] trait). See its documentation for more.
 ///
-/// [`into_iter`]: BTreeSet#method.into_iter
+/// [`into_iter`]: BTreeSetA#method.into_iter
 #[derive(Debug)]
 pub struct IntoIter<T, A: Tuning = DefaultTuning> {
     iter: map::IntoIter<T, (), A>,
@@ -1532,14 +1516,14 @@ where
 
 // end impl for IntoIter
 
-/// A cursor over a `BTreeSet`.
+/// A cursor over a `BTreeSetA`.
 ///
 /// A `Cursor` is like an iterator, except that it can freely seek back-and-forth.
 ///
 /// Cursors always point to a gap between two elements in the set, and can
 /// operate on the two immediately adjacent elements.
 ///
-/// A `Cursor` is created with the [`BTreeSet::lower_bound`] and [`BTreeSet::upper_bound`] methods.
+/// A `Cursor` is created with the [`BTreeSetA::lower_bound`] and [`BTreeSetA::upper_bound`] methods.
 #[derive(Clone)]
 pub struct Cursor<'a, K: 'a, A: Tuning = DefaultTuning> {
     inner: map::Cursor<'a, K, (), A>,
@@ -1586,7 +1570,7 @@ impl<'a, K, A: Tuning> Cursor<'a, K, A> {
     }
 }
 
-/// A cursor over a `BTreeSet` with editing operations, and which allows
+/// A cursor over a `BTreeSetA` with editing operations, and which allows
 /// mutating elements.
 ///
 /// A `Cursor` is like an iterator, except that it can freely seek back-and-forth, and can
@@ -1601,7 +1585,7 @@ impl<'a, K, A: Tuning> Cursor<'a, K, A> {
 /// [`CursorMut::with_mutable_key`] method.
 ///
 /// Since this cursor allows mutating elements, you should ensure that the
-/// `BTreeSet` invariants are maintained. Specifically:
+/// `BTreeSetA` invariants are maintained. Specifically:
 ///
 /// * The newly inserted element should be unique in the tree.
 /// * All elements in the tree should remain in sorted order.
@@ -1655,7 +1639,7 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
     /// After the insertion the cursor will be pointing at the gap before the
     /// newly inserted element.
     ///
-    /// You should ensure that the `BTreeSet` invariants are maintained.
+    /// You should ensure that the `BTreeSetA` invariants are maintained.
     /// Specifically:
     ///
     /// * The key of the newly inserted element must be unique in the tree.
@@ -1670,7 +1654,7 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
     /// After the insertion the cursor will be pointing at the gap after the
     /// newly inserted element.
     ///
-    /// You should ensure that the `BTreeSet` invariants are maintained.
+    /// You should ensure that the `BTreeSetA` invariants are maintained.
     /// Specifically:
     ///
     /// * The newly inserted element must be unique in the tree.
@@ -1707,7 +1691,7 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
         self.inner.insert_before(value, ())
     }
 
-    /// Removes the next element from the `BTreeSet`.
+    /// Removes the next element from the `BTreeSetA`.
     ///
     /// The element that was removed is returned. The cursor position is
     /// unchanged (before the removed element).
@@ -1715,7 +1699,7 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
         self.inner.remove_next().map(|(k, _)| k)
     }
 
-    /// Removes the preceding element from the `BTreeSet`.
+    /// Removes the preceding element from the `BTreeSetA`.
     ///
     /// The element that was removed is returned. The cursor position is
     /// unchanged (after the removed element).
@@ -1724,7 +1708,7 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
     }
 }
 
-/// A cursor over a `BTreeSet` with editing operations.
+/// A cursor over a `BTreeSetA` with editing operations.
 ///
 /// A `Cursor` is like an iterator, except that it can freely seek back-and-forth, and can
 /// safely mutate the set during iteration. This is because the lifetime of its yielded
@@ -1734,7 +1718,7 @@ impl<'a, T: Ord, A: Tuning> CursorMutKey<'a, T, A> {
 /// Cursors always point to a gap between two elements in the set, and can
 /// operate on the two immediately adjacent elements.
 ///
-/// A `CursorMut` is created with the [`BTreeSet::lower_bound_mut`] and [`BTreeSet::upper_bound_mut`]
+/// A `CursorMut` is created with the [`BTreeSetA::lower_bound_mut`] and [`BTreeSetA::upper_bound_mut`]
 /// methods.
 pub struct CursorMut<'a, T: 'a, A: Tuning = DefaultTuning> {
     inner: map::CursorMut<'a, T, (), A>,
@@ -1786,7 +1770,7 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
     /// After the insertion the cursor will be pointing at the gap before the
     /// newly inserted element.
     ///
-    /// You should ensure that the `BTreeSet` invariants are maintained.
+    /// You should ensure that the `BTreeSetA` invariants are maintained.
     /// Specifically:
     ///
     /// * The key of the newly inserted element must be unique in the tree.
@@ -1801,7 +1785,7 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
     /// After the insertion the cursor will be pointing at the gap after the
     /// newly inserted element.
     ///
-    /// You should ensure that the `BTreeSet` invariants are maintained.
+    /// You should ensure that the `BTreeSetA` invariants are maintained.
     /// Specifically:
     ///
     /// * The newly inserted element must be unique in the tree.
@@ -1838,7 +1822,7 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
         self.inner.insert_before(value, ())
     }
 
-    /// Removes the next element from the `BTreeSet`.
+    /// Removes the next element from the `BTreeSetA`.
     ///
     /// The element that was removed is returned. The cursor position is
     /// unchanged (before the removed element).
@@ -1846,7 +1830,7 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
         self.inner.remove_next().map(|(k, _)| k)
     }
 
-    /// Removes the preceding element from the `BTreeSet`.
+    /// Removes the preceding element from the `BTreeSetA`.
     ///
     /// The element that was removed is returned. The cursor position is
     /// unchanged (after the removed element).
@@ -1858,7 +1842,7 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
     /// elements in the tree.
     ///
     /// Since this cursor allows mutating elements, you should ensure that the
-    /// `BTreeSet` invariants are maintained. Specifically:
+    /// `BTreeSetA` invariants are maintained. Specifically:
     ///
     /// * The newly inserted element must be unique in the tree.
     /// * All elements in the tree must remain in sorted order.
@@ -1874,7 +1858,7 @@ impl<'a, T: Ord, A: Tuning> CursorMut<'a, T, A> {
     }
 }
 
-/// Iterator returned by [`BTreeSet::extract_if`].
+/// Iterator returned by [`BTreeSetA::extract_if`].
 // #[derive(Debug)]
 pub struct ExtractIf<'a, K, F, A: Tuning = DefaultTuning>
 where
@@ -1919,12 +1903,12 @@ where
 {
 }
 
-/// An iterator producing elements in the intersection of `BTreeSet`s.
+/// An iterator producing elements in the intersection of `BTreeSetA`s.
 ///
-/// This `struct` is created by the [`intersection`] method on [`BTreeSet`].
+/// This `struct` is created by the [`intersection`] method on [`BTreeSetA`].
 /// See its documentation for more.
 ///
-/// [`intersection`]: BTreeSet::intersection
+/// [`intersection`]: BTreeSetA::intersection
 #[must_use = "this returns the intersection as an iterator, \
               without modifying either input set"]
 pub struct Intersection<'a, T: 'a, A: Tuning = DefaultTuning> {
@@ -1940,7 +1924,7 @@ enum IntersectionInner<'a, T: 'a, A: Tuning = DefaultTuning> {
     Search {
         // iterate a small set, look up in the large set
         small_iter: Iter<'a, T>,
-        large_set: &'a BTreeSet<T, A>,
+        large_set: &'a BTreeSetA<T, A>,
     },
     Answer(Option<&'a T>), // return a specific element or emptiness
 }
@@ -1988,12 +1972,12 @@ impl<'a, T: Ord, A: Tuning> Iterator for Intersection<'a, T, A> {
     }
 }
 
-/// An iterator over a sub-range of items in a `BTreeSet`.
+/// An iterator over a sub-range of items in a `BTreeSetA`.
 ///
-/// This `struct` is created by the [`range`] method on [`BTreeSet`].
+/// This `struct` is created by the [`range`] method on [`BTreeSetA`].
 /// See its documentation for more.
 ///
-/// [`range`]: BTreeSet::range
+/// [`range`]: BTreeSetA::range
 #[must_use = "iterators are lazy and do nothing unless consumed"]
 #[derive(Debug)]
 pub struct Range<'a, T: 'a> {
@@ -2057,12 +2041,12 @@ impl<T> Default for Range<'_, T> {
     }
 }
 
-/// An iterator producing elements in the symmetric difference of `BTreeSet`s.
+/// An iterator producing elements in the symmetric difference of `BTreeSetA`s.
 ///
 /// This `struct` is created by the [`symmetric_difference`] method on
-/// [`BTreeSet`]. See its documentation for more.
+/// [`BTreeSetA`]. See its documentation for more.
 ///
-/// [`symmetric_difference`]: BTreeSet::symmetric_difference
+/// [`symmetric_difference`]: BTreeSetA::symmetric_difference
 #[must_use = "this returns the difference as an iterator, \
               without modifying either input set"]
 pub struct SymmetricDifference<'a, T: 'a>(MergeIterInner<Iter<'a, T>>);
@@ -2106,12 +2090,12 @@ impl<'a, T: Ord> Iterator for SymmetricDifference<'a, T> {
 
 impl<T: Ord> FusedIterator for SymmetricDifference<'_, T> {}
 
-/// An iterator producing elements in the union of `BTreeSet`s.
+/// An iterator producing elements in the union of `BTreeSetA`s.
 ///
-/// This `struct` is created by the [`union`] method on [`BTreeSet`].
+/// This `struct` is created by the [`union`] method on [`BTreeSetA`].
 /// See its documentation for more.
 ///
-/// [`union`]: BTreeSet::union
+/// [`union`]: BTreeSetA::union
 #[must_use = "this returns the union as an iterator, \
               without modifying either input set"]
 pub struct Union<'a, T: 'a>(MergeIterInner<Iter<'a, T>>);
@@ -2149,12 +2133,12 @@ impl<'a, T: Ord> Iterator for Union<'a, T> {
 
 impl<T: Ord> FusedIterator for Union<'_, T> {}
 
-/// An iterator producing elements in the difference of `BTreeSet`s.
+/// An iterator producing elements in the difference of `BTreeSetA`s.
 ///
-/// This `struct` is created by the [`difference`] method on [`BTreeSet`].
+/// This `struct` is created by the [`difference`] method on [`BTreeSetA`].
 /// See its documentation for more.
 ///
-/// [`difference`]: BTreeSet::difference
+/// [`difference`]: BTreeSetA::difference
 #[must_use = "this returns the difference as an iterator, \
               without modifying either input set"]
 pub struct Difference<'a, T: 'a, A: Tuning> {
@@ -2171,7 +2155,7 @@ enum DifferenceInner<'a, T: 'a, A: Tuning> {
     Search {
         // iterate `self`, look up in `other`
         self_iter: Iter<'a, T>,
-        other_set: &'a BTreeSet<T, A>,
+        other_set: &'a BTreeSetA<T, A>,
     },
     Iterate(Iter<'a, T>), // simply produce all elements in `self`
 }
@@ -2261,94 +2245,94 @@ impl<'a, T: Ord, A: Tuning> Iterator for Difference<'a, T, A> {
 
 impl<T: Ord, A: Tuning> FusedIterator for Difference<'_, T, A> {}
 
-impl<T: Ord + Clone, A: Tuning> BitAnd<&BTreeSet<T, A>> for &BTreeSet<T, A> {
-    type Output = BTreeSet<T, A>;
+impl<T: Ord + Clone, A: Tuning> BitAnd<&BTreeSetA<T, A>> for &BTreeSetA<T, A> {
+    type Output = BTreeSetA<T, A>;
 
-    /// Returns the intersection of `self` and `rhs` as a new `BTreeSet<T>`.
+    /// Returns the intersection of `self` and `rhs` as a new `BTreeSetA<T>`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let a = BTreeSet::from([1, 2, 3]);
-    /// let b = BTreeSet::from([2, 3, 4]);
+    /// let a = BTreeSetA::from([1, 2, 3]);
+    /// let b = BTreeSetA::from([2, 3, 4]);
     ///
     /// let result = &a & &b;
-    /// assert_eq!(result, BTreeSet::from([2, 3]));
+    /// assert_eq!(result, BTreeSetA::from([2, 3]));
     /// ```
-    fn bitand(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
-        BTreeSet::from_sorted_iter(self.intersection(rhs).cloned(), self.map.tuning().clone())
+    fn bitand(self, rhs: &BTreeSetA<T, A>) -> BTreeSetA<T, A> {
+        BTreeSetA::from_sorted_iter(self.intersection(rhs).cloned(), self.map.tuning().clone())
     }
 }
 
-impl<T: Ord + Clone, A: Tuning> BitOr<&BTreeSet<T, A>> for &BTreeSet<T, A> {
-    type Output = BTreeSet<T, A>;
+impl<T: Ord + Clone, A: Tuning> BitOr<&BTreeSetA<T, A>> for &BTreeSetA<T, A> {
+    type Output = BTreeSetA<T, A>;
 
-    /// Returns the union of `self` and `rhs` as a new `BTreeSet<T>`.
+    /// Returns the union of `self` and `rhs` as a new `BTreeSetA<T>`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let a = BTreeSet::from([1, 2, 3]);
-    /// let b = BTreeSet::from([3, 4, 5]);
+    /// let a = BTreeSetA::from([1, 2, 3]);
+    /// let b = BTreeSetA::from([3, 4, 5]);
     ///
     /// let result = &a | &b;
-    /// assert_eq!(result, BTreeSet::from([1, 2, 3, 4, 5]));
+    /// assert_eq!(result, BTreeSetA::from([1, 2, 3, 4, 5]));
     /// ```
-    fn bitor(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
-        BTreeSet::from_sorted_iter(self.union(rhs).cloned(), self.map.tuning().clone())
+    fn bitor(self, rhs: &BTreeSetA<T, A>) -> BTreeSetA<T, A> {
+        BTreeSetA::from_sorted_iter(self.union(rhs).cloned(), self.map.tuning().clone())
     }
 }
 
-impl<T: Ord + Clone, A: Tuning> BitXor<&BTreeSet<T, A>> for &BTreeSet<T, A> {
-    type Output = BTreeSet<T, A>;
+impl<T: Ord + Clone, A: Tuning> BitXor<&BTreeSetA<T, A>> for &BTreeSetA<T, A> {
+    type Output = BTreeSetA<T, A>;
 
-    /// Returns the symmetric difference of `self` and `rhs` as a new `BTreeSet<T>`.
+    /// Returns the symmetric difference of `self` and `rhs` as a new `BTreeSetA<T>`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use pstd::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let a = BTreeSet::from([1, 2, 3]);
-    /// let b = BTreeSet::from([2, 3, 4]);
+    /// let a = BTreeSetA::from([1, 2, 3]);
+    /// let b = BTreeSetA::from([2, 3, 4]);
     ///
     /// let result = &a ^ &b;
-    /// assert_eq!(result, BTreeSet::from([1, 4]));
+    /// assert_eq!(result, BTreeSetA::from([1, 4]));
     /// ```
-    fn bitxor(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
-        BTreeSet::from_sorted_iter(
+    fn bitxor(self, rhs: &BTreeSetA<T, A>) -> BTreeSetA<T, A> {
+        BTreeSetA::from_sorted_iter(
             self.symmetric_difference(rhs).cloned(),
             self.map.tuning().clone(),
         )
     }
 }
 
-impl<T: Ord + Clone, A: Tuning> Sub<&BTreeSet<T, A>> for &BTreeSet<T, A> {
-    type Output = BTreeSet<T, A>;
+impl<T: Ord + Clone, A: Tuning> Sub<&BTreeSetA<T, A>> for &BTreeSetA<T, A> {
+    type Output = BTreeSetA<T, A>;
 
-    /// Returns the difference of `self` and `rhs` as a new `BTreeSet<T>`.
+    /// Returns the difference of `self` and `rhs` as a new `BTreeSetA<T>`.
     ///
     /// # Examples
     ///
     /// ```
-    /// use std::collections::BTreeSet;
+    /// use pstd::collections::BTreeSetA;
     ///
-    /// let a = BTreeSet::from([1, 2, 3]);
-    /// let b = BTreeSet::from([3, 4, 5]);
+    /// let a = BTreeSetA::from([1, 2, 3]);
+    /// let b = BTreeSetA::from([3, 4, 5]);
     ///
     /// let result = &a - &b;
-    /// assert_eq!(result, BTreeSet::from([1, 2]));
+    /// assert_eq!(result, BTreeSetA::from([1, 2]));
     /// ```
-    fn sub(self, rhs: &BTreeSet<T, A>) -> BTreeSet<T, A> {
-        BTreeSet::from_sorted_iter(self.difference(rhs).cloned(), self.map.tuning().clone())
+    fn sub(self, rhs: &BTreeSetA<T, A>) -> BTreeSetA<T, A> {
+        BTreeSetA::from_sorted_iter(self.difference(rhs).cloned(), self.map.tuning().clone())
     }
 }
 
-impl<T: Ord, A: Tuning> Extend<T> for BTreeSet<T, A> {
+impl<T: Ord, A: Tuning> Extend<T> for BTreeSetA<T, A> {
     #[inline]
     fn extend<Iter: IntoIterator<Item = T>>(&mut self, iter: Iter) {
         iter.into_iter().for_each(move |elem| {
@@ -2363,7 +2347,7 @@ impl<T: Ord, A: Tuning> Extend<T> for BTreeSet<T, A> {
     */
 }
 
-impl<'a, T: 'a + Ord + Copy, A: Tuning> Extend<&'a T> for BTreeSet<T, A> {
+impl<'a, T: 'a + Ord + Copy, A: Tuning> Extend<&'a T> for BTreeSetA<T, A> {
     fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
         self.extend(iter.into_iter().cloned());
     }
@@ -2386,7 +2370,7 @@ use serde::{
 use std::marker::PhantomData;
 
 #[cfg(feature = "serde")]
-impl<T: Serialize, A: Tuning> Serialize for BTreeSet<T, A> {
+impl<T: Serialize, A: Tuning> Serialize for BTreeSetA<T, A> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut s = serializer.serialize_seq(Some(self.len()))?;
         for t in self {
@@ -2398,35 +2382,35 @@ impl<T: Serialize, A: Tuning> Serialize for BTreeSet<T, A> {
 
 /// For implementation of serde deserialisation.
 #[cfg(feature = "serde")]
-struct BTreeSetVisitor<T> {
-    marker: PhantomData<fn() -> BTreeSet<T>>,
+struct BTreeSetAVisitor<T> {
+    marker: PhantomData<fn() -> BTreeSetA<T>>,
 }
 
 #[cfg(feature = "serde")]
-impl<T> BTreeSetVisitor<T> {
+impl<T> BTreeSetAVisitor<T> {
     fn new() -> Self {
-        BTreeSetVisitor {
+        BTreeSetAVisitor {
             marker: PhantomData,
         }
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T> Visitor<'de> for BTreeSetVisitor<T>
+impl<'de, T> Visitor<'de> for BTreeSetAVisitor<T>
 where
     T: Deserialize<'de> + Ord,
 {
-    type Value = BTreeSet<T>;
+    type Value = BTreeSetA<T>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("BTreeSet")
+        formatter.write_str("BTreeSetA")
     }
 
     fn visit_seq<S>(self, mut access: S) -> Result<Self::Value, S::Error>
     where
         S: SeqAccess<'de>,
     {
-        let mut s = BTreeSet::new();
+        let mut s = BTreeSetA::new();
         let save = s.tuning_mut().set_seq(true);
         {
             let mut c = s.lower_bound_mut(Bound::Unbounded);
@@ -2454,7 +2438,7 @@ where
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T> Deserialize<'de> for BTreeSet<T>
+impl<'de, T> Deserialize<'de> for BTreeSetA<T>
 where
     T: Deserialize<'de> + Ord,
 {
@@ -2462,7 +2446,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_seq(BTreeSetVisitor::new())
+        deserializer.deserialize_seq(BTreeSetAVisitor::new())
     }
 }
 

@@ -26,7 +26,7 @@
 //!# Features
 //!
 //! This crate supports the following cargo features:
-//! - `serde` : enables serialisation of [`BTreeMap`] via serde crate.
+//! - `serde` : enables serialisation of [`BTreeMapA`] via serde crate.
 //! - `unsafe-optim` : uses unsafe code for extra optimisation.
 
 use std::{
@@ -54,11 +54,14 @@ type StkVec<T> = Vec<T>; // type StkVec<T> = vecs::Stack<T, 8>;
 // Note : with the current compiler, vecs::Stack does not work well for small maps.
 // See https://users.rust-lang.org/t/large-enums-are-they-moved-around-during-construction/138168/13
 
-/// `BTreeMap` similar to [`std::collections::BTreeMap`].
+/// BTreeMap allocated from Global
+pub type BTreeMap<K, V> = BTreeMapA<K, V, CustomTuning<Global>>;
+
+/// `BTreeMapA` is similar to [`std::collections::BTreeMap`].
 ///
 /// General guide to implementation:
 ///
-/// [`BTreeMap`] has a length and a `Tree`, where `Tree` is an enum that can be `Leaf` or `NonLeaf`.
+/// [`BTreeMapA`] has a length and a `Tree`, where `Tree` is an enum that can be `Leaf` or `NonLeaf`.
 ///
 /// The [Entry] API is implemented using [`CursorMut`].
 ///
@@ -66,23 +69,23 @@ type StkVec<T> = Vec<T>; // type StkVec<T> = vecs::Stack<T, 8>;
 /// to keep track of non-leaf positions.
 ///
 /// Roughly speaking, unsafe code is limited to the vecs module and the implementation of [`CursorMut`] and [`CursorMutKey`].
-pub struct BTreeMap<K, V, A: Tuning = DefaultTuning> {
+pub struct BTreeMapA<K, V, A: Tuning = DefaultTuning> {
     len: usize,
     tree: Tree<K, V>,
     atune: A,
 }
-impl<K, V> Default for BTreeMap<K, V> {
-    /// Creates an empty BTreeMap.
+impl<K, V, A: Tuning + Default> Default for BTreeMapA<K, V, A> {
+    /// Creates an empty BTreeMapA.
     fn default() -> Self {
         Self::new()
     }
 }
-impl<K, V, A: Tuning> Drop for BTreeMap<K, V, A> {
+impl<K, V, A: Tuning> Drop for BTreeMapA<K, V, A> {
     fn drop(&mut self) {
         self.tree.dealloc(&self.atune);
     }
 }
-impl<K: Clone, V: Clone, A: Tuning> Clone for BTreeMap<K, V, A> {
+impl<K: Clone, V: Clone, A: Tuning> Clone for BTreeMapA<K, V, A> {
     fn clone(&self) -> Self {
         Self {
             len: self.len,
@@ -92,15 +95,18 @@ impl<K: Clone, V: Clone, A: Tuning> Clone for BTreeMap<K, V, A> {
     }
 }
 
-impl<K, V> BTreeMap<K, V> {
+impl<K, V, A: Tuning> BTreeMapA<K, V, A> {
     /// Returns a new, empty map.
     #[must_use]
-    pub const fn new() -> Self {
-        Self::new_in(Global)
+    pub fn new() -> Self
+    where
+        A: Default,
+    {
+        Self::with_tuning(A::default())
     }
 }
 
-impl<K, V, A: Tuning> BTreeMap<K, V, A> {
+impl<K, V, A: Tuning> BTreeMapA<K, V, A> {
     #[cfg(all(test, feature = "stdtests"))]
     pub(crate) fn check(&self) {}
 
@@ -109,16 +115,16 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::{ alloc::Global, collections::btree_map::{BTreeMap,CustomTuning} };
-    /// let mut map = BTreeMap::<&str,&str,CustomTuning<Global>>::new_in(Global);
+    /// use pstd::{ alloc::Global, collections::btree_map::{BTreeMapA,CustomTuning} };
+    /// let mut map = BTreeMapA::<&str,&str,CustomTuning<Global>>::new_in(Global);
     /// map.insert("England", "London");
     /// ```
     #[must_use]
-    pub const fn new_in<AL>(a: AL) -> BTreeMap<K, V, CustomTuning<AL>>
+    pub const fn new_in<AL>(a: AL) -> BTreeMapA<K, V, CustomTuning<AL>>
     where
         AL: Allocator + Clone,
     {
-        BTreeMap::with_tuning(CustomTuning::new_in_def(a))
+        BTreeMapA::with_tuning(CustomTuning::new_in_def(a))
     }
 
     /// Returns a new, empty map with specified allocation tuning.
@@ -126,8 +132,8 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     /// # Example
     ///
     /// ```
-    ///     use pstd::collections::btree_map::{BTreeMap,DefaultTuning};
-    ///     let mut mymap = BTreeMap::with_tuning(DefaultTuning::new(8,2));
+    ///     use pstd::collections::btree_map::{BTreeMapA,DefaultTuning};
+    ///     let mut mymap = BTreeMapA::with_tuning(DefaultTuning::new(8,2));
     ///     mymap.insert("England", "London");
     ///     mymap.insert("France", "Paris");
     ///     println!("The capital of France is {}", mymap["France"]);
@@ -350,13 +356,13 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     ///
     /// If a key from `other` is already present in `self`, the respective
     /// value from `self` will be overwritten with the respective value from `other`.
-    pub fn append(&mut self, other: &mut BTreeMap<K, V, A>)
+    pub fn append(&mut self, other: &mut BTreeMapA<K, V, A>)
     where
         K: Ord,
     {
         let rep = Tree::new();
         let tree = mem::replace(&mut other.tree, rep);
-        let temp = BTreeMap {
+        let temp = BTreeMapA {
             len: other.len,
             tree,
             atune: other.atune.clone(),
@@ -502,10 +508,10 @@ impl<K, V, A: Tuning> BTreeMap<K, V, A> {
     {
         CursorMut::upper_bound(self, bound)
     }
-} // End impl BTreeMap
+} // End impl BTreeMapA
 
 use std::hash::{Hash, Hasher};
-impl<K: Hash, V: Hash, A: Tuning> Hash for BTreeMap<K, V, A> {
+impl<K: Hash, V: Hash, A: Tuning> Hash for BTreeMapA<K, V, A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // state.write_length_prefix(self.len());
         for elt in self {
@@ -513,33 +519,33 @@ impl<K: Hash, V: Hash, A: Tuning> Hash for BTreeMap<K, V, A> {
         }
     }
 }
-impl<K: PartialEq, V: PartialEq, A: Tuning> PartialEq for BTreeMap<K, V, A> {
-    fn eq(&self, other: &BTreeMap<K, V, A>) -> bool {
+impl<K: PartialEq, V: PartialEq, A: Tuning> PartialEq for BTreeMapA<K, V, A> {
+    fn eq(&self, other: &BTreeMapA<K, V, A>) -> bool {
         self.len() == other.len() && self.iter().zip(other.iter()).all(|(a, b)| a == b)
     }
 }
-impl<K: Eq, V: Eq, A: Tuning> Eq for BTreeMap<K, V, A> {}
+impl<K: Eq, V: Eq, A: Tuning> Eq for BTreeMapA<K, V, A> {}
 
-impl<K: PartialOrd, V: PartialOrd, A: Tuning> PartialOrd for BTreeMap<K, V, A> {
-    fn partial_cmp(&self, other: &BTreeMap<K, V, A>) -> Option<Ordering> {
+impl<K: PartialOrd, V: PartialOrd, A: Tuning> PartialOrd for BTreeMapA<K, V, A> {
+    fn partial_cmp(&self, other: &BTreeMapA<K, V, A>) -> Option<Ordering> {
         self.iter().partial_cmp(other.iter())
     }
 }
-impl<K: Ord, V: Ord, A: Tuning> Ord for BTreeMap<K, V, A> {
-    fn cmp(&self, other: &BTreeMap<K, V, A>) -> Ordering {
+impl<K: Ord, V: Ord, A: Tuning> Ord for BTreeMapA<K, V, A> {
+    fn cmp(&self, other: &BTreeMapA<K, V, A>) -> Ordering {
         self.iter().cmp(other.iter())
     }
 }
-impl<K, V, A: Tuning> IntoIterator for BTreeMap<K, V, A> {
+impl<K, V, A: Tuning> IntoIterator for BTreeMapA<K, V, A> {
     type Item = (K, V);
     type IntoIter = IntoIter<K, V, A>;
 
-    /// Convert `BTreeMap` to [`IntoIter`].
+    /// Convert `BTreeMapA` to [`IntoIter`].
     fn into_iter(self) -> IntoIter<K, V, A> {
         IntoIter::new(self)
     }
 }
-impl<'a, K, V, A: Tuning> IntoIterator for &'a BTreeMap<K, V, A> {
+impl<'a, K, V, A: Tuning> IntoIterator for &'a BTreeMapA<K, V, A> {
     type Item = (&'a K, &'a V);
     type IntoIter = Iter<'a, K, V>;
     #[inline]
@@ -547,32 +553,32 @@ impl<'a, K, V, A: Tuning> IntoIterator for &'a BTreeMap<K, V, A> {
         self.iter()
     }
 }
-impl<'a, K, V, A: Tuning> IntoIterator for &'a mut BTreeMap<K, V, A> {
+impl<'a, K, V, A: Tuning> IntoIterator for &'a mut BTreeMapA<K, V, A> {
     type Item = (&'a K, &'a mut V);
     type IntoIter = IterMut<'a, K, V>;
     fn into_iter(self) -> IterMut<'a, K, V> {
         self.iter_mut()
     }
 }
-impl<K: Ord, V> FromIterator<(K, V)> for BTreeMap<K, V> {
-    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> BTreeMap<K, V> {
-        let mut map = BTreeMap::new();
+impl<K: Ord, V> FromIterator<(K, V)> for BTreeMapA<K, V> {
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> BTreeMapA<K, V> {
+        let mut map = BTreeMapA::new();
         for (k, v) in iter {
             map.insert(k, v);
         }
         map
     }
 }
-impl<K: Ord, V, const N: usize> From<[(K, V); N]> for BTreeMap<K, V> {
-    fn from(arr: [(K, V); N]) -> BTreeMap<K, V> {
-        let mut map = BTreeMap::new();
+impl<K: Ord, V, const N: usize> From<[(K, V); N]> for BTreeMapA<K, V> {
+    fn from(arr: [(K, V); N]) -> BTreeMapA<K, V> {
+        let mut map = BTreeMapA::new();
         for (k, v) in arr {
             map.insert(k, v);
         }
         map
     }
 }
-impl<K: Ord, V, A: Tuning> Extend<(K, V)> for BTreeMap<K, V, A> {
+impl<K: Ord, V, A: Tuning> Extend<(K, V)> for BTreeMapA<K, V, A> {
     fn extend<T>(&mut self, iter: T)
     where
         T: IntoIterator<Item = (K, V)>,
@@ -582,7 +588,7 @@ impl<K: Ord, V, A: Tuning> Extend<(K, V)> for BTreeMap<K, V, A> {
         }
     }
 }
-impl<'a, K: Ord + Copy, V: Copy, A: Tuning> Extend<(&'a K, &'a V)> for BTreeMap<K, V, A> {
+impl<'a, K: Ord + Copy, V: Copy, A: Tuning> Extend<(&'a K, &'a V)> for BTreeMapA<K, V, A> {
     fn extend<I>(&mut self, iter: I)
     where
         I: IntoIterator<Item = (&'a K, &'a V)>,
@@ -592,7 +598,7 @@ impl<'a, K: Ord + Copy, V: Copy, A: Tuning> Extend<(&'a K, &'a V)> for BTreeMap<
         }
     }
 }
-impl<K, Q, V, A: Tuning> std::ops::Index<&Q> for BTreeMap<K, V, A>
+impl<K, Q, V, A: Tuning> std::ops::Index<&Q> for BTreeMapA<K, V, A>
 where
     K: Borrow<Q> + Ord,
     Q: Ord + ?Sized,
@@ -601,13 +607,13 @@ where
 
     /// Returns a reference to the value corresponding to the supplied key.
     ///
-    /// Panics if the key is not present in the `BTreeMap`.
+    /// Panics if the key is not present in the `BTreeMapA`.
     #[inline]
     fn index(&self, key: &Q) -> &V {
         self.get(key).expect("no entry found for key")
     }
 }
-impl<K: Debug, V: Debug, A: Tuning> Debug for BTreeMap<K, V, A> {
+impl<K: Debug, V: Debug, A: Tuning> Debug for BTreeMapA<K, V, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_map().entries(self.iter()).finish()
     }
@@ -621,7 +627,7 @@ use serde::{
 };
 
 #[cfg(feature = "serde")]
-impl<K: Serialize, V: Serialize, A: Tuning> Serialize for BTreeMap<K, V, A> {
+impl<K: Serialize, V: Serialize, A: Tuning> Serialize for BTreeMapA<K, V, A> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         let mut map = serializer.serialize_map(Some(self.len()))?;
         for (k, v) in self {
@@ -633,36 +639,36 @@ impl<K: Serialize, V: Serialize, A: Tuning> Serialize for BTreeMap<K, V, A> {
 
 /// For implementation of serde deserialisation.
 #[cfg(feature = "serde")]
-struct BTreeMapVisitor<K, V> {
-    marker: PhantomData<fn() -> BTreeMap<K, V>>,
+struct XVisitor<K, V, A: Tuning + Default> {
+    marker: PhantomData<BTreeMapA<K, V, A>>,
 }
 
 #[cfg(feature = "serde")]
-impl<K, V> BTreeMapVisitor<K, V> {
+impl<K, V, A: Tuning + Default> XVisitor<K, V, A> {
     fn new() -> Self {
-        BTreeMapVisitor {
+        Self {
             marker: PhantomData,
         }
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de, K, V> Visitor<'de> for BTreeMapVisitor<K, V>
+impl<'de, K, V, A: Tuning + Default> Visitor<'de> for XVisitor<K, V, A>
 where
     K: Deserialize<'de> + Ord,
     V: Deserialize<'de>,
 {
-    type Value = BTreeMap<K, V>;
+    type Value = BTreeMapA<K, V, A>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("BTreeMap")
+        formatter.write_str("BTreeMapA")
     }
 
     fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
     where
         M: MapAccess<'de>,
     {
-        let mut map = BTreeMap::new();
+        let mut map = BTreeMapA::<K, V, A>::new();
         let save = map.tuning_mut().set_seq(true);
         {
             let mut c = map.lower_bound_mut(Bound::Unbounded);
@@ -690,7 +696,7 @@ where
 }
 
 #[cfg(feature = "serde")]
-impl<'de, K, V> Deserialize<'de> for BTreeMap<K, V>
+impl<'de, K, V, A: Tuning + Default> Deserialize<'de> for BTreeMapA<K, V, A>
 where
     K: Deserialize<'de> + Ord,
     V: Deserialize<'de>,
@@ -699,7 +705,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_map(BTreeMapVisitor::new())
+        deserializer.deserialize_map(XVisitor::new())
     }
 }
 
@@ -711,7 +717,7 @@ pub enum FullAction {
     Extend(usize),
 }
 
-/// Trait for controlling storage allocation for [BTreeMap].
+/// Trait for controlling storage allocation for [BTreeMapA].
 pub trait Tuning: Clone + Allocator {
     /// Determine what to do when the size of an underlying BTree vector needs to be increased.
     fn full_action(&self, i: usize, len: usize) -> FullAction;
@@ -825,7 +831,7 @@ unsafe impl<AL: Allocator + Clone> Allocator for CustomTuning<AL> {
 /// Result of splitting a node due to it being full.
 type Split<K, V> = ((K, V), Tree<K, V>);
 
-/// Context for [`BTreeMap::insert`]
+/// Context for [`BTreeMapA::insert`]
 struct InsertCtx<'a, K, V, A: Tuning> {
     value: Option<V>,
     split: Option<Split<K, V>>,
@@ -851,7 +857,7 @@ where
     }
 }
 
-/// For implementation of [`BTreeMap`], either [`Leaf`] or [`NonLeaf`].
+/// For implementation of [`BTreeMapA`], either [`Leaf`] or [`NonLeaf`].
 #[derive(Debug)]
 enum Tree<K, V> {
     L(Leaf<K, V>),
@@ -1361,7 +1367,7 @@ impl<K, V> NonLeafInner<K, V> {
     }
 } // End impl NonLeafInner
 
-/// Error returned by [`BTreeMap::try_insert`].
+/// Error returned by [`BTreeMapA::try_insert`].
 pub struct OccupiedError<'a, K, V, A: Tuning>
 where
     K: 'a,
@@ -1394,7 +1400,7 @@ impl<'a, K: Debug + Ord, V: Debug, A: Tuning> fmt::Display for OccupiedError<'a,
 }
 impl<'a, K: Debug + Ord, V: Debug, A: Tuning> Error for OccupiedError<'a, K, V, A> {}
 
-/// Entry in `BTreeMap`, returned by [`BTreeMap::entry`].
+/// Entry in `BTreeMapA`, returned by [`BTreeMapA::entry`].
 pub enum Entry<'a, K, V, A: Tuning = DefaultTuning> {
     /// Vacant entry - map doesn't yet contain key.
     Vacant(VacantEntry<'a, K, V, A>),
@@ -1431,9 +1437,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pstd::collections::BTreeMap;
+    /// use pstd::collections::BTreeMapA;
     ///
-    /// let mut map: BTreeMap<&str, String> = BTreeMap::new();
+    /// let mut map: BTreeMapA<&str, String> = BTreeMapA::new();
     /// let entry = map.entry("poneyland").insert_entry("hoho".to_string());
     ///
     /// assert_eq!(entry.key(), &"poneyland");
@@ -1616,7 +1622,7 @@ where
 
 // Mutable reference iteration.
 
-/// Iterator returned by [`BTreeMap::iter_mut`].
+/// Iterator returned by [`BTreeMapA::iter_mut`].
 #[derive(Debug)]
 pub struct IterMut<'a, K, V> {
     len: usize,
@@ -1668,7 +1674,7 @@ struct StkMut<'a, K, V> {
     c: std::slice::IterMut<'a, Tree<K, V>>,
 }
 
-/// Iterator returned by [`BTreeMap::range_mut`].
+/// Iterator returned by [`BTreeMapA::range_mut`].
 #[derive(Debug)]
 pub struct RangeMut<'a, K, V> {
     /* There are two iterations going on to implement DoubleEndedIterator.
@@ -1883,13 +1889,13 @@ impl<'a, K, V> FusedIterator for RangeMut<'a, K, V> {}
 
 // Consuming iteration.
 
-/// Consuming iterator for [`BTreeMap`].
+/// Consuming iterator for [`BTreeMapA`].
 pub struct IntoIter<K, V, A: Tuning = DefaultTuning> {
     len: usize,
     inner: IntoIterInner<K, V, A>,
 }
 impl<K, V, A: Tuning> IntoIter<K, V, A> {
-    fn new(mut bt: BTreeMap<K, V, A>) -> Self {
+    fn new(mut bt: BTreeMapA<K, V, A>) -> Self {
         let atune = bt.atune.clone();
         let len = bt.len();
         let mut s = Self {
@@ -1912,7 +1918,7 @@ impl<K: Debug, V: Debug, A: Tuning> Debug for IntoIter<K, V, A> {
 
 impl<K, V> Default for IntoIter<K, V> {
     fn default() -> Self {
-        BTreeMap::new().into_iter()
+        BTreeMapA::new().into_iter()
     }
 }
 
@@ -2086,7 +2092,7 @@ impl<K, V, A: Tuning> IntoIterInner<K, V, A> {
 
 // Immutable reference iteration.
 
-/// Iterator returned by [`BTreeMap::iter`].
+/// Iterator returned by [`BTreeMapA::iter`].
 #[derive(Debug)]
 pub struct Iter<'a, K, V> {
     len: usize,
@@ -2154,7 +2160,7 @@ impl<K, V> Clone for Stk<'_, K, V> {
     }
 }
 
-/// Iterator returned by [`BTreeMap::range`].
+/// Iterator returned by [`BTreeMapA::range`].
 #[derive(Debug)]
 pub struct Range<'a, K, V> {
     fwd_leaf: IterPairVec<'a, K, V>,
@@ -2373,7 +2379,7 @@ impl<'a, K, V> DoubleEndedIterator for Range<'a, K, V> {
 }
 impl<'a, K, V> FusedIterator for Range<'a, K, V> {}
 
-/// Consuming iterator returned by [`BTreeMap::into_keys`].
+/// Consuming iterator returned by [`BTreeMapA::into_keys`].
 #[derive(Debug)]
 pub struct IntoKeys<K, V, A: Tuning = DefaultTuning>(IntoIter<K, V, A>);
 impl<K, V> Default for IntoKeys<K, V> {
@@ -2402,7 +2408,7 @@ impl<K, V, A: Tuning> ExactSizeIterator for IntoKeys<K, V, A> {
 }
 impl<K, V, A: Tuning> FusedIterator for IntoKeys<K, V, A> {}
 
-/// Consuming iterator returned by [`BTreeMap::into_values`].
+/// Consuming iterator returned by [`BTreeMapA::into_values`].
 pub struct IntoValues<K, V, A: Tuning = DefaultTuning>(IntoIter<K, V, A>);
 impl<K: Debug, V: Debug, A: Tuning> Debug for IntoValues<K, V, A> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -2437,7 +2443,7 @@ impl<K, V, A: Tuning> FusedIterator for IntoValues<K, V, A> {}
 
 // Trivial iterators.
 
-/// Iterator returned by [`BTreeMap::values_mut`].
+/// Iterator returned by [`BTreeMapA::values_mut`].
 #[derive(Debug)]
 pub struct ValuesMut<'a, K, V>(IterMut<'a, K, V>);
 impl<K, V> Default for ValuesMut<'_, K, V> {
@@ -2463,7 +2469,7 @@ impl<'a, K, V> ExactSizeIterator for ValuesMut<'a, K, V> {
 }
 impl<'a, K, V> FusedIterator for ValuesMut<'a, K, V> {}
 
-/// Iterator returned by [`BTreeMap::values`].
+/// Iterator returned by [`BTreeMapA::values`].
 #[derive(Debug)]
 pub struct Values<'a, K, V>(Iter<'a, K, V>);
 impl<K, V> Clone for Values<'_, K, V> {
@@ -2494,7 +2500,7 @@ impl<'a, K, V> ExactSizeIterator for Values<'a, K, V> {
 }
 impl<'a, K, V> FusedIterator for Values<'a, K, V> {}
 
-/// Iterator returned by [`BTreeMap::keys`].
+/// Iterator returned by [`BTreeMapA::keys`].
 #[derive(Debug)]
 pub struct Keys<'a, K, V>(Iter<'a, K, V>);
 impl<K, V> Clone for Keys<'_, K, V> {
@@ -2528,7 +2534,7 @@ impl<'a, K, V> ExactSizeIterator for Keys<'a, K, V> {
 }
 impl<'a, K, V> FusedIterator for Keys<'a, K, V> {}
 
-/// Iterator returned by [`BTreeMap::extract_if`].
+/// Iterator returned by [`BTreeMapA::extract_if`].
 // #[derive(Debug)]
 pub struct ExtractIf<'a, K, V, F, A: Tuning = DefaultTuning>
 where
@@ -2581,10 +2587,10 @@ impl fmt::Display for UnorderedKeyError {
 }
 impl std::error::Error for UnorderedKeyError {}
 
-/// Cursor that allows mutation of map, returned by [`BTreeMap::lower_bound_mut`], [`BTreeMap::upper_bound_mut`].
+/// Cursor that allows mutation of map, returned by [`BTreeMapA::lower_bound_mut`], [`BTreeMapA::upper_bound_mut`].
 pub struct CursorMut<'a, K, V, A: Tuning = DefaultTuning>(CursorMutKey<'a, K, V, A>);
 impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
-    fn lower_bound<Q>(map: &'a mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
+    fn lower_bound<Q>(map: &'a mut BTreeMapA<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
@@ -2592,7 +2598,7 @@ impl<'a, K, V, A: Tuning> CursorMut<'a, K, V, A> {
         Self(CursorMutKey::lower(map, bound))
     }
 
-    fn upper_bound<Q>(map: &'a mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
+    fn upper_bound<Q>(map: &'a mut BTreeMapA<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
@@ -2700,18 +2706,18 @@ impl<K: Debug, V: Debug, A: Tuning> Debug for CursorMut<'_, K, V, A> {
 
 /// Cursor that allows mutation of map keys, returned by [`CursorMut::with_mutable_key`].
 pub struct CursorMutKey<'a, K, V, A: Tuning = DefaultTuning> {
-    map: *mut BTreeMap<K, V, A>,
+    map: *mut BTreeMapA<K, V, A>,
     leaf: *mut Leaf<K, V>,
     index: usize,
     stack: StkVec<(*mut NonLeaf<K, V>, usize)>,
-    _pd: PhantomData<&'a mut BTreeMap<K, V, A>>,
+    _pd: PhantomData<&'a mut BTreeMapA<K, V, A>>,
 }
 
 unsafe impl<'a, K: Send, V: Send, A: Tuning + Send> Send for CursorMutKey<'a, K, V, A> {}
 unsafe impl<'a, K: Sync, V: Sync, A: Tuning + Sync> Sync for CursorMutKey<'a, K, V, A> {}
 
 impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
-    fn lower<Q>(map: &mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
+    fn lower<Q>(map: &mut BTreeMapA<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
@@ -2739,7 +2745,7 @@ impl<'a, K, V, A: Tuning> CursorMutKey<'a, K, V, A> {
         }
     }
 
-    fn upper<Q>(map: &mut BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
+    fn upper<Q>(map: &mut BTreeMapA<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
@@ -3133,19 +3139,19 @@ impl<K: Debug, V: Debug, A: Tuning> Debug for CursorMutKey<'_, K, V, A> {
     }
 }
 
-/// Cursor returned by [`BTreeMap::lower_bound`], [`BTreeMap::upper_bound`].
+/// Cursor returned by [`BTreeMapA::lower_bound`], [`BTreeMapA::upper_bound`].
 pub struct Cursor<'a, K, V, A: Tuning = DefaultTuning> {
     leaf: *const Leaf<K, V>,
     index: usize,
     stack: StkVec<(*const NonLeaf<K, V>, usize)>,
-    _pd: PhantomData<&'a BTreeMap<K, V, A>>,
+    _pd: PhantomData<&'a BTreeMapA<K, V, A>>,
 }
 
 unsafe impl<'a, K: Send, V: Send, A: Tuning + Send> Send for Cursor<'a, K, V, A> {}
 unsafe impl<'a, K: Sync, V: Sync, A: Tuning + Sync> Sync for Cursor<'a, K, V, A> {}
 
 impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
-    fn lower_bound<Q>(bt: &'a BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
+    fn lower_bound<Q>(bt: &'a BTreeMapA<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
@@ -3172,7 +3178,7 @@ impl<'a, K, V, A: Tuning> Cursor<'a, K, V, A> {
         }
     }
 
-    fn upper_bound<Q>(bt: &'a BTreeMap<K, V, A>, bound: Bound<&Q>) -> Self
+    fn upper_bound<Q>(bt: &'a BTreeMapA<K, V, A>, bound: Bound<&Q>) -> Self
     where
         K: Borrow<Q> + Ord,
         Q: Ord + ?Sized,
@@ -3372,9 +3378,18 @@ impl<K: Debug, V: Debug, A: Tuning> Debug for Cursor<'_, K, V, A> {
 // Tests.
 
 /* mimalloc cannot be used with miri */
+/*
 #[cfg(all(test, not(miri)))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+*/
+
+#[cfg(all(test, not(miri)))]
+use crate::localalloc::Perm;
+
+#[cfg(all(test, not(miri)))]
+#[global_allocator]
+static GLOBAL: Perm = Perm;
 
 #[cfg(all(test, feature = "mytests"))]
 mod mytests;
