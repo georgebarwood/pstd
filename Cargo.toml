@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "1.0.108"
+version = "1.0.111"
 edition = "2024"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
@@ -27,7 +27,7 @@ default = ["serde"]
 serde = ["dep:serde"]
 unsafe-optim = []
 dynbox = []
-log-bump = []
+log-alloc = []
 
 # Features for testing
 mytests = ["serde"]
