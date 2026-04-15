@@ -152,8 +152,8 @@ impl<T: ?Sized + PartialOrd, A: Allocator> PartialOrd for BoxA<T, A> {
     }
 }
 
-unsafe impl<T: Send, A: Allocator + Send> Send for BoxA<T, A> {}
-unsafe impl<T: Sync, A: Allocator + Sync> Sync for BoxA<T, A> {}
+unsafe impl<T: ?Sized + Send, A: Allocator + Send> Send for BoxA<T, A> {}
+unsafe impl<T: ?Sized + Sync, A: Allocator + Sync> Sync for BoxA<T, A> {}
 
 impl<T: ?Sized, A: Allocator> Drop for BoxA<T, A> {
     fn drop(&mut self) {

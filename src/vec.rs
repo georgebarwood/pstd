@@ -6,6 +6,7 @@
 use crate::alloc::{Allocator, Global};
 use crate::collections::{TryReserveError, TryReserveErrorKind};
 
+use std::marker::PhantomData;
 use std::{
     alloc::Layout,
     borrow::{Borrow, BorrowMut},
@@ -1258,7 +1259,7 @@ impl<T, A: Allocator> Drop for VecA<T, A> {
     }
 }
 
-impl<T> Default for VecA<T> {
+impl<T, A: Allocator + Default> Default for VecA<T, A> {
     fn default() -> Self {
         Self::new()
     }
@@ -1948,6 +1949,68 @@ impl<'a, T, A: Allocator> DerefMut for PeekMut<'a, T, A> {
 }
 
 //######################## END  PeekMut ##############################
+
+#[cfg(feature = "serde")]
+impl<T, A> serde::Serialize for VecA<T, A>
+where
+    T: serde::Serialize,
+    A: Allocator,
+{
+    #[inline(always)]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::ser::Serializer,
+    {
+        serializer.collect_seq(self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T, A> serde::de::Deserialize<'de> for VecA<T, A>
+where
+    T: serde::de::Deserialize<'de>,
+    A: Allocator + Default,
+{
+    #[inline(always)]
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        struct VecVisitor<T, A> {
+            marker: PhantomData<(T, A)>,
+        }
+
+        impl<'de, T, A> serde::de::Visitor<'de> for VecVisitor<T, A>
+        where
+            T: serde::de::Deserialize<'de>,
+            A: Allocator + Default,
+        {
+            type Value = VecA<T, A>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a sequence")
+            }
+
+            fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+            where
+                S: serde::de::SeqAccess<'de>,
+            {
+                let mut values = VecA::new(); // Could maybe set capacity.
+
+                while let Some(value) = seq.next_element()? {
+                    values.push(value);
+                }
+
+                Ok(values)
+            }
+        }
+
+        let visitor = VecVisitor {
+            marker: PhantomData,
+        };
+        deserializer.deserialize_seq(visitor)
+    }
+}
 
 /// Creates a [`Vec`] containing the arguments.
 #[macro_export]

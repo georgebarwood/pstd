@@ -1,5 +1,6 @@
 use crate::VecA;
 use crate::alloc::{Allocator, Global};
+use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::ops;
 
@@ -106,6 +107,12 @@ impl<A: Allocator> ops::DerefMut for StringA<A> {
     }
 }
 
+impl<A: Allocator> Borrow<str> for StringA<A> {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl<A: Allocator> std::fmt::Display for StringA<A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&**self, f)
@@ -191,6 +198,65 @@ impl<A: Allocator> std::fmt::Write for StringA<A> {
     fn write_str(&mut self, s: &str) -> Result<(), std::fmt::Error> {
         self.push_str(s);
         Ok(())
+    }
+}
+
+#[cfg(feature = "serde")]
+use {
+    serde::{
+        Deserialize, Deserializer, Serialize, Serializer,
+        de::{Error, Visitor},
+    },
+    std::fmt,
+};
+
+#[cfg(feature = "serde")]
+impl<A: Allocator> Serialize for StringA<A> {
+    #[inline]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, A: Allocator + Default> Deserialize<'de> for StringA<A> {
+    /*
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            deserializer.deserialize_string(StrVisitor)
+        }
+    */
+
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = deserializer.deserialize_string(StrVisitor).unwrap();
+        Ok(Self::from_str(s))
+    }
+}
+
+#[cfg(feature = "serde")]
+struct StrVisitor;
+
+#[cfg(feature = "serde")]
+impl<'a> Visitor<'a> for StrVisitor {
+    type Value = &'a str;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a borrowed string")
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'a str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(v)
     }
 }
 

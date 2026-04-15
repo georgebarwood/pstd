@@ -43,14 +43,14 @@ const L2_MIN_SIZE: usize = 1 + mem::size_of::<FreeMem>().ilog2() as usize;
 /// Maximum alignment for [`Temp`].
 pub const MAX_ALIGN: usize = 128;
 
-/// Size of the blocks fetched from [`System`] allocator ( 2 MiB ).
-pub const BLOCK_SIZE: usize = 1 << 21;
+/// Size of the blocks fetched from [`System`] allocator ( 1 MiB ).
+pub const BLOCK_SIZE: usize = 1 << 16;
 
 /// Minimum size allocation for [`Local`] and [`Perm`] = 16 for a 64-bit system.
 pub const MIN_SIZE: usize = 1 << L2_MIN_SIZE;
 
-/// Maximum size allocation ( 64 KiB ).
-pub const MAX_SIZE: usize = BLOCK_SIZE / 32;
+/// Maximum size allocation ( 4 KiB ).
+pub const MAX_SIZE: usize = BLOCK_SIZE / 64;
 
 /// Number of size classes.
 pub const NUM_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
@@ -139,23 +139,7 @@ impl Perm {
     /// println!( "Perm::info = {:?}", Perm::info() );
     ///```
     pub fn info() -> Option<(usize, usize, [usize; NUM_SC])> {
-        let mut fclen = [0; NUM_SC];
-        let a = PA.lock().unwrap();
-        if !a.is_none() {
-            let a = a.as_ref().unwrap();
-            for (i, e) in fclen.iter_mut().enumerate() {
-                let mut n = 0;
-                let mut p = a.free[i];
-                while !p.is_null() {
-                    n += 1;
-                    p = unsafe { (*p).next };
-                }
-                *e = n;
-            }
-            Some((a.idx, a.overflow.len(), fclen))
-        } else {
-            None
-        }
+        PA.lock().unwrap().as_ref().map(|a| a.info())
     }
 }
 
@@ -177,6 +161,74 @@ unsafe impl Allocator for Perm {
 }
 
 unsafe impl GlobalAlloc for Perm {
+    unsafe fn alloc(&self, lay: Layout) -> *mut u8 {
+        let nn = self.allocate(lay).unwrap();
+        let p: *mut [u8] = nn.as_ptr();
+        let p: *mut u8 = p.cast::<u8>();
+        p
+    }
+
+    unsafe fn dealloc(&self, p: *mut u8, lay: Layout) {
+        unsafe {
+            let nn = NonNull::new_unchecked(p);
+            self.deallocate(nn, lay);
+        }
+    }
+}
+
+static GTA: Mutex<Option<ChainAllocator>> = Mutex::new(None);
+
+/// GTemp is for shareable allocations that do not persist permanently.
+#[derive(Default, Clone, Debug)]
+pub struct GTemp;
+
+impl GTemp {
+    /// Create a GTemp allocator
+    pub const fn new() -> Self {
+        Self {}
+    }
+
+    /// Get the number of outstanding allocations.
+    pub fn alloc_count() -> u64 {
+        let a = GTA.lock().unwrap();
+        if a.is_none() {
+            return 0;
+        }
+        let a = a.as_ref().unwrap();
+        a.alloc_count
+    }
+
+    /// Get info : Current alloc index, number of overflow blocks, free chain lengths for each size class.
+    ///
+    /// # Example
+    /// ```
+    /// use pstd::{BoxA,localalloc::GTemp};
+    /// let b = BoxA::<_,GTemp>::new(99);
+    /// println!( "GTemp::info = {:?}", GTemp::info() );
+    ///```
+    pub fn info() -> Option<(usize, usize, [usize; NUM_SC])> {
+        GTA.lock().unwrap().as_ref().map(|a| a.info())
+    }
+}
+
+unsafe impl Allocator for GTemp {
+    fn allocate(&self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        let mut a = GTA.lock().unwrap();
+        if a.is_none() {
+            *a = Some(ChainAllocator::new());
+        }
+        let a = a.as_mut().unwrap();
+        a.allocate(lay)
+    }
+
+    unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
+        let mut a = GTA.lock().unwrap();
+        let a = a.as_mut().unwrap();
+        a.deallocate(p, lay);
+    }
+}
+
+unsafe impl GlobalAlloc for GTemp {
     unsafe fn alloc(&self, lay: Layout) -> *mut u8 {
         let nn = self.allocate(lay).unwrap();
         let p: *mut [u8] = nn.as_ptr();
@@ -248,11 +300,11 @@ impl BumpAllocator {
     }
 
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
-        self.alloc_count += 1;
         let (n, m) = (lay.size(), lay.align());
         if MIRI || n > MAX_SIZE || m > MAX_ALIGN {
             System::allocate(&System, lay)
         } else {
+            self.alloc_count += 1;
             #[cfg(feature = "log-alloc")]
             {
                 self._alloc_bytes += n;
@@ -435,6 +487,20 @@ impl ChainAllocator {
         while let Some(mut b) = self.overflow.pop() {
             b.drop();
         }
+    }
+
+    fn info(&self) -> (usize, usize, [usize; NUM_SC]) {
+        let mut fclen = [0; NUM_SC];
+        for (i, e) in fclen.iter_mut().enumerate() {
+            let mut n = 0;
+            let mut p = self.free[i];
+            while !p.is_null() {
+                n += 1;
+                p = unsafe { (*p).next };
+            }
+            *e = n;
+        }
+        (self.idx, self.overflow.len(), fclen)
     }
 }
 
