@@ -43,14 +43,14 @@ const L2_MIN_SIZE: usize = 1 + mem::size_of::<FreeMem>().ilog2() as usize;
 /// Maximum alignment for [`Temp`].
 pub const MAX_ALIGN: usize = 128;
 
-/// Size of the blocks fetched from [`System`] allocator ( 1 MiB ).
-pub const BLOCK_SIZE: usize = 1 << 16;
+/// Size of the blocks fetched from [`System`] allocator.
+pub const BLOCK_SIZE: usize = 1 << 18;
 
 /// Minimum size allocation for [`Local`] and [`Perm`] = 16 for a 64-bit system.
 pub const MIN_SIZE: usize = 1 << L2_MIN_SIZE;
 
-/// Maximum size allocation ( 4 KiB ).
-pub const MAX_SIZE: usize = BLOCK_SIZE / 64;
+/// Maximum size allocation.
+pub const MAX_SIZE: usize = BLOCK_SIZE / 16;
 
 /// Number of size classes.
 pub const NUM_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
@@ -138,7 +138,7 @@ impl Perm {
     /// let b = BoxA::<_,Perm>::new(99);
     /// println!( "Perm::info = {:?}", Perm::info() );
     ///```
-    pub fn info() -> Option<(usize, usize, [usize; NUM_SC])> {
+    pub fn info() -> Option<Info> {
         PA.lock().unwrap().as_ref().map(|a| a.info())
     }
 }
@@ -206,9 +206,23 @@ impl GTemp {
     /// let b = BoxA::<_,GTemp>::new(99);
     /// println!( "GTemp::info = {:?}", GTemp::info() );
     ///```
-    pub fn info() -> Option<(usize, usize, [usize; NUM_SC])> {
+    pub fn info() -> Option<Info> {
         GTA.lock().unwrap().as_ref().map(|a| a.info())
     }
+}
+
+/// Allocator state info.
+#[derive(Debug)]
+pub struct Info
+{
+   /// Number of outstanding allocations.
+   pub alloc_count: u64,
+   /// Allocation index for current block.
+   pub idx: usize,
+   /// Number of overflow blocks.
+   pub overflow_len: usize,
+   /// Length of free chain for each size class.
+   pub free_len: [usize; NUM_SC]
 }
 
 unsafe impl Allocator for GTemp {
@@ -489,18 +503,16 @@ impl ChainAllocator {
         }
     }
 
-    fn info(&self) -> (usize, usize, [usize; NUM_SC]) {
-        let mut fclen = [0; NUM_SC];
-        for (i, e) in fclen.iter_mut().enumerate() {
-            let mut n = 0;
+    fn info(&self) -> Info {
+        let mut free_len = [0; NUM_SC];
+        for (i, n) in free_len.iter_mut().enumerate() {
             let mut p = self.free[i];
             while !p.is_null() {
-                n += 1;
+                *n += 1;
                 p = unsafe { (*p).next };
             }
-            *e = n;
         }
-        (self.idx, self.overflow.len(), fclen)
+        Info{ alloc_count: self.alloc_count, idx: self.idx, overflow_len: self.overflow.len(), free_len }
     }
 }
 
