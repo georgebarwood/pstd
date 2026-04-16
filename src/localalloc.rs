@@ -1,9 +1,11 @@
 //!
-//! [`Local`](localalloc::Local) is for heap allocations that are thread-local.
+//! [`Local`](localalloc::Local) is for thread-local allocations.
 //!
-//! [`Perm`](localalloc::Perm) is for heap allocations unsuitable for Temp or Local.
+//! [`Temp`](localalloc::Temp) is for thread-local allocations that last a short time.
 //!
-//! [`Temp`](localalloc::Temp) is for heap thread-local allocations that last a short time.
+//! [`Perm`](localalloc::Perm) is for non-thread-local allocations.
+//!
+//! [`GTemp`](localalloc::GTemp) is for non-thread-local allocations that do not persist permanently.
 //!
 //! Example
 //! ```
@@ -55,7 +57,7 @@ pub const MAX_SIZE: usize = BLOCK_SIZE / 16;
 /// Number of size classes.
 pub const NUM_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
 
-/// Temp is for heap thread-local allocations that last a short time.
+/// Temp is for thread-local allocations that last a short time.
 /// Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
 /// This means there is no minimum allocation internally.
 /// Allocations larger than [`MAX_SIZE`] bytes, or having more than [`MAX_ALIGN`] alignment, are routed to [`System`].
@@ -81,7 +83,7 @@ unsafe impl Allocator for Temp {
     }
 }
 
-/// Local is for heap allocations that are thread-local.
+/// Local is for thread-local allocations.
 /// Local has an array of free lists, one for each size class [`MIN_SIZE`]..[`MAX_SIZE`].
 /// Allocations larger than [`MAX_SIZE`] bytes, or having more than [`MIN_SIZE`] alignment, are routed to [`System`].
 #[derive(Default, Clone, Debug)]
@@ -108,7 +110,7 @@ unsafe impl Allocator for Local {
 
 static PA: Mutex<Option<ChainAllocator>> = Mutex::new(None);
 
-/// Perm is for heap allocations unsuitable for Temp or Local.
+/// Perm is for non-thread-local allocations.
 /// Perm is similar to [Local], except there is a single instance per process. It implements both [`Allocator`] and [`GlobalAlloc`]
 /// so can be used to set a Global Allocator using the `#[global_allocator]` attribute.
 #[derive(Default, Clone, Debug)]
@@ -130,7 +132,7 @@ impl Perm {
         a.alloc_count
     }
 
-    /// Get info : Current alloc index, number of overflow blocks, free chain lengths for each size class.
+    /// Get allocator state info.
     ///
     /// # Example
     /// ```
@@ -178,7 +180,7 @@ unsafe impl GlobalAlloc for Perm {
 
 static GTA: Mutex<Option<ChainAllocator>> = Mutex::new(None);
 
-/// GTemp is for shareable allocations that do not persist permanently.
+/// GTemp is for non-thread-local allocations that do not persist permanently.
 #[derive(Default, Clone, Debug)]
 pub struct GTemp;
 
@@ -198,7 +200,7 @@ impl GTemp {
         a.alloc_count
     }
 
-    /// Get info : Current alloc index, number of overflow blocks, free chain lengths for each size class.
+    /// Get allocator state info.
     ///
     /// # Example
     /// ```
