@@ -223,40 +223,43 @@ impl<A: Allocator> Serialize for StringA<A> {
 
 #[cfg(feature = "serde")]
 impl<'de, A: Allocator + Default> Deserialize<'de> for StringA<A> {
-    /*
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            deserializer.deserialize_string(StrVisitor)
-        }
-    */
-
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let s = deserializer.deserialize_string(StrVisitor).unwrap();
-        Ok(Self::from_str(s))
+        let v: MyVisitor<A> = MyVisitor {
+            pd: std::marker::PhantomData,
+        };
+        let s = deserializer.deserialize_string(v).unwrap();
+        Ok(Self::from_str(&s))
     }
 }
 
 #[cfg(feature = "serde")]
-struct StrVisitor;
+struct MyVisitor<A: Allocator> {
+    pd: std::marker::PhantomData<A>,
+}
 
 #[cfg(feature = "serde")]
-impl<'a> Visitor<'a> for StrVisitor {
-    type Value = &'a str;
+impl<'a, A: Allocator + Default> Visitor<'a> for MyVisitor<A> {
+    type Value = StringA<A>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a borrowed string")
+        formatter.write_str("a string")
     }
 
-    fn visit_borrowed_str<E>(self, v: &'a str) -> Result<Self::Value, E>
+    fn visit_string<E>(self, v: std::string::String) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(v)
+        Ok(Self::Value::from_str(&v))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: Error,
+    {
+        Ok(Self::Value::from_str(v))
     }
 }
 
