@@ -84,11 +84,11 @@ pub type BTreeSet<T> = BTreeSetA<T, CustomTuning<Global>>;
 /// # Examples
 ///
 /// ```
-/// use pstd::collections::BTreeSetA;
+/// use pstd::collections::BTreeSet;
 ///
 /// // Type inference lets us omit an explicit type signature (which
-/// // would be `BTreeSetA<&str>` in this example).
-/// let mut books = BTreeSetA::new();
+/// // would be `BTreeSet<&str>` in this example).
+/// let mut books = BTreeSet::new();
 ///
 /// // Add some books.
 /// books.insert("A Dance With Dragons");
@@ -111,33 +111,34 @@ pub type BTreeSet<T> = BTreeSetA<T, CustomTuning<Global>>;
 /// }
 /// ```
 ///
-/// A `BTreeSetA` with a known list of items can be initialized from an array:
+/// A `BTreeSet` with a known list of items can be initialized from an array:
 ///
 /// ```
-/// use pstd::collections::BTreeSetA;
+/// use pstd::collections::BTreeSet;
 ///
-/// let set = BTreeSetA::from([1, 2, 3]);
+/// let set = BTreeSet::from([1, 2, 3]);
 /// ```
-pub struct BTreeSetA<T, A: Tuning = DefaultTuning> {
+pub struct BTreeSetA<T, A: Tuning> {
     map: map::BTreeMapA<T, (), A>,
 }
 
-impl<T> BTreeSetA<T> {
+impl<T, A: Tuning> BTreeSetA<T, A> {
     /// Returns a new, empty `BTreeSetA`.
     ///
     /// # Example
     ///
     /// ```
     /// # #![allow(unused_mut)]
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set: BTreeSetA<i32> = BTreeSetA::new();
+    /// let mut set: BTreeSet<i32> = BTreeSet::new();
     /// ```
     #[must_use]
-    pub fn new() -> BTreeSetA<T> {
-        BTreeSetA {
-            map: map::BTreeMapA::new(),
-        }
+    pub fn new() -> Self
+    where
+        A: Default,
+    {
+        Self::with_tuning(A::default())
     }
 }
 
@@ -192,8 +193,8 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::{BTreeSetA,btree_set::Tuning};
-    /// let mut v = BTreeSetA::new();
+    /// use pstd::collections::{BTreeSet,btree_set::Tuning};
+    /// let mut v = BTreeSet::new();
     /// v.tuning_mut().set_seq(true);
     /// for x in 0..100 { v.insert(x); }
     /// assert!(v.len() == 100);
@@ -207,9 +208,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut v = BTreeSetA::new();
+    /// let mut v = BTreeSet::new();
     /// assert_eq!(v.len(), 0);
     /// v.insert(1);
     /// assert_eq!(v.len(), 1);
@@ -223,9 +224,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut v = BTreeSetA::new();
+    /// let mut v = BTreeSet::new();
     /// assert!(v.is_empty());
     /// v.insert(1);
     /// assert!(!v.is_empty());
@@ -239,9 +240,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut v = BTreeSetA::new();
+    /// let mut v = BTreeSet::new();
     /// v.insert(1);
     /// v.clear();
     /// assert!(v.is_empty());
@@ -255,9 +256,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::new();
+    /// let mut set = BTreeSet::new();
     /// set.insert(Vec::<i32>::new());
     ///
     /// assert_eq!(set.get(&[][..]).unwrap().capacity(), 0);
@@ -276,9 +277,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::new();
+    /// let mut set = BTreeSet::new();
     ///
     /// set.insert(2);
     /// assert_eq!(set.remove(&2), true);
@@ -301,9 +302,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::from([1, 2, 3]);
+    /// let mut set = BTreeSet::from([1, 2, 3]);
     /// assert_eq!(set.take(&2), Some(2));
     /// assert_eq!(set.take(&2), None);
     /// ```
@@ -321,9 +322,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::new();
+    /// let mut set = BTreeSet::new();
     /// set.insert(Vec::<i32>::new());
     ///
     /// assert_eq!(set.get(&[][..]).unwrap().capacity(), 0);
@@ -349,9 +350,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let set = BTreeSetA::from([1, 2, 3]);
+    /// let set = BTreeSet::from([1, 2, 3]);
     /// assert_eq!(set.contains(&1), true);
     /// assert_eq!(set.contains(&4), false);
     /// ```
@@ -373,9 +374,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let set = BTreeSetA::from([1, 2, 3]);
+    /// let set = BTreeSet::from([1, 2, 3]);
     /// assert_eq!(set.get(&2), Some(&2));
     /// assert_eq!(set.get(&4), None);
     /// ```
@@ -394,9 +395,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::from([1, 2, 3]);
+    /// let mut set = BTreeSet::from([1, 2, 3]);
     /// assert_eq!(set.len(), 3);
     /// assert_eq!(set.get_or_insert(2), &2);
     /// assert_eq!(set.get_or_insert(100), &100);
@@ -417,9 +418,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set: BTreeSetA<String> = ["cat", "dog", "horse"]
+    /// let mut set: BTreeSet<String> = ["cat", "dog", "horse"]
     ///     .iter().map(|&pet| pet.to_owned()).collect();
     ///
     /// assert_eq!(set.len(), 3);
@@ -458,9 +459,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::from([1, 2, 3, 4, 5, 6]);
+    /// let mut set = BTreeSet::from([1, 2, 3, 4, 5, 6]);
     /// // Keep only the even numbers.
     /// set.retain(|&k| k % 2 == 0);
     /// assert!(set.iter().eq([2, 4, 6].iter()));
@@ -481,9 +482,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// Basic usage:
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::new();
+    /// let mut set = BTreeSet::new();
     /// assert_eq!(set.first(), None);
     /// set.insert(1);
     /// assert_eq!(set.first(), Some(&1));
@@ -506,9 +507,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// Basic usage:
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::new();
+    /// let mut set = BTreeSet::new();
     /// assert_eq!(set.last(), None);
     /// set.insert(1);
     /// assert_eq!(set.last(), Some(&1));
@@ -529,9 +530,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::new();
+    /// let mut set = BTreeSet::new();
     ///
     /// set.insert(1);
     /// while let Some(n) = set.pop_first() {
@@ -552,9 +553,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut set = BTreeSetA::new();
+    /// let mut set = BTreeSet::new();
     ///
     /// set.insert(1);
     /// while let Some(n) = set.pop_last() {
@@ -599,9 +600,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// Basic usage:
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut a = BTreeSetA::new();
+    /// let mut a = BTreeSet::new();
     /// a.insert(1);
     /// a.insert(2);
     /// a.insert(3);
@@ -635,14 +636,14 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut a = BTreeSetA::new();
+    /// let mut a = BTreeSet::new();
     /// a.insert(1);
     /// a.insert(2);
     /// a.insert(3);
     ///
-    /// let mut b = BTreeSetA::new();
+    /// let mut b = BTreeSet::new();
     /// b.insert(3);
     /// b.insert(4);
     /// b.insert(5);
@@ -672,9 +673,9 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let set = BTreeSetA::from([3, 1, 2]);
+    /// let set = BTreeSet::from([3, 1, 2]);
     /// let mut set_iter = set.iter();
     /// assert_eq!(set_iter.next(), Some(&1));
     /// assert_eq!(set_iter.next(), Some(&2));
@@ -703,10 +704,10 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     /// use std::ops::Bound::Included;
     ///
-    /// let mut set = BTreeSetA::new();
+    /// let mut set = BTreeSet::new();
     /// set.insert(3);
     /// set.insert(5);
     /// set.insert(8);
@@ -733,13 +734,13 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut a = BTreeSetA::new();
+    /// let mut a = BTreeSet::new();
     /// a.insert(1);
     /// a.insert(2);
     ///
-    /// let mut b = BTreeSetA::new();
+    /// let mut b = BTreeSet::new();
     /// b.insert(2);
     /// b.insert(3);
     ///
@@ -792,12 +793,12 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut a = BTreeSetA::new();
+    /// let mut a = BTreeSet::new();
     /// a.insert(1);
     ///
-    /// let mut b = BTreeSetA::new();
+    /// let mut b = BTreeSet::new();
     /// b.insert(2);
     ///
     /// let union: Vec<_> = a.union(&b).cloned().collect();
@@ -817,13 +818,13 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut a = BTreeSetA::new();
+    /// let mut a = BTreeSet::new();
     /// a.insert(1);
     /// a.insert(2);
     ///
-    /// let mut b = BTreeSetA::new();
+    /// let mut b = BTreeSet::new();
     /// b.insert(2);
     /// b.insert(3);
     ///
@@ -880,13 +881,13 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let mut a = BTreeSetA::new();
+    /// let mut a = BTreeSet::new();
     /// a.insert(1);
     /// a.insert(2);
     ///
-    /// let mut b = BTreeSetA::new();
+    /// let mut b = BTreeSet::new();
     /// b.insert(2);
     /// b.insert(3);
     ///
@@ -909,10 +910,10 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let a = BTreeSetA::from([1, 2, 3]);
-    /// let mut b = BTreeSetA::new();
+    /// let a = BTreeSet::from([1, 2, 3]);
+    /// let mut b = BTreeSet::new();
     ///
     /// assert_eq!(a.is_disjoint(&b), true);
     /// b.insert(4);
@@ -934,10 +935,10 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let sub = BTreeSetA::from([1, 2]);
-    /// let mut set = BTreeSetA::new();
+    /// let sub = BTreeSet::from([1, 2]);
+    /// let mut set = BTreeSet::new();
     ///
     /// assert_eq!(set.is_superset(&sub), false);
     ///
@@ -962,10 +963,10 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let sup = BTreeSetA::from([1, 2, 3]);
-    /// let mut set = BTreeSetA::new();
+    /// let sup = BTreeSet::from([1, 2, 3]);
+    /// let mut set = BTreeSet::new();
     ///
     /// assert_eq!(set.is_subset(&sup), true);
     /// set.insert(2);
@@ -1049,10 +1050,10 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     /// use std::ops::Bound;
     ///
-    /// let set = BTreeSetA::from([1, 2, 3, 4]);
+    /// let set = BTreeSet::from([1, 2, 3, 4]);
     ///
     /// let cursor = set.lower_bound(Bound::Included(&2));
     /// assert_eq!(cursor.peek_prev(), Some(&1));
@@ -1091,10 +1092,10 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     /// use std::ops::Bound;
     ///
-    /// let set = BTreeSetA::from([1, 2, 3, 4]);
+    /// let set = BTreeSet::from([1, 2, 3, 4]);
     ///
     /// let cursor = set.upper_bound(Bound::Included(&3));
     /// assert_eq!(cursor.peek_prev(), Some(&3));
@@ -1133,10 +1134,10 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     /// use std::ops::Bound;
     ///
-    /// let mut set = BTreeSetA::from([1, 2, 3, 4]);
+    /// let mut set = BTreeSet::from([1, 2, 3, 4]);
     ///
     /// let mut cursor = set.lower_bound_mut(Bound::Included(&2));
     /// assert_eq!(cursor.peek_prev(), Some(&1));
@@ -1176,10 +1177,10 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     /// use std::ops::Bound;
     ///
-    /// let mut set = BTreeSetA::from([1, 2, 3, 4]);
+    /// let mut set = BTreeSet::from([1, 2, 3, 4]);
     ///
     /// let mut cursor = set.upper_bound_mut(Bound::Included(&3));
     /// assert_eq!(cursor.peek_prev(), Some(&3));
@@ -1226,11 +1227,11 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
     ///
     /// ```
     ///
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     /// use pstd::collections::btree_set::Entry::*;
     ///
-    /// let mut singles = BTreeSetA::new();
-    /// let mut dupes = BTreeSetA::new();
+    /// let mut singles = BTreeSet::new();
+    /// let mut dupes = BTreeSet::new();
     ///
     /// for ch in "a short treatise on fungi".chars() {
     ///     if let Vacant(dupe_entry) = dupes.entry(ch) {
@@ -1268,8 +1269,8 @@ impl<T, A: Tuning> BTreeSetA<T, A> {
 
 // start impl for BTreeSetA
 
-impl<T: Ord, const N: usize> From<[T; N]> for BTreeSetA<T> {
-    /// Converts a `[T; N]` into a `BTreeSetA<T>`.
+impl<T: Ord, A: Tuning + Default, const N: usize> From<[T; N]> for BTreeSetA<T, A> {
+    /// Converts a `[T; N]` into a `BTreeSetA<T, A>`.
     ///
     /// If the array contains any equal values,
     /// all but one will be dropped.
@@ -1277,10 +1278,10 @@ impl<T: Ord, const N: usize> From<[T; N]> for BTreeSetA<T> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let set1 = BTreeSetA::from([1, 2, 3, 4]);
-    /// let set2: BTreeSetA<_> = [1, 2, 3, 4].into();
+    /// let set1 = BTreeSet::from([1, 2, 3, 4]);
+    /// let set2: BTreeSet<_> = [1, 2, 3, 4].into();
     /// assert_eq!(set1, set2);
     /// ```
     fn from(arr: [T; N]) -> Self {
@@ -1292,10 +1293,10 @@ impl<T: Ord, const N: usize> From<[T; N]> for BTreeSetA<T> {
     }
 }
 
-impl<T> Default for BTreeSetA<T> {
+impl<T, A: Tuning + Default> Default for BTreeSetA<T, A> {
     /// Creates an empty `BTreeSetA`.
-    fn default() -> BTreeSetA<T> {
-        BTreeSetA::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1343,8 +1344,8 @@ impl<T: Debug, A: Tuning> Debug for BTreeSetA<T, A> {
     }
 }
 
-impl<T: Ord> FromIterator<T> for BTreeSetA<T> {
-    fn from_iter<X: IntoIterator<Item = T>>(iter: X) -> BTreeSetA<T> {
+impl<T: Ord, A: Tuning + Default> FromIterator<T> for BTreeSetA<T, A> {
+    fn from_iter<X: IntoIterator<Item = T>>(iter: X) -> Self {
         let mut result = BTreeSetA::new();
         for k in iter {
             result.insert(k);
@@ -1362,9 +1363,9 @@ impl<T, A: Tuning> IntoIterator for BTreeSetA<T, A> {
     /// # Example
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let set = BTreeSetA::from([1, 2, 3, 4]);
+    /// let set = BTreeSet::from([1, 2, 3, 4]);
     ///
     /// let v: Vec<_> = set.into_iter().collect();
     /// assert_eq!(v, [1, 2, 3, 4]);
@@ -2253,13 +2254,13 @@ impl<T: Ord + Clone, A: Tuning> BitAnd<&BTreeSetA<T, A>> for &BTreeSetA<T, A> {
     /// # Examples
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let a = BTreeSetA::from([1, 2, 3]);
-    /// let b = BTreeSetA::from([2, 3, 4]);
+    /// let a = BTreeSet::from([1, 2, 3]);
+    /// let b = BTreeSet::from([2, 3, 4]);
     ///
     /// let result = &a & &b;
-    /// assert_eq!(result, BTreeSetA::from([2, 3]));
+    /// assert_eq!(result, BTreeSet::from([2, 3]));
     /// ```
     fn bitand(self, rhs: &BTreeSetA<T, A>) -> BTreeSetA<T, A> {
         BTreeSetA::from_sorted_iter(self.intersection(rhs).cloned(), self.map.tuning().clone())
@@ -2274,13 +2275,13 @@ impl<T: Ord + Clone, A: Tuning> BitOr<&BTreeSetA<T, A>> for &BTreeSetA<T, A> {
     /// # Examples
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let a = BTreeSetA::from([1, 2, 3]);
-    /// let b = BTreeSetA::from([3, 4, 5]);
+    /// let a = BTreeSet::from([1, 2, 3]);
+    /// let b = BTreeSet::from([3, 4, 5]);
     ///
     /// let result = &a | &b;
-    /// assert_eq!(result, BTreeSetA::from([1, 2, 3, 4, 5]));
+    /// assert_eq!(result, BTreeSet::from([1, 2, 3, 4, 5]));
     /// ```
     fn bitor(self, rhs: &BTreeSetA<T, A>) -> BTreeSetA<T, A> {
         BTreeSetA::from_sorted_iter(self.union(rhs).cloned(), self.map.tuning().clone())
@@ -2295,13 +2296,13 @@ impl<T: Ord + Clone, A: Tuning> BitXor<&BTreeSetA<T, A>> for &BTreeSetA<T, A> {
     /// # Examples
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let a = BTreeSetA::from([1, 2, 3]);
-    /// let b = BTreeSetA::from([2, 3, 4]);
+    /// let a = BTreeSet::from([1, 2, 3]);
+    /// let b = BTreeSet::from([2, 3, 4]);
     ///
     /// let result = &a ^ &b;
-    /// assert_eq!(result, BTreeSetA::from([1, 4]));
+    /// assert_eq!(result, BTreeSet::from([1, 4]));
     /// ```
     fn bitxor(self, rhs: &BTreeSetA<T, A>) -> BTreeSetA<T, A> {
         BTreeSetA::from_sorted_iter(
@@ -2319,13 +2320,13 @@ impl<T: Ord + Clone, A: Tuning> Sub<&BTreeSetA<T, A>> for &BTreeSetA<T, A> {
     /// # Examples
     ///
     /// ```
-    /// use pstd::collections::BTreeSetA;
+    /// use pstd::collections::BTreeSet;
     ///
-    /// let a = BTreeSetA::from([1, 2, 3]);
-    /// let b = BTreeSetA::from([3, 4, 5]);
+    /// let a = BTreeSet::from([1, 2, 3]);
+    /// let b = BTreeSet::from([3, 4, 5]);
     ///
     /// let result = &a - &b;
-    /// assert_eq!(result, BTreeSetA::from([1, 2]));
+    /// assert_eq!(result, BTreeSet::from([1, 2]));
     /// ```
     fn sub(self, rhs: &BTreeSetA<T, A>) -> BTreeSetA<T, A> {
         BTreeSetA::from_sorted_iter(self.difference(rhs).cloned(), self.map.tuning().clone())
@@ -2382,35 +2383,35 @@ impl<T: Serialize, A: Tuning> Serialize for BTreeSetA<T, A> {
 
 /// For implementation of serde deserialisation.
 #[cfg(feature = "serde")]
-struct BTreeSetAVisitor<T> {
-    marker: PhantomData<fn() -> BTreeSetA<T>>,
+struct MyVisitor<T, A: Tuning + Default> {
+    marker: PhantomData<BTreeSetA<T, A>>,
 }
 
 #[cfg(feature = "serde")]
-impl<T> BTreeSetAVisitor<T> {
+impl<T, A: Tuning + Default> MyVisitor<T, A> {
     fn new() -> Self {
-        BTreeSetAVisitor {
+        MyVisitor {
             marker: PhantomData,
         }
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T> Visitor<'de> for BTreeSetAVisitor<T>
+impl<'de, T, A: Tuning + Default> Visitor<'de> for MyVisitor<T, A>
 where
     T: Deserialize<'de> + Ord,
 {
-    type Value = BTreeSetA<T>;
+    type Value = BTreeSetA<T, A>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("BTreeSetA")
+        formatter.write_str("BTreeSet")
     }
 
     fn visit_seq<S>(self, mut access: S) -> Result<Self::Value, S::Error>
     where
         S: SeqAccess<'de>,
     {
-        let mut s = BTreeSetA::new();
+        let mut s = BTreeSetA::<T, A>::new();
         let save = s.tuning_mut().set_seq(true);
         {
             let mut c = s.lower_bound_mut(Bound::Unbounded);
@@ -2438,7 +2439,7 @@ where
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T> Deserialize<'de> for BTreeSetA<T>
+impl<'de, T, A: Tuning + Default> Deserialize<'de> for BTreeSetA<T, A>
 where
     T: Deserialize<'de> + Ord,
 {
@@ -2446,7 +2447,7 @@ where
     where
         D: Deserializer<'de>,
     {
-        deserializer.deserialize_seq(BTreeSetAVisitor::new())
+        deserializer.deserialize_seq(MyVisitor::new())
     }
 }
 

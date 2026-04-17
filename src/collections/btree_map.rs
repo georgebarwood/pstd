@@ -69,7 +69,7 @@ pub type BTreeMap<K, V> = BTreeMapA<K, V, CustomTuning<Global>>;
 /// to keep track of non-leaf positions.
 ///
 /// Roughly speaking, unsafe code is limited to the vecs module and the implementation of [`CursorMut`] and [`CursorMutKey`].
-pub struct BTreeMapA<K, V, A: Tuning = DefaultTuning> {
+pub struct BTreeMapA<K, V, A: Tuning> {
     len: usize,
     tree: Tree<K, V>,
     atune: A,
@@ -96,6 +96,9 @@ impl<K: Clone, V: Clone, A: Tuning> Clone for BTreeMapA<K, V, A> {
 }
 
 impl<K, V, A: Tuning> BTreeMapA<K, V, A> {
+    #[cfg(all(test, feature = "stdtests"))]
+    pub(crate) fn check(&self) {}
+
     /// Returns a new, empty map.
     #[must_use]
     pub fn new() -> Self
@@ -104,11 +107,6 @@ impl<K, V, A: Tuning> BTreeMapA<K, V, A> {
     {
         Self::with_tuning(A::default())
     }
-}
-
-impl<K, V, A: Tuning> BTreeMapA<K, V, A> {
-    #[cfg(all(test, feature = "stdtests"))]
-    pub(crate) fn check(&self) {}
 
     /// Returns a new, empty map with specified allocator.
     ///
@@ -560,8 +558,8 @@ impl<'a, K, V, A: Tuning> IntoIterator for &'a mut BTreeMapA<K, V, A> {
         self.iter_mut()
     }
 }
-impl<K: Ord, V> FromIterator<(K, V)> for BTreeMapA<K, V> {
-    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> BTreeMapA<K, V> {
+impl<K: Ord, V, A: Tuning + Default> FromIterator<(K, V)> for BTreeMapA<K, V, A> {
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> BTreeMapA<K, V, A> {
         let mut map = BTreeMapA::new();
         for (k, v) in iter {
             map.insert(k, v);
@@ -569,8 +567,8 @@ impl<K: Ord, V> FromIterator<(K, V)> for BTreeMapA<K, V> {
         map
     }
 }
-impl<K: Ord, V, const N: usize> From<[(K, V); N]> for BTreeMapA<K, V> {
-    fn from(arr: [(K, V); N]) -> BTreeMapA<K, V> {
+impl<K: Ord, V, A: Tuning + Default, const N: usize> From<[(K, V); N]> for BTreeMapA<K, V, A> {
+    fn from(arr: [(K, V); N]) -> BTreeMapA<K, V, A> {
         let mut map = BTreeMapA::new();
         for (k, v) in arr {
             map.insert(k, v);
@@ -1437,9 +1435,9 @@ where
     /// # Examples
     ///
     /// ```
-    /// use pstd::collections::BTreeMapA;
+    /// use pstd::collections::BTreeMap;
     ///
-    /// let mut map: BTreeMapA<&str, String> = BTreeMapA::new();
+    /// let mut map: BTreeMap<&str, String> = BTreeMap::new();
     /// let entry = map.entry("poneyland").insert_entry("hoho".to_string());
     ///
     /// assert_eq!(entry.key(), &"poneyland");
