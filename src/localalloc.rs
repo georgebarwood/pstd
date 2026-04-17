@@ -21,6 +21,12 @@
 //! assert!(v.pop() == Some("Hello"));
 //! ```
 
+/* Idea : have an allocator that buffers allocations using a thread-local cache.
+   So when there is a shortage (in a size class) it allocates (say) 10 pointers.
+   When deallocating, it waits until it has 10 pointers before deallocating them.
+   This should reduce the number of Mutex locks operations.
+*/
+
 use crate::VecA;
 use crate::alloc::{AllocError, Allocator, GlobalAlloc, System};
 
@@ -56,6 +62,19 @@ pub const MAX_SIZE: usize = BLOCK_SIZE / 16;
 
 /// Number of size classes.
 pub const NUM_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
+
+/// Allocator state info.
+#[derive(Debug)]
+pub struct Info {
+    /// Number of outstanding allocations.
+    pub alloc_count: u64,
+    /// Allocation index for current block.
+    pub idx: usize,
+    /// Number of overflow blocks.
+    pub overflow_len: usize,
+    /// Length of free chain for each size class.
+    pub free_len: [usize; NUM_SC],
+}
 
 /// Temp is for thread-local allocations that last a short time.
 /// Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
@@ -211,20 +230,6 @@ impl GTemp {
     pub fn info() -> Option<Info> {
         GTA.lock().unwrap().as_ref().map(|a| a.info())
     }
-}
-
-/// Allocator state info.
-#[derive(Debug)]
-pub struct Info
-{
-   /// Number of outstanding allocations.
-   pub alloc_count: u64,
-   /// Allocation index for current block.
-   pub idx: usize,
-   /// Number of overflow blocks.
-   pub overflow_len: usize,
-   /// Length of free chain for each size class.
-   pub free_len: [usize; NUM_SC]
 }
 
 unsafe impl Allocator for GTemp {
@@ -514,7 +519,12 @@ impl ChainAllocator {
                 p = unsafe { (*p).next };
             }
         }
-        Info{ alloc_count: self.alloc_count, idx: self.idx, overflow_len: self.overflow.len(), free_len }
+        Info {
+            alloc_count: self.alloc_count,
+            idx: self.idx,
+            overflow_len: self.overflow.len(),
+            free_len,
+        }
     }
 }
 
