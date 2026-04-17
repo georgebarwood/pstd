@@ -9,7 +9,7 @@ pub type String = StringA<Global>;
 
 /// A UTF-8–encoded, growable string.
 #[derive(Clone)]
-pub struct StringA<A: Allocator = Global>(VecA<u8, A>);
+pub struct StringA<A: Allocator>(VecA<u8, A>);
 
 impl<A: Allocator> StringA<A> {
     /// Create an empty string.
