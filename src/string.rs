@@ -33,17 +33,6 @@ impl<A: Allocator> StringA<A> {
         Self(v)
     }
 
-    /// Create from a str.
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Self
-    where
-        A: Default,
-    {
-        let mut v = VecA::with_capacity(s.len());
-        v.extend_from_slice(s.as_bytes());
-        Self(v)
-    }
-
     /// Creates a String from a str in the specified allocator.
     pub fn from_str_in(s: &str, alloc: A) -> Self {
         let mut v = VecA::with_capacity_in(s.len(), alloc);
@@ -120,12 +109,6 @@ impl<A: Allocator> std::fmt::Display for StringA<A> {
 }
 
 impl<A: Allocator> Debug for StringA<A> {
-    /*
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            std::fmt::Display::fmt(&**self, f)
-        }
-    */
-
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         std::fmt::Debug::fmt(&**self, f)
     }
@@ -201,6 +184,14 @@ impl<A: Allocator> std::fmt::Write for StringA<A> {
     }
 }
 
+impl<A: Allocator + Default> From<&str> for StringA<A> {
+    fn from(s: &str) -> Self { 
+        let mut v = VecA::with_capacity(s.len());
+        v.extend_from_slice(s.as_bytes());
+        Self(v)
+    }
+}
+
 #[cfg(feature = "serde")]
 use {
     serde::{
@@ -231,7 +222,7 @@ impl<'de, A: Allocator + Default> Deserialize<'de> for StringA<A> {
             pd: std::marker::PhantomData,
         };
         let s = deserializer.deserialize_string(v).unwrap();
-        Ok(Self::from_str(&s))
+        Ok(Self::from(&*s))
     }
 }
 
@@ -248,18 +239,18 @@ impl<'a, A: Allocator + Default> Visitor<'a> for MyVisitor<A> {
         formatter.write_str("a string")
     }
 
-    fn visit_string<E>(self, v: std::string::String) -> Result<Self::Value, E>
+    fn visit_string<E>(self, s: std::string::String) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(Self::Value::from_str(&v))
+        Ok(Self::Value::from(&*s))
     }
 
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
     where
         E: Error,
     {
-        Ok(Self::Value::from_str(v))
+        Ok(Self::Value::from(s))
     }
 }
 
