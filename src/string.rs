@@ -80,6 +80,79 @@ impl<A: Allocator> StringA<A> {
         result.push_str(unsafe { self.get_unchecked(last_end..self.len()) });
         result
     }
+
+    /// Truncates this `String`, removing all contents.
+    ///
+    /// While this means the `String` will have a length of zero, it does not
+    /// touch its capacity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::String;
+    /// let mut s = String::from("foo");
+    ///
+    /// s.clear();
+    ///
+    /// assert!(s.is_empty());
+    /// assert_eq!(0, s.len());
+    /// assert_eq!(3, s.capacity());
+    /// ```
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    /// Returns the length of this `String`, in bytes, not [`char`]s or
+    /// graphemes. In other words, it might not be what a human considers the
+    /// length of the string.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::String;
+    /// let a = String::from("foo");
+    /// assert_eq!(a.len(), 3);
+    ///
+    /// let fancy_f = String::from("ƒoo");
+    /// assert_eq!(fancy_f.len(), 4);
+    /// assert_eq!(fancy_f.chars().count(), 3);
+    /// ```
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns `true` if this `String` has a length of zero, and `false` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::String;
+    /// let mut v = String::new();
+    /// assert!(v.is_empty());
+    ///
+    /// v.push_str("a");
+    /// assert!(!v.is_empty());
+    /// ```
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Returns this `String`'s capacity, in bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use pstd::String;
+    /// let s = String::with_capacity(10);
+    ///
+    /// assert!(s.capacity() >= 10);
+    /// ```
+    #[must_use]
+    pub const fn capacity(&self) -> usize {
+        self.0.capacity()
+    }
 }
 
 impl<A: Allocator> ops::Deref for StringA<A> {
@@ -159,6 +232,12 @@ impl<A: Allocator> PartialEq<StringA<A>> for str {
     }
 }
 
+impl<A: Allocator> PartialEq<StringA<A>> for &str {
+    fn eq(&self, s: &StringA<A>) -> bool {
+        &**s == *self
+    }
+}
+
 impl<A: Allocator> PartialEq<str> for StringA<A> {
     fn eq(&self, s: &str) -> bool {
         s == &**self
@@ -168,12 +247,6 @@ impl<A: Allocator> PartialEq<str> for StringA<A> {
 impl<A: Allocator> PartialEq<&str> for StringA<A> {
     fn eq(&self, s: &&str) -> bool {
         &**self == *s
-    }
-}
-
-impl<A: Allocator> PartialEq<StringA<A>> for &str {
-    fn eq(&self, s: &StringA<A>) -> bool {
-        &**s == *self
     }
 }
 
