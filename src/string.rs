@@ -268,7 +268,7 @@ fn test_string() {
 fn test_string_replace() {
     use crate::localalloc::Temp;
 
-    let mut s = StringA::<Temp>::from_str("George");
+    let mut s = StringA::<Temp>::from("George");
     s = s.replace("eorge", "raham");
     assert!(s == "Graham");
     println!("s={}", s);

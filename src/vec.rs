@@ -248,6 +248,7 @@ impl<T, A: Allocator> VecA<T, A> {
     where
         T: Clone,
     {
+        self.reserve(other.len());
         for e in other {
             self.push(e.clone());
         }
@@ -528,9 +529,6 @@ impl<T, A: Allocator> VecA<T, A> {
             return Ok(());
         }
         let result = unsafe { self.basic_set_capacity(self.cap, na) };
-        if result.is_ok() {
-            self.cap = na;
-        }
         result
     }
 
@@ -541,6 +539,7 @@ impl<T, A: Allocator> VecA<T, A> {
     unsafe fn basic_set_capacity(&mut self, oa: usize, na: usize) -> Result<(), TryReserveError> {
         unsafe {
             if mem::size_of::<T>() == 0 {
+                self.cap = na;
                 return Ok(());
             }
             if na == 0 {
@@ -549,6 +548,7 @@ impl<T, A: Allocator> VecA<T, A> {
                     Layout::array::<T>(oa).unwrap(),
                 );
                 self.nn = NonNull::dangling();
+                self.cap = 0;
                 return Ok(());
             }
             let new_layout = match Layout::array::<T>(na) {
@@ -571,7 +571,12 @@ impl<T, A: Allocator> VecA<T, A> {
                 }
             };
             match new_ptr {
-                Ok(p) => self.nn = NonNull::new(p.as_ptr().cast::<T>()).unwrap(),
+                Ok(p) => 
+                {
+                   // Note the comment here: https://doc.rust-lang.org/src/alloc/raw_vec/mod.rs.html#473
+                   self.cap = p.len() / size_of::<T>();
+                   self.nn = NonNull::new(p.as_ptr().cast::<T>()).unwrap();
+                }
                 Err(_e) => {
                     let kind = TryReserveErrorKind::AllocError { layout: new_layout };
                     return Err(TryReserveError { kind });
@@ -668,9 +673,10 @@ impl<T, A: Allocator> VecA<T, A> {
     /// Reserves capacity for at least `additional` more elements to be inserted
     /// in the given `VecA<T>`.
     pub fn reserve(&mut self, additional: usize) {
-        let capacity = self.len + additional;
-        // Could round up to power of 2 here.
+        let mut capacity = self.len + additional;
         if capacity > self.cap {
+            if capacity < 2 * self.cap { capacity = 2 * self.cap; }
+            // else round up to power of two.
             self.set_capacity(capacity).unwrap();
         }
     }

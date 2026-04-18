@@ -195,6 +195,8 @@ unsafe impl GlobalAlloc for Perm {
             self.deallocate(nn, lay);
         }
     }
+
+    // ToDo : implement realloc rather than use the supplied function.
 }
 
 static GTA: Mutex<Option<ChainAllocator>> = Mutex::new(None);
@@ -246,22 +248,6 @@ unsafe impl Allocator for GTemp {
         let mut a = GTA.lock().unwrap();
         let a = a.as_mut().unwrap();
         a.deallocate(p, lay);
-    }
-}
-
-unsafe impl GlobalAlloc for GTemp {
-    unsafe fn alloc(&self, lay: Layout) -> *mut u8 {
-        let nn = self.allocate(lay).unwrap();
-        let p: *mut [u8] = nn.as_ptr();
-        let p: *mut u8 = p.cast::<u8>();
-        p
-    }
-
-    unsafe fn dealloc(&self, p: *mut u8, lay: Layout) {
-        unsafe {
-            let nn = NonNull::new_unchecked(p);
-            self.deallocate(nn, lay);
-        }
     }
 }
 
@@ -539,6 +525,7 @@ impl Drop for ChainAllocator {
             self._max_alloc,
             self._reset_count
         );
+        // println!("Info={:?}", self.info() );
         self.cur.drop();
         self.reset_overflow();
     }
