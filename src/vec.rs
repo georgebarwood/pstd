@@ -528,8 +528,7 @@ impl<T, A: Allocator> VecA<T, A> {
         if na == self.cap {
             return Ok(());
         }
-        let result = unsafe { self.basic_set_capacity(self.cap, na) };
-        result
+        unsafe { self.basic_set_capacity(self.cap, na) }
     }
 
     /// Set capacity ( allocate or reallocate memory ).
