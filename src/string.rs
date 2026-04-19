@@ -1,5 +1,8 @@
-use crate::{ VecA, alloc::{Allocator, Global} };
-use std::{ borrow::Borrow, fmt::Debug, ops, ptr };
+use crate::{
+    VecA,
+    alloc::{Allocator, Global},
+};
+use std::{borrow::Borrow, fmt::Debug, ops, ptr};
 
 /// A UTF-8–encoded, growable string allocated from Global.
 pub type String = StringA<Global>;
@@ -18,8 +21,7 @@ impl<A: Allocator> StringA<A> {
     }
 
     /// Create an empty string in specified allocator.
-    pub const fn new_in( a: A) -> Self
-    {
+    pub const fn new_in(a: A) -> Self {
         Self(VecA::new_in(a))
     }
 
@@ -57,8 +59,8 @@ impl<A: Allocator> StringA<A> {
     /// assert_eq!("abc123", s);
     /// ```
     pub fn push(&mut self, ch: char) {
-        let mut buf : [u8; 4] = [0; 4];
-        self.push_str( ch.encode_utf8(&mut buf) );
+        let mut buf: [u8; 4] = [0; 4];
+        self.push_str(ch.encode_utf8(&mut buf));
     }
 
     /// Removes the last character from the string buffer and returns it.
@@ -118,7 +120,11 @@ impl<A: Allocator> StringA<A> {
         // ahead. This is safe because sufficient capacity was just reserved, and `idx`
         // is a char boundary.
         unsafe {
-            ptr::copy(self.0.as_ptr().add(idx), self.0.as_mut_ptr().add(idx + amt), len - idx);
+            ptr::copy(
+                self.0.as_ptr().add(idx),
+                self.0.as_mut_ptr().add(idx + amt),
+                len - idx,
+            );
         }
 
         // SAFETY: Copy the new string slice into the vacated region if `idx != len`,
@@ -161,9 +167,8 @@ impl<A: Allocator> StringA<A> {
     /// ```
     pub fn insert(&mut self, idx: usize, ch: char) {
         assert!(self.is_char_boundary(idx));
-        let mut buf : [u8; 4] = [0; 4];
-        self.insert_str( idx, ch.encode_utf8(&mut buf) );
-        
+        let mut buf: [u8; 4] = [0; 4];
+        self.insert_str(idx, ch.encode_utf8(&mut buf));
     }
 
     /// Returns the length of this `String`, in bytes, not [`char`]s or
@@ -208,7 +213,7 @@ impl<A: Allocator> StringA<A> {
     where
         A: Clone,
     {
-        let mut result = Self::new_in( self.0.allocator().clone() );
+        let mut result = Self::new_in(self.0.allocator().clone());
         let mut last_end = 0;
         for (start, part) in self.match_indices(pat) {
             result.push_str(unsafe { self.get_unchecked(last_end..start) });
@@ -242,9 +247,12 @@ impl<A: Allocator> StringA<A> {
     /// assert_eq!(world, "World!");
     /// ```
     #[must_use = "use `.truncate()` if you don't need the other half"]
-    pub fn split_off(&mut self, at: usize) -> Self where A: Clone {
+    pub fn split_off(&mut self, at: usize) -> Self
+    where
+        A: Clone,
+    {
         assert!(self.is_char_boundary(at));
-        Self( self.0.split_off(at) )
+        Self(self.0.split_off(at))
     }
 
     /// Truncates this `String`, removing all contents.
@@ -383,10 +391,9 @@ impl<A: Allocator> StringA<A> {
     /// assert_eq!(&[104, 101, 108, 108, 111][..], &bytes[..]);
     /// ```
     #[must_use = "`self` will be dropped if the result is not used"]
-    pub fn into_bytes(self) -> VecA<u8,A> {
+    pub fn into_bytes(self) -> VecA<u8, A> {
         self.0
     }
-
 }
 
 impl<A: Allocator> ops::Deref for StringA<A> {

@@ -10,8 +10,6 @@
 //! Example
 //! ```
 //! use pstd::{BoxA,VecA,localalloc::{Local,Temp}};
-//! let b = BoxA::new_in(98, Local::new());
-//! assert!(*b == 98);
 //! type TBox<T> = BoxA::<T,Temp>; // Temp allocated Box.
 //! let b = TBox::new(99);
 //! assert!(*b == 99);
@@ -21,14 +19,10 @@
 //! assert!(v.pop() == Some("Hello"));
 //! ```
 
-/* Idea : have an allocator that buffers allocations using a thread-local cache.
-   So when there is a shortage (in a size class) it allocates (say) 10 pointers.
-   When deallocating, it waits until it has 10 pointers before deallocating them.
-   This should reduce the number of Mutex locks operations.
-*/
-
-use crate::VecA;
-use crate::alloc::{AllocError, Allocator, GlobalAlloc, System};
+use crate::{
+    VecA,
+    alloc::{AllocError, Allocator, GlobalAlloc, System},
+};
 
 use std::{
     alloc::Layout,
@@ -38,11 +32,6 @@ use std::{
     ptr::{NonNull, null, slice_from_raw_parts_mut},
     sync::Mutex,
 };
-
-thread_local! {
-    static TA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new());
-    static LA: RefCell<ChainAllocator> = RefCell::new(ChainAllocator::new());
-}
 
 const MIRI: bool = cfg!(miri);
 
@@ -75,6 +64,11 @@ pub struct Info {
     pub overflow_len: usize,
     /// Length of free chain for each size class.
     pub free_len: [usize; NUM_SC],
+}
+
+thread_local! {
+    static TA: RefCell<BumpAllocator> = RefCell::new(BumpAllocator::new());
+    static LA: RefCell<ChainAllocator> = RefCell::new(ChainAllocator::new());
 }
 
 /// Temp is for thread-local allocations that last a short time.
@@ -255,31 +249,33 @@ unsafe impl Allocator for GTemp {
 struct Block(NonNull<u8>);
 
 impl Block {
-    fn new() -> Self {
+    fn alloc(&self, i: usize, n: usize) -> NonNull<[u8]> {
+        let p = unsafe { self.0.as_ptr().add(i) };
+        let p = slice_from_raw_parts_mut(p, n);
+        unsafe { NonNull::new_unchecked(p) }
+    }
+}
+
+impl Default for Block {
+    fn default() -> Self {
         let lay = Layout::from_size_align(BLOCK_SIZE, MAX_ALIGN).unwrap();
         let p = System::allocate(&System, lay).unwrap();
         let p = p.as_ptr().cast::<u8>();
         let nn = unsafe { NonNull::new_unchecked(p) };
         Self(nn)
     }
+}
 
-    fn alloc(&self, i: usize, n: usize) -> NonNull<[u8]> {
-        let p = unsafe { self.0.as_ptr().add(i) };
-        let p = slice_from_raw_parts_mut(p, n);
-        unsafe { NonNull::new_unchecked(p) }
-    }
-
+impl Drop for Block {
     fn drop(&mut self) {
-        if self.0 != NonNull::dangling() {
-            let lay = Layout::from_size_align(BLOCK_SIZE, MAX_ALIGN).unwrap();
-            unsafe { System::deallocate(&System, self.0, lay) }
-            self.0 = NonNull::dangling();
-        }
+        let lay = Layout::from_size_align(BLOCK_SIZE, MAX_ALIGN).unwrap();
+        unsafe { System::deallocate(&System, self.0, lay) }
     }
 }
 
 type SVec<T> = VecA<T, System>;
 
+#[derive(Default)]
 struct BumpAllocator {
     alloc_count: u64,      // Number of current allocations
     idx: usize,            // Current bytes allocated from cur
@@ -294,17 +290,7 @@ struct BumpAllocator {
 
 impl BumpAllocator {
     fn new() -> Self {
-        Self {
-            alloc_count: 0,
-            idx: 0,
-            cur: Block::new(),
-            overflow: SVec::new(),
-            _alloc_bytes: 0,
-            _max_alloc: 0,
-            _reset_count: 0,
-            _total_count: 0,
-            _total_alloc: 0,
-        }
+        Self::default()
     }
 
     fn allocate(&mut self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
@@ -323,7 +309,7 @@ impl BumpAllocator {
             let e = i + n;
             // Make a new block if necessary.
             if e >= BLOCK_SIZE && (e > BLOCK_SIZE || n == 0) {
-                let old = mem::replace(&mut self.cur, Block::new());
+                let old = mem::take(&mut self.cur);
                 self.overflow.push(old);
                 i = 0;
             }
@@ -348,14 +334,8 @@ impl BumpAllocator {
                     self._alloc_bytes = 0;
                 }
                 self.idx = 0;
-                self.reset_overflow();
+                self.overflow.clear();
             }
-        }
-    }
-
-    fn reset_overflow(&mut self) {
-        while let Some(mut b) = self.overflow.pop() {
-            b.drop();
         }
     }
 }
@@ -371,8 +351,6 @@ impl Drop for BumpAllocator {
             self._max_alloc,
             self._reset_count
         );
-        self.cur.drop();
-        self.reset_overflow();
     }
 }
 
@@ -380,6 +358,7 @@ struct FreeMem {
     next: *const FreeMem, // May be null
 }
 
+#[derive(Default)]
 struct ChainAllocator {
     alloc_count: u64,               // Number of current allocations
     idx: usize,                     // Current bytes allocated from cur
@@ -395,18 +374,7 @@ struct ChainAllocator {
 
 impl ChainAllocator {
     fn new() -> Self {
-        Self {
-            alloc_count: 0,
-            idx: 0,
-            cur: Block::new(),
-            free: [null(); NUM_SC],
-            overflow: SVec::new(),
-            _alloc_bytes: 0,
-            _max_alloc: 0,
-            _reset_count: 0,
-            _total_count: 0,
-            _total_alloc: 0,
-        }
+        Self::default()
     }
 
     /// Calculate size class index and size for n-byte storage request.
@@ -429,13 +397,9 @@ impl ChainAllocator {
                 self._alloc_bytes += n;
                 self._total_count += 1;
                 self._total_alloc += n;
-            };
+            }
             let (sc, xn) = Self::size_class(n);
-
             let p = self.free[sc];
-
-            // println!("ChainAllocator::allocate n={n} m={m} sc={sc} xn={xn} ix={} p={}", self.idx, p as usize);
-
             if !p.is_null() {
                 // Remove p from free list and return it.
                 let next = unsafe { (*p).next };
@@ -448,7 +412,7 @@ impl ChainAllocator {
                 let e = i + xn;
                 // Make a new block if necessary.
                 if e > BLOCK_SIZE {
-                    let old = mem::replace(&mut self.cur, Block::new());
+                    let old = mem::take(&mut self.cur);
                     self.overflow.push(old);
                     i = 0;
                 }
@@ -474,26 +438,17 @@ impl ChainAllocator {
                     self._alloc_bytes = 0;
                 }
                 self.idx = 0;
-                self.reset_overflow();
+                self.overflow.clear();
                 self.free = [null(); NUM_SC];
             } else {
                 // Put freed storage on free list.
                 let (sc, _xn) = Self::size_class(n);
                 let p = p.as_ptr() as *mut FreeMem;
-
-                // println!("ChainAllocator::deallocate n={n} m={m} sc={sc} xn={_xn} ix={} p={}", self.idx, p as usize);
-
                 unsafe {
                     (*p).next = self.free[sc];
                 }
                 self.free[sc] = p;
             }
-        }
-    }
-
-    fn reset_overflow(&mut self) {
-        while let Some(mut b) = self.overflow.pop() {
-            b.drop();
         }
     }
 
@@ -526,9 +481,6 @@ impl Drop for ChainAllocator {
             self._max_alloc,
             self._reset_count
         );
-        // println!("Info={:?}", self.info() );
-        self.cur.drop();
-        self.reset_overflow();
     }
 }
 
