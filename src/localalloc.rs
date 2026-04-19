@@ -64,6 +64,7 @@ pub const MAX_SIZE: usize = BLOCK_SIZE / 16;
 pub const NUM_SC: usize = 1 + (MAX_SIZE.ilog2() as usize) - L2_MIN_SIZE;
 
 /// Allocator state info.
+#[non_exhaustive]
 #[derive(Debug)]
 pub struct Info {
     /// Number of outstanding allocations.

@@ -5,7 +5,7 @@
 //! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ),
 //! in particular [`Box`], [`Vec`], [`Rc`], [`String`] and [collections]::{ [`BTreeMap`](collections::BTreeMap), [`BTreeSet`](collections::BTreeSet), [`HashMap`](collections::HashMap), [`HashSet`](collections::HashMap) }.
 //!
-//! Box, Rc and String currently only have minimal methods/traits implemented.
+//! Box, Rc and String do not have all std methods/traits implemented.
 //!
 //! HashMap and HashSet are imported from the hashbrown crate.
 //!

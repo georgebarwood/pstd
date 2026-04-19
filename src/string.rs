@@ -28,10 +28,12 @@ impl<A: Allocator> StringA<A> {
         Self(VecA::with_capacity(cap))
     }
 
-    /// Create from Vec
-    pub fn from_vec(v: VecA<u8, A>) -> Self {
-        Self(v)
-    }
+    /*
+        /// Create from Vec
+        fn from_vec(v: VecA<u8, A>) -> Self {
+            Self(v)
+        }
+    */
 
     /// Creates a String from a str in the specified allocator.
     pub fn from_str_in(s: &str, alloc: A) -> Self {
@@ -258,7 +260,7 @@ impl<A: Allocator> std::fmt::Write for StringA<A> {
 }
 
 impl<A: Allocator + Default> From<&str> for StringA<A> {
-    fn from(s: &str) -> Self { 
+    fn from(s: &str) -> Self {
         let mut v = VecA::with_capacity(s.len());
         v.extend_from_slice(s.as_bytes());
         Self(v)

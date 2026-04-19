@@ -571,11 +571,10 @@ impl<T, A: Allocator> VecA<T, A> {
                 }
             };
             match new_ptr {
-                Ok(p) => 
-                {
-                   // Note the comment here: https://doc.rust-lang.org/src/alloc/raw_vec/mod.rs.html#473
-                   self.cap = p.len() / size_of::<T>();
-                   self.nn = NonNull::new(p.as_ptr().cast::<T>()).unwrap();
+                Ok(p) => {
+                    // Note the comment here: https://doc.rust-lang.org/src/alloc/raw_vec/mod.rs.html#473
+                    self.cap = p.len() / size_of::<T>();
+                    self.nn = NonNull::new(p.as_ptr().cast::<T>()).unwrap();
                 }
                 Err(_e) => {
                     let kind = TryReserveErrorKind::AllocError { layout: new_layout };
@@ -675,7 +674,9 @@ impl<T, A: Allocator> VecA<T, A> {
     pub fn reserve(&mut self, additional: usize) {
         let mut capacity = self.len + additional;
         if capacity > self.cap {
-            if capacity < 2 * self.cap { capacity = 2 * self.cap; }
+            if capacity < 2 * self.cap {
+                capacity = 2 * self.cap;
+            }
             // else round up to power of two.
             self.set_capacity(capacity).unwrap();
         }
