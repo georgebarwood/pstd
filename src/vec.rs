@@ -2028,23 +2028,37 @@ where
 #[macro_export]
 macro_rules! vec {
     () => (
-        $crate::vec::Vec::new()
+        $crate::Vec::new()
     );
     ($elem:expr; $n:expr) => (
-        $crate::vec::from_elem($elem, $n)
+        $crate::vec::from_elem<_,Global>($elem, $n)
     );
     ($($x:expr),+ $(,)?) => (
-        Vec::from_iter([$($x),+].into_iter())
+        $crate::Vec::from_iter([$($x),+].into_iter())
     );
 }
 
-#[doc(hidden)]
-pub fn from_elem<T: Clone>(elem: T, n: usize) -> Vec<T> {
-    let mut v = Vec::with_capacity(n);
-    for _i in 0..n {
-        v.push(elem.clone());
+/// Creates a [`VecA`] containing the arguments.
+#[macro_export]
+macro_rules! veca {
+    () => (
+        $crate::VecA::new()
+    );
+    ($elem:expr; $n:expr) => (
+        $crate::VecA::from_elem($elem, $n)
+    );
+    ($($x:expr),+ $(,)?) => (
+        $crate::VecA::from_iter([$($x),+].into_iter())
+    );
+}
+
+impl<T: Clone, A: Allocator + Default> VecA<T, A> {
+    #[doc(hidden)]
+    pub fn from_elem(elem: T, n: usize) -> VecA<T, A> {
+        let mut v = VecA::with_capacity(n);
+        v.resize(n, elem);
+        v
     }
-    v
 }
 
 #[cfg(test)]

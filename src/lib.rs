@@ -16,7 +16,7 @@
 //!# Features
 //!
 //! This crate supports the following cargo features:
-//! - `serde` : enables serialisation of [`BTreeMap`](collections::BTreeMap) and [`BTreeSet`](collections::BTreeSet) via serde crate.
+//! - `serde` : enables serialisation of [`Vec`], [`String`], [`BTreeMap`](collections::BTreeMap) and [`BTreeSet`](collections::BTreeSet) via serde crate.
 //! - `unsafe-optim` : Enable unsafe optimisations in release mode.
 //! - `dynbox` : enables Boxing of dyn values, requires nightly toolchain. An alternative is to use the [unsize_box] macro.
 //! - `log-alloc` : prints details of thread-local allocation when thread terminates.
