@@ -1,6 +1,8 @@
 #![deny(missing_docs)]
 #![cfg_attr(feature = "dynbox", feature(unsize))]
 #![cfg_attr(feature = "dynbox", feature(coerce_unsized))]
+// #![cfg_attr(feature = "dynbox", feature (const_default))]
+// #![cfg_attr(feature = "dynbox", feature (const_trait_impl))]
 
 //! Crate with parts of Rust std library ( different implementations, features not yet stabilised etc ),
 //! in particular [`Box`], [`Vec`], [`Rc`], [`String`] and [collections]::{ [`BTreeMap`](collections::BTreeMap), [`BTreeSet`](collections::BTreeSet), [`HashMap`](collections::HashMap), [`HashSet`](collections::HashMap) }.

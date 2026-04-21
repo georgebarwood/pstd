@@ -2031,7 +2031,7 @@ macro_rules! vec {
         $crate::Vec::new()
     );
     ($elem:expr; $n:expr) => (
-        $crate::vec::from_elem<_,Global>($elem, $n)
+        $crate::Vec::from_elem($elem, $n)
     );
     ($($x:expr),+ $(,)?) => (
         $crate::Vec::from_iter([$($x),+].into_iter())
@@ -2059,6 +2059,18 @@ impl<T: Clone, A: Allocator + Default> VecA<T, A> {
         v.resize(n, elem);
         v
     }
+}
+
+#[test]
+fn test_grow() {
+    use crate::localalloc::*;
+    let mut v: VecA<u64, Perm> = veca![1, 2, 3, 4, 5];
+    println!("v capacity={}", v.capacity());
+    v.reserve_exact(1);
+    println!("v capacity={}", v.capacity());
+    v.push(6);
+    println!("v capacity={}", v.capacity());
+    assert_eq!(*v, [1, 2, 3, 4, 5, 6]);
 }
 
 #[cfg(test)]

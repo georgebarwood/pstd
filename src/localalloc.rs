@@ -75,7 +75,7 @@ thread_local! {
 /// Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
 /// This means there is no minimum allocation internally.
 /// Allocations larger than [`MAX_SIZE`] bytes, or having more than [`MAX_ALIGN`] alignment, are routed to [`System`].
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Temp {
     pd: PhantomData<NonNull<()>>, // To make Temp !Send and !Sync
 }
@@ -87,13 +87,19 @@ impl Temp {
     }
 }
 
+impl Default for Temp {
+    fn default() -> Self {
+        Self { pd: PhantomData }
+    }
+}
+
 unsafe impl Allocator for Temp {
     fn allocate(&self, lay: Layout) -> Result<NonNull<[u8]>, AllocError> {
         TA.with_borrow_mut(|a| a.allocate(lay))
     }
 
     unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
-        TA.with_borrow_mut(|a| a.deallocate(p, lay));
+        TA.with_borrow_mut(|a| a.deallocate(p, lay))
     }
 }
 
@@ -118,7 +124,7 @@ unsafe impl Allocator for Local {
     }
 
     unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
-        LA.with_borrow_mut(|a| a.deallocate(p, lay));
+        LA.with_borrow_mut(|a| a.deallocate(p, lay))
     }
 }
 
@@ -165,33 +171,59 @@ unsafe impl Allocator for Perm {
         if a.is_none() {
             *a = Some(ChainAllocator::new());
         }
-        let a = a.as_mut().unwrap();
-        a.allocate(lay)
+        a.as_mut().unwrap().allocate(lay)
     }
 
     unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
         let mut a = PA.lock().unwrap();
-        let a = a.as_mut().unwrap();
-        a.deallocate(p, lay);
+        a.as_mut().unwrap().deallocate(p, lay)
+    }
+
+    unsafe fn grow(
+        &self,
+        p: NonNull<u8>,
+        old: Layout,
+        new: Layout,
+    ) -> Result<NonNull<[u8]>, AllocError> {
+        let mut a = PA.lock().unwrap();
+        a.as_mut().unwrap().grow(p, old, new)
+    }
+
+    unsafe fn shrink(
+        &self,
+        p: NonNull<u8>,
+        old: Layout,
+        new: Layout,
+    ) -> Result<NonNull<[u8]>, AllocError> {
+        let mut a = PA.lock().unwrap();
+        a.as_mut().unwrap().shrink(p, old, new)
     }
 }
 
 unsafe impl GlobalAlloc for Perm {
     unsafe fn alloc(&self, lay: Layout) -> *mut u8 {
         let nn = self.allocate(lay).unwrap();
-        let p: *mut [u8] = nn.as_ptr();
-        let p: *mut u8 = p.cast::<u8>();
-        p
+        nn.as_ptr().cast::<u8>()
     }
 
     unsafe fn dealloc(&self, p: *mut u8, lay: Layout) {
         unsafe {
             let nn = NonNull::new_unchecked(p);
-            self.deallocate(nn, lay);
+            self.deallocate(nn, lay)
         }
     }
 
-    // ToDo : implement realloc rather than use the supplied function.
+    unsafe fn realloc(&self, p: *mut u8, lay: Layout, new_size: usize) -> *mut u8 {
+        let (n, m) = (lay.size(), lay.align());
+        let new_lay = Layout::from_size_align(new_size, m).unwrap();
+        let nn = unsafe { NonNull::new_unchecked(p) };
+        let x = if new_size > n {
+            unsafe { self.grow(nn, lay, new_lay) }
+        } else {
+            unsafe { self.shrink(nn, lay, new_lay) }
+        };
+        x.unwrap().as_ptr().cast::<u8>()
+    }
 }
 
 static GTA: Mutex<Option<ChainAllocator>> = Mutex::new(None);
@@ -212,8 +244,7 @@ impl GTemp {
         if a.is_none() {
             return 0;
         }
-        let a = a.as_ref().unwrap();
-        a.alloc_count
+        a.as_ref().unwrap().alloc_count
     }
 
     /// Get allocator state info.
@@ -235,14 +266,12 @@ unsafe impl Allocator for GTemp {
         if a.is_none() {
             *a = Some(ChainAllocator::new());
         }
-        let a = a.as_mut().unwrap();
-        a.allocate(lay)
+        a.as_mut().unwrap().allocate(lay)
     }
 
     unsafe fn deallocate(&self, p: NonNull<u8>, lay: Layout) {
         let mut a = GTA.lock().unwrap();
-        let a = a.as_mut().unwrap();
-        a.deallocate(p, lay);
+        a.as_mut().unwrap().deallocate(p, lay)
     }
 }
 
@@ -321,9 +350,7 @@ impl BumpAllocator {
     fn deallocate(&mut self, p: NonNull<u8>, lay: Layout) {
         let (n, m) = (lay.size(), lay.align());
         if MIRI || n > MAX_SIZE || m > MAX_ALIGN {
-            unsafe {
-                System::deallocate(&System, p, lay);
-            }
+            unsafe { System::deallocate(&System, p, lay) }
         } else {
             self.alloc_count -= 1;
             if self.alloc_count == 0 {
@@ -334,7 +361,7 @@ impl BumpAllocator {
                     self._alloc_bytes = 0;
                 }
                 self.idx = 0;
-                self.overflow.clear();
+                self.overflow.clear()
             }
         }
     }
@@ -418,6 +445,62 @@ impl ChainAllocator {
                 }
                 self.idx = i + xn;
                 Ok(self.cur.alloc(i, xn))
+            }
+        }
+    }
+
+    fn grow(
+        &mut self,
+        p: NonNull<u8>,
+        old: Layout,
+        new: Layout,
+    ) -> Result<NonNull<[u8]>, AllocError> {
+        let (n, m) = (old.size(), old.align());
+        if MIRI || n > MAX_SIZE || m > MIN_SIZE {
+            unsafe { System::grow(&System, p, old, new) }
+        } else {
+            let n1 = new.size();
+            let (sc, xn) = Self::size_class(n);
+            let (sc1, _) = Self::size_class(n1);
+            if sc == sc1 {
+                // The size class is unchanged, nothing to do.
+                let p = slice_from_raw_parts_mut(p.as_ptr(), xn);
+                Ok(unsafe { NonNull::new_unchecked(p) })
+            } else {
+                let np = self.allocate(new)?;
+                unsafe {
+                    std::ptr::copy_nonoverlapping(p.as_ptr(), np.as_ptr().cast(), n);
+                    self.deallocate(p, old);
+                }
+                Ok(np)
+            }
+        }
+    }
+
+    fn shrink(
+        &mut self,
+        p: NonNull<u8>,
+        old: Layout,
+        new: Layout,
+    ) -> Result<NonNull<[u8]>, AllocError> {
+        let (n, m) = (old.size(), old.align());
+        if MIRI || n > MAX_SIZE || m > MIN_SIZE {
+            unsafe { System::shrink(&System, p, old, new) }
+        } else {
+            let n1 = new.size();
+            let (sc, xn) = Self::size_class(n);
+            let (sc1, _) = Self::size_class(n1);
+            if sc == sc1 {
+                // The size class is unchanged, nothing to do.
+                let p = slice_from_raw_parts_mut(p.as_ptr(), xn);
+                Ok(unsafe { NonNull::new_unchecked(p) })
+            } else {
+                let np = self.allocate(new)?;
+                unsafe {
+                    std::ptr::copy_nonoverlapping(p.as_ptr(), np.as_ptr().cast(), n1);
+                    self.deallocate(p, old);
+                }
+                Ok(np)
             }
         }
     }
@@ -514,4 +597,14 @@ fn test_alloc_free() {
     }
     println!("v len={}", v.len());
     println!("Perm::info = {:?}", Perm::info());
+}
+
+#[test]
+fn test_perm_shrink() {
+    let mut v: VecA<_, Temp> = crate::veca!(0; 100);
+    println!("v capacity={}", v.capacity());
+    v.truncate(10);
+    println!("v capacity={}", v.capacity());
+    v.shrink_to_fit();
+    println!("v capacity={}", v.capacity());
 }
