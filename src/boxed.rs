@@ -225,8 +225,8 @@ impl<T: ?Sized + Unsize<U>, U: ?Sized, A: Allocator> CoerceUnsized<BoxA<U, A>> f
 #[macro_export]
 macro_rules! unsize_box {
     ( $boxed:expr ) => {{
-        let (ptr, allocator) = ::pstd::boxed::BoxA::into_raw_with_allocator($boxed);
+        let (ptr, allocator) = $crate::BoxA::into_raw_with_allocator($boxed);
         let ptr: *mut _ = ptr;
-        unsafe { ::pstd::boxed::BoxA::from_raw_in(ptr, allocator) }
+        unsafe { $crate::BoxA::from_raw_in(ptr, allocator) }
     }};
 }

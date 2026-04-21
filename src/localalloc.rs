@@ -75,7 +75,7 @@ thread_local! {
 /// Temp uses "bump" allocation, deallocate just decreases a count of outstanding allocations.
 /// This means there is no minimum allocation internally.
 /// Allocations larger than [`MAX_SIZE`] bytes, or having more than [`MAX_ALIGN`] alignment, are routed to [`System`].
-#[derive(Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub struct Temp {
     pd: PhantomData<NonNull<()>>, // To make Temp !Send and !Sync
 }
@@ -83,12 +83,6 @@ pub struct Temp {
 impl Temp {
     /// Create a Temp allocator
     pub const fn new() -> Self {
-        Self { pd: PhantomData }
-    }
-}
-
-impl Default for Temp {
-    fn default() -> Self {
         Self { pd: PhantomData }
     }
 }
