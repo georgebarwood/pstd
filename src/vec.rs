@@ -673,8 +673,8 @@ impl<T, A: Allocator> VecA<T, A> {
     pub fn reserve(&mut self, additional: usize) {
         let mut capacity = self.len + additional;
         if capacity > self.cap {
-            if capacity < ( self.cap * 3 ) / 2 {
-                capacity = ( self.cap * 3 ) / 2;
+            if capacity < self.cap *2 {
+                capacity = self.cap * 2;
             }
             self.set_capacity(capacity).unwrap();
         }
