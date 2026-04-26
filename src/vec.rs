@@ -638,14 +638,6 @@ impl<T, A: Allocator> VecA<T, A> {
         }
     }
 
-    /// Constructs a new, empty `VecA<T, A>` with at least the specified capacity
-    /// with the provided allocator.
-    pub fn with_capacity_in(capacity: usize, alloc: A) -> VecA<T, A> {
-        let mut v = Self::new_in(alloc);
-        v.set_capacity(capacity).unwrap();
-        v
-    }
-
     /// Constructs a new, empty `VecA<T>` with at least the specified capacity.
     ///
     /// # Example
@@ -663,7 +655,15 @@ impl<T, A: Allocator> VecA<T, A> {
     where
         A: Default,
     {
-        let mut v = Self::new_in(A::default());
+        let mut v = Self::new();
+        v.set_capacity(capacity).unwrap();
+        v
+    }
+
+    /// Constructs a new, empty `VecA<T, A>` with at least the specified capacity
+    /// with the provided allocator.
+    pub fn with_capacity_in(capacity: usize, alloc: A) -> VecA<T, A> {
+        let mut v = Self::new_in(alloc);
         v.set_capacity(capacity).unwrap();
         v
     }
@@ -673,10 +673,9 @@ impl<T, A: Allocator> VecA<T, A> {
     pub fn reserve(&mut self, additional: usize) {
         let mut capacity = self.len + additional;
         if capacity > self.cap {
-            if capacity < 2 * self.cap {
-                capacity = 2 * self.cap;
+            if capacity < ( self.cap * 3 ) / 2 {
+                capacity = ( self.cap * 3 ) / 2;
             }
-            // else round up to power of two.
             self.set_capacity(capacity).unwrap();
         }
     }
@@ -690,17 +689,18 @@ impl<T, A: Allocator> VecA<T, A> {
         }
     }
 
-    /// Trim excess storage allocation.
-    pub fn shrink_to_fit(&mut self) {
-        let _ = self.set_capacity(self.len);
-    }
-
     /// Trim excess capacity to specified value.
     pub fn shrink_to(&mut self, capacity: usize) {
         if self.cap > capacity {
             let _ = self.set_capacity(cmp::max(self.len, capacity));
         }
     }
+
+    /// Trim excess storage allocation.
+    pub fn shrink_to_fit(&mut self) {
+        let _ = self.set_capacity(self.len);
+    }
+
 }
 
 /// # Conversion methods.
@@ -1061,6 +1061,16 @@ impl<T, A: Allocator, const N: usize> VecA<[T; N], A> {
 /// # Non-panic methods.
 /// These are panic-free alternatives for programs that must not panic.
 impl<T, A: Allocator> VecA<T, A> {
+    /// Constructs a new, empty `Vec` with at least the specified capacity.
+    pub fn try_with_capacity(capacity: usize) -> Result<Self, TryReserveError>
+    where
+        A: Default,
+    {
+        let mut v = VecA::new();
+        v.set_capacity(capacity)?;
+        Ok(v)
+    }
+    
     /// Constructs a new, empty VecA<T, A> with at least the specified capacity with the provided allocator.
     pub fn try_with_capacity_in(capacity: usize, alloc: A) -> Result<Self, TryReserveError> {
         let mut v = Self::new_in(alloc);
@@ -1113,16 +1123,6 @@ impl<T, A: Allocator> VecA<T, A> {
             self.len -= 1;
             Some(result)
         }
-    }
-
-    /// Constructs a new, empty `Vec` with at least the specified capacity.
-    pub fn try_with_capacity(capacity: usize) -> Result<Self, TryReserveError>
-    where
-        A: Default,
-    {
-        let mut v = VecA::new();
-        v.set_capacity(capacity)?;
-        Ok(v)
     }
 }
 
@@ -1491,7 +1491,7 @@ where
 {
     /// Creates an empty `VecA::IntoIter`.
     fn default() -> Self {
-        VecA::new_in(Default::default()).into_iter()
+        VecA::new().into_iter()
     }
 }
 

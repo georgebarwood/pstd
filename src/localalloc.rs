@@ -142,8 +142,7 @@ impl Perm {
         if a.is_none() {
             return 0;
         }
-        let a = a.as_ref().unwrap();
-        a.alloc_count
+        a.as_ref().unwrap().alloc_count
     }
 
     /// Get allocator state info.
