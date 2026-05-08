@@ -449,25 +449,31 @@ impl ChainAllocator {
         new: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
         let (n, m) = (old.size(), old.align());
-        if MIRI || n > MAX_SIZE || m > MIN_SIZE {
-            unsafe { System::grow(&System, p, old, new) }
-        } else {
-            let n1 = new.size();
+        let (n1, m1) = (new.size(), new.align());
+
+        let old_is_sys = MIRI || n > MAX_SIZE || m > MIN_SIZE;
+        let new_is_sys = MIRI || n1 > MAX_SIZE || m1 > MIN_SIZE;
+
+        if old_is_sys && new_is_sys {
+            // Can use System::grow.
+            return unsafe { System::grow(&System, p, old, new) };
+        } else if !old_is_sys && !new_is_sys {
+            let (n1, m1) = (new.size(), new.align());
             let (sc, xn) = Self::size_class(n);
             let (sc1, _) = Self::size_class(n1);
-            if sc == sc1 {
-                // The size class is unchanged, nothing to do.
+            if sc == sc1 && m1 <= MIN_SIZE {
+                // Can use existing allocation, nothing to do.
                 let p = slice_from_raw_parts_mut(p.as_ptr(), xn);
-                Ok(unsafe { NonNull::new_unchecked(p) })
-            } else {
-                let np = self.allocate(new)?;
-                unsafe {
-                    std::ptr::copy_nonoverlapping(p.as_ptr(), np.as_ptr().cast(), n);
-                    self.deallocate(p, old);
-                }
-                Ok(np)
+                return Ok(unsafe { NonNull::new_unchecked(p) });
             }
         }
+        // Grow optimisation not possible.
+        let np = self.allocate(new)?;
+        unsafe {
+            std::ptr::copy_nonoverlapping(p.as_ptr(), np.as_ptr().cast(), n);
+            self.deallocate(p, old);
+        }
+        Ok(np)
     }
 
     fn shrink(
@@ -477,25 +483,30 @@ impl ChainAllocator {
         new: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
         let (n, m) = (old.size(), old.align());
-        if MIRI || n > MAX_SIZE || m > MIN_SIZE {
-            unsafe { System::shrink(&System, p, old, new) }
-        } else {
-            let n1 = new.size();
+        let (n1, m1) = (new.size(), new.align());
+
+        let old_is_sys = MIRI || n > MAX_SIZE || m > MIN_SIZE;
+        let new_is_sys = MIRI || n1 > MAX_SIZE || m1 > MIN_SIZE;
+
+        if old_is_sys && new_is_sys {
+            // Can use System::shrink
+            return unsafe { System::shrink(&System, p, old, new) };
+        } else if !old_is_sys && !new_is_sys {
             let (sc, xn) = Self::size_class(n);
             let (sc1, _) = Self::size_class(n1);
-            if sc == sc1 {
-                // The size class is unchanged, nothing to do.
+            if sc == sc1 && m1 <= MIN_SIZE {
+                // The size class is unchanged, and alignment is ok, so nothing to do.
                 let p = slice_from_raw_parts_mut(p.as_ptr(), xn);
-                Ok(unsafe { NonNull::new_unchecked(p) })
-            } else {
-                let np = self.allocate(new)?;
-                unsafe {
-                    std::ptr::copy_nonoverlapping(p.as_ptr(), np.as_ptr().cast(), n1);
-                    self.deallocate(p, old);
-                }
-                Ok(np)
+                return Ok(unsafe { NonNull::new_unchecked(p) });
             }
         }
+        // Shrink optimisation not possible, have to copy to new allocation.
+        let np = self.allocate(new)?;
+        unsafe {
+            std::ptr::copy_nonoverlapping(p.as_ptr(), np.as_ptr().cast(), n1);
+            self.deallocate(p, old);
+        }
+        Ok(np)
     }
 
     fn deallocate(&mut self, p: NonNull<u8>, lay: Layout) {

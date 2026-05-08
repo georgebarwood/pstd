@@ -673,7 +673,7 @@ impl<T, A: Allocator> VecA<T, A> {
     pub fn reserve(&mut self, additional: usize) {
         let mut capacity = self.len + additional;
         if capacity > self.cap {
-            if capacity < self.cap *2 {
+            if capacity < self.cap * 2 {
                 capacity = self.cap * 2;
             }
             self.set_capacity(capacity).unwrap();
@@ -700,7 +700,6 @@ impl<T, A: Allocator> VecA<T, A> {
     pub fn shrink_to_fit(&mut self) {
         let _ = self.set_capacity(self.len);
     }
-
 }
 
 /// # Conversion methods.
@@ -1070,7 +1069,7 @@ impl<T, A: Allocator> VecA<T, A> {
         v.set_capacity(capacity)?;
         Ok(v)
     }
-    
+
     /// Constructs a new, empty VecA<T, A> with at least the specified capacity with the provided allocator.
     pub fn try_with_capacity_in(capacity: usize, alloc: A) -> Result<Self, TryReserveError> {
         let mut v = Self::new_in(alloc);
