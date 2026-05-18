@@ -1449,6 +1449,16 @@ impl<T, A: Allocator, const N: usize> TryFrom<VecA<T, A>> for [T; N] {
     }
 }
 
+impl<A: Allocator> std::io::Write for VecA<u8, A> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 // ##########################################################################
 // Iterators ################################################################
 // ##########################################################################
