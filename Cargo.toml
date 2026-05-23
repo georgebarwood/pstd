@@ -1,6 +1,6 @@
 [package]
 name = "pstd"
-version = "1.0.133"
+version = "1.0.135"
 edition = "2024"
 authors = ["George Barwood"]
 description = "Crate with parts of Rust std library ( different implementations, features not yet stabilised etc )."
@@ -13,7 +13,8 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 allocator-api2 = "0.2.0"
-hashbrown = "0.16.1"
+format-bytes = "0.3.0"
+hashbrown = "0.17.0"
 serde = { version = "1.0.197", optional=true }
 
 [dev-dependencies]
