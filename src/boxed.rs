@@ -126,6 +126,15 @@ impl<A: Allocator + Clone> Clone for BoxA<str, A> {
     }
 }
 
+impl<T:Clone, A: Allocator + Clone> Clone for BoxA<T, A> {
+    fn clone(&self) -> BoxA<T, A> {
+        
+        let p = self.nn.as_ptr();
+        let v = unsafe{ (*p).clone() };
+        BoxA::new_in( v, self.a.clone() )
+    }
+}
+
 impl<T: ?Sized + Hash, A: Allocator> Hash for BoxA<T, A> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         (**self).hash(state);
@@ -229,4 +238,29 @@ macro_rules! unsize_box {
         let ptr: *mut _ = ptr;
         unsafe { $crate::BoxA::from_raw_in(ptr, allocator) }
     }};
+}
+
+#[cfg(feature = "serde")]
+impl<T, A> serde::Serialize for BoxA<T, A>
+where
+    T: serde::Serialize,
+    A: Allocator,
+{
+    #[inline(always)]
+    fn serialize<S: serde::ser::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (**self).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, T, A:Allocator + Default> serde::Deserialize<'de> for BoxA<T, A>
+where
+    T: serde::Deserialize<'de>,
+    A: Allocator + Default,
+{
+    #[inline(always)]
+    fn deserialize<D: serde::de::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = T::deserialize(deserializer)?;
+        Ok(BoxA::new(value))
+    }
 }

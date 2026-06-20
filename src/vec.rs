@@ -2033,6 +2033,12 @@ where
     }
 }
 
+impl<A: Allocator> format_bytes::DisplayBytes for VecA<u8, A> {
+    fn display_bytes(&self, output: &mut dyn std::io::Write) -> std::io::Result<()> {
+        output.write_all(self)
+    }
+}
+
 /// Creates a [`Vec`] containing the arguments.
 #[macro_export]
 macro_rules! vec {

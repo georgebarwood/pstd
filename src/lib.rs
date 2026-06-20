@@ -50,6 +50,10 @@ pub use boxed::{Box, BoxA};
 pub mod rc;
 pub use rc::{Rc, RcA, RcSlice, RcSliceA, RcStr, RcStrA};
 
+/// Similar to [`std::sync::Arc`].
+pub mod sync;
+pub use sync::{Arc, ArcA};
+
 #[cfg(test)]
 mod testing {
     pub mod crash_test;
