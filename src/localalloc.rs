@@ -412,12 +412,6 @@ impl ChainAllocator {
             System::allocate(&System, lay)
         } else {
             self.alloc_count += 1;
-            #[cfg(feature = "log-alloc")]
-            {
-                self._alloc_bytes += n;
-                self._total_count += 1;
-                self._total_alloc += n;
-            }
             let (sc, xn) = Self::size_class(n);
             let p = self.free[sc];
             if !p.is_null() {
@@ -428,6 +422,14 @@ impl ChainAllocator {
                 let p: *mut [u8] = slice_from_raw_parts_mut(p, xn);
                 Ok(unsafe { NonNull::new_unchecked(p) })
             } else {
+
+                #[cfg(feature = "log-alloc")]
+                {
+                    self._alloc_bytes += xn;
+                    self._total_count += 1;
+                    self._total_alloc += xn;
+                }
+                
                 let mut i = self.idx;
                 let e = i + xn;
                 // Make a new block if necessary.
